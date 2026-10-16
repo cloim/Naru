@@ -82,7 +82,7 @@ const client = new QueryClient({
 
 const navLink = ({ isActive }) =>
   cn(
-    'flex items-center gap-3.25 rounded-[9px] px-4 py-3.25 text-[14px] font-medium transition-[background] duration-150 hover:bg-[#ffffff0b] max-desktop:gap-2.5 max-desktop:p-3',
+    'flex items-center gap-3.25 rounded-[9px] px-4 py-3.25 text-[14px] font-medium transition-[background] duration-150 hover:bg-[#ffffff0b] max-desktop:gap-2.5 max-desktop:p-3 max-tablet:py-2.5',
     isActive && 'bg-[#31554a] text-[#f1ffdf] hover:bg-[#31554a]',
   );
 
@@ -264,13 +264,13 @@ function Shell() {
             ref={sidebarRef}
             inert={mobile && !drawer}
             className={cn(
-              'flex w-56 flex-none flex-col bg-brand px-4.5 pt-8.5 pb-5 text-[#c7d6ce] wide:w-60 max-desktop:w-47.5 max-desktop:px-3 max-desktop:py-7 max-tablet:fixed max-tablet:inset-y-0 max-tablet:left-0 max-tablet:z-100 max-tablet:w-57.5 max-tablet:-translate-x-full max-tablet:transition-transform max-tablet:duration-200 max-tablet:ease-[ease]',
+              'flex w-56 flex-none flex-col overflow-y-auto overscroll-contain bg-brand px-4.5 pt-8.5 pb-5 text-[#c7d6ce] wide:w-60 max-desktop:w-47.5 max-desktop:px-3 max-desktop:py-7 max-tablet:fixed max-tablet:inset-y-0 max-tablet:left-0 max-tablet:z-100 max-tablet:w-57.5 max-tablet:pt-6 max-tablet:pb-4 max-tablet:-translate-x-full max-tablet:transition-transform max-tablet:duration-200 max-tablet:ease-[ease]',
               drawer && 'max-tablet:translate-x-0',
             )}
           >
             <Link
               to="/"
-              className="mx-3.5 mb-11 flex items-center gap-2.5 rounded-[10px] hover:bg-[#ffffff0b] max-desktop:ml-3"
+              className="mx-3.5 mb-11 flex flex-none items-center gap-2.5 rounded-[10px] hover:bg-[#ffffff0b] max-desktop:ml-3 max-tablet:mb-6"
             >
               {/* 마크의 짙은 초록이 사이드바 배경에 묻히지 않도록 밝은 타일 위에 둔다. */}
               <span className="flex h-9.5 w-9.5 flex-none items-center justify-center rounded-[10px] bg-[#e8eedf]">
@@ -302,7 +302,7 @@ function Shell() {
             </div>
           </aside>
           <div id="workspace" className="flex min-w-0 flex-1 flex-col" inert={mobile && drawer}>
-            <header className="flex h-21 min-h-21 items-center justify-between gap-4.5 border-b border-line bg-[#fbfcf8] px-9.5 wide:px-13 max-desktop:px-6 max-tablet:h-17 max-tablet:min-h-17 max-tablet:px-4">
+            <header className="flex h-21 min-h-21 items-center justify-between gap-4.5 border-b border-line bg-[#fbfcf8] px-4 max-tablet:h-17 max-tablet:min-h-17">
               <div className="flex min-w-0 items-center gap-2.5">
                 <button
                   ref={menuRef}
