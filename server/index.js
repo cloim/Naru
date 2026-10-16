@@ -12,7 +12,7 @@ import { jobList, submit, identifier, reconcileJobs } from './jobs.js';
 import * as runtime from './runtime.js';
 import * as engine from './engine.js';
 import { wsl, distributions } from './runner.js';
-import { startDockerBridge, startKubernetesBridge } from './bridge.js';
+import { startDockerBridge, startCompatBridge, startKubernetesBridge } from './bridge.js';
 import { listForwards } from './forwarding.js';
 import { registerExtensions } from './extensions.js';
 
@@ -286,10 +286,21 @@ try {
   if (e.code !== 'ENOENT') throw e;
 }
 server.listen(port, '127.0.0.1', () =>
-  console.log(`Naru http://127.0.0.1:${port} | ${DATA}${remote ? ` | https://${remote.host}` : ''}`),
+  console.log(
+    `Naru http://127.0.0.1:${port} | ${DATA}${remote ? ` | https://${remote.host}` : ''}`,
+  ),
 );
-if (process.platform === 'win32') startDockerBridge();
+if (process.platform === 'win32') {
+  startDockerBridge();
+  startCompatBridge();
+}
 kubernetesBridge = startKubernetesBridge((await settings()).kubernetes.port);
+// Containers with a restart policy come back only when the engine starts with the server.
+if ((await settings()).autoStart)
+  runtime
+    .status()
+    .then((s) => (s.managed && s.installed && !s.running ? submit('startRuntime', {}) : null))
+    .catch((e) => console.error(`엔진 자동 시작: ${e.message}`));
 server.on('error', (e) => {
   console.error(e);
   process.exitCode = 1;

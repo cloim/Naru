@@ -21,7 +21,11 @@ ulimit -n 65536
 mount --make-rshared / 2>/dev/null || true
 if [ "$engine" = 'moby' ]; then
   ln -sf /run/naru/docker.sock /var/run/docker.sock
-  /usr/bin/dockerd --host unix:///run/naru/docker.sock --pidfile /run/naru/docker.pid --data-root /var/lib/naru/docker > /var/log/naru/engine.log 2>&1 &
+  # Same image store and API floor as Rancher Desktop, so migrated data and older clients keep working.
+  if [ ! -f /etc/naru/dockerd.json ]; then
+    printf '{\n  "min-api-version": "1.41",\n  "features": { "containerd-snapshotter": true }\n}\n' > /etc/naru/dockerd.json
+  fi
+  /usr/bin/dockerd --config-file /etc/naru/dockerd.json --host unix:///run/naru/docker.sock --pidfile /run/naru/docker.pid --data-root /var/lib/naru/docker > /var/log/naru/engine.log 2>&1 &
   engine_pid=$!
 elif [ "$engine" = 'containerd' ]; then
   mkdir -p /var/lib/naru/k3s/agent/etc/cni/net.d /etc/cni /etc/naru/cni/net.d

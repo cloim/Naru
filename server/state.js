@@ -15,6 +15,7 @@ export const settingsSchema = z
       .string()
       .regex(/^[a-zA-Z0-9_.-]{1,64}$/)
       .default('default'),
+    autoStart: z.boolean().default(true),
     kubernetes: z
       .object({
         enabled: z.boolean().default(false),

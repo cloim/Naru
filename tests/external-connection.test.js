@@ -4,6 +4,7 @@ import { settingsSchema } from '../server/state.js';
 import { assertSharedJob } from '../server/external.js';
 test('shared Docker connection validates engine and protects runtime owner', () => {
   assert.equal(settingsSchema.parse({}).connection, 'managed');
+  assert.equal(settingsSchema.parse({}).autoStart, true);
   const cfg = settingsSchema.parse({ connection: 'rancher-desktop' });
   assert.equal(cfg.engine, 'moby');
   assert.throws(() =>

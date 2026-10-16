@@ -5,8 +5,15 @@ import { spawn } from 'node:child_process';
 import { DISTRO } from './state.js';
 import { requireReady } from './runtime.js';
 
-export function startDockerBridge() {
+const NARU_PIPE = '\\\\.\\pipe\\naru_engine';
+// compat serves the default Docker pipe that Rancher Desktop left free; it never proxies to itself.
+export function startDockerBridge(pipe = NARU_PIPE, { compat = false } = {}) {
   const server = net.createServer(async (socket) => {
+    const shared = (await settings()).connection === 'rancher-desktop';
+    if (compat && shared) {
+      socket.destroy();
+      return;
+    }
     try {
       await requireReady();
     } catch {
@@ -14,7 +21,7 @@ export function startDockerBridge() {
       return;
     }
     if (socket.destroyed) return;
-    if ((await settings()).connection === 'rancher-desktop') {
+    if (shared) {
       const upstream = net.connect(RANCHER_PIPE);
       upstream.on('error', () => socket.destroy());
       socket.on('error', () => upstream.destroy());
@@ -37,9 +44,21 @@ export function startDockerBridge() {
     socket.on('close', () => child.kill());
     child.on('close', () => socket.destroy());
   });
-  server.on('error', (e) => console.error(`Docker named pipe bridge: ${e.message}`));
-  server.listen('\\\\.\\pipe\\naru_engine');
+  server.on('error', (e) => console.error(`Docker named pipe bridge (${pipe}): ${e.message}`));
+  server.listen(pipe);
   return server;
+}
+
+// Rancher Desktop owns docker_engine while it runs; claim it only in managed mode and retry while busy.
+export function startCompatBridge() {
+  let server;
+  const attempt = async () => {
+    if (server?.listening || (await settings()).connection !== 'managed') return;
+    server?.close();
+    server = startDockerBridge(RANCHER_PIPE, { compat: true });
+  };
+  attempt();
+  setInterval(attempt, 30000).unref();
 }
 
 export function startKubernetesBridge(port) {
