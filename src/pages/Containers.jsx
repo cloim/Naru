@@ -68,7 +68,7 @@ function ProjectRow({ data: g }) {
   const run = (action) => job('project', { name: g.__group, action });
   return (
     <div
-      className="flex h-full cursor-pointer items-center gap-3 border-b border-line bg-[#f6f8f2] pr-3 pl-3.5 max-tablet:sticky max-tablet:left-0 max-tablet:w-[calc(100vw-34px)] max-tablet:gap-2 max-tablet:pl-2.5"
+      className="flex h-full cursor-pointer items-center gap-3 border-b border-line bg-[#f6f8f2] pr-3 pl-3.5 max-tablet:gap-2 max-tablet:pl-2.5"
       onClick={() => toggle(g.__group)}
     >
       <ChevronRight
@@ -367,10 +367,7 @@ function Containers() {
     // 실행 중인 컨테이너가 있는 프로젝트를 먼저, 같은 조건에서는 이름순으로 둔다.
     const live = (key) => (all.get(key) || []).some((r) => r.State === 'running');
     const ordered = [...keys].sort(
-      (a, b) =>
-        live(b) - live(a) ||
-        (a === NO_PROJECT) - (b === NO_PROJECT) ||
-        a.localeCompare(b),
+      (a, b) => live(b) - live(a) || (a === NO_PROJECT) - (b === NO_PROJECT) || a.localeCompare(b),
     );
     const shown = visible
       .filter((r) => inTab(r, tab))
