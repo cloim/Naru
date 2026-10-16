@@ -142,6 +142,14 @@ function Settings() {
               onChange={(e) => setValue({ ...value, namespace: e.target.value })}
             />
           </label>
+          <label className={tw.checkbox}>
+            <input
+              type="checkbox"
+              checked={value.autoStart}
+              onChange={(e) => setValue({ ...value, autoStart: e.target.checked })}
+            />
+            Naru 서버 시작 시 엔진도 시작
+          </label>
         </section>
         <section className={cn(tw.panel, tw.group)}>
           <h3>Kubernetes</h3>
