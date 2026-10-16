@@ -19,8 +19,11 @@ import { Modal } from './Modal/Modal.jsx';
 import { api } from '../api.js';
 import { cn, tw } from '../tw.js';
 
-export function ContainerFileExplorer({ containerId }) {
+export function ResourceFileExplorer({ containerId, targetType: propTargetType, targetId: propTargetId }) {
   useLocale();
+  const targetType = propTargetType || 'containers';
+  const targetId = propTargetId || containerId;
+  const isVolume = targetType === 'volumes';
   const { notify, confirm } = useActions();
   const qc = useQueryClient();
   const [currentPath, setCurrentPath] = useState('/');
@@ -29,9 +32,9 @@ export function ContainerFileExplorer({ containerId }) {
   const [editContent, setEditContent] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const queryKey = ['container-files', containerId, currentPath];
-  const files = useData(queryKey, `/containers/${containerId}/files?path=${encodeURIComponent(currentPath)}`, {
-    enabled: !!containerId,
+  const queryKey = [`${targetType}-files`, targetId, currentPath];
+  const files = useData(queryKey, `/${targetType}/${targetId}/files?path=${encodeURIComponent(currentPath)}`, {
+    enabled: !!targetId,
   });
 
   const pathParts = useMemo(() => {
@@ -61,7 +64,7 @@ export function ContainerFileExplorer({ containerId }) {
 
   const openFile = async (entry) => {
     try {
-      const res = await api(`/containers/${containerId}/files/content?path=${encodeURIComponent(entry.path)}`);
+      const res = await api(`/${targetType}/${targetId}/files/content?path=${encodeURIComponent(entry.path)}`);
       setEditFile(entry);
       setEditContent(res.text ?? '');
     } catch (e) {
@@ -73,7 +76,7 @@ export function ContainerFileExplorer({ containerId }) {
     if (!editFile) return;
     setSaving(true);
     try {
-      await api(`/containers/${containerId}/files/content`, {
+      await api(`/${targetType}/${targetId}/files/content`, {
         method: 'PUT',
         body: { path: editFile.path, text: editContent },
       });
@@ -93,7 +96,7 @@ export function ContainerFileExplorer({ containerId }) {
       t('{0}을(를) 삭제합니다. 되돌릴 수 없습니다.', [entry.name]),
       async () => {
         try {
-          await api(`/containers/${containerId}/files?path=${encodeURIComponent(entry.path)}`, {
+          await api(`/${targetType}/${targetId}/files?path=${encodeURIComponent(entry.path)}`, {
             method: 'DELETE',
           });
           qc.invalidateQueries({ queryKey });
@@ -113,7 +116,7 @@ export function ContainerFileExplorer({ containerId }) {
       const text = reader.result;
       const targetPath = (currentPath === '/' ? '' : currentPath) + '/' + file.name;
       try {
-        await api(`/containers/${containerId}/files/content`, {
+        await api(`/${targetType}/${targetId}/files/content`, {
           method: 'PUT',
           body: { path: targetPath, text: String(text) },
         });
@@ -127,8 +130,33 @@ export function ContainerFileExplorer({ containerId }) {
     e.target.value = '';
   };
 
+  const handleArchiveRestore = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    confirm(
+      t('볼륨 데이터 복원'),
+      t('{0} 아카이브로 볼륨 데이터를 덮어씁니다. 계속하시겠습니까?', [file.name]),
+      async () => {
+        try {
+          const buffer = await file.arrayBuffer();
+          const res = await fetch(`/api/volumes/${encodeURIComponent(targetId)}/import`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/gzip' },
+            body: buffer,
+          });
+          if (!res.ok) throw new Error(await res.text());
+          qc.invalidateQueries({ queryKey: [`${targetType}-files`, targetId] });
+          notify(t('볼륨 데이터를 성공적으로 복원했습니다.'));
+        } catch (err) {
+          notify(err);
+        }
+      },
+    );
+    e.target.value = '';
+  };
+
   const downloadFile = (entry) => {
-    api(`/containers/${containerId}/files/content?path=${encodeURIComponent(entry.path)}`)
+    api(`/${targetType}/${targetId}/files/content?path=${encodeURIComponent(entry.path)}`)
       .then((res) => {
         const blob = new Blob([res.text], { type: 'text/plain;charset=utf-8' });
         const url = URL.createObjectURL(blob);
@@ -139,6 +167,10 @@ export function ContainerFileExplorer({ containerId }) {
         URL.revokeObjectURL(url);
       })
       .catch(notify);
+  };
+
+  const downloadVolumeBackup = () => {
+    window.open(`/api/volumes/${encodeURIComponent(targetId)}/export`, '_blank');
   };
 
   return (
@@ -189,6 +221,28 @@ export function ContainerFileExplorer({ containerId }) {
               </button>
             )}
           </div>
+          {isVolume && (
+            <>
+              <Button
+                compact
+                icon={Download}
+                onClick={downloadVolumeBackup}
+                title={t('볼륨 전체 데이터를 TAR.GZ로 압축 다운로드')}
+              >
+                {t('백업')}
+              </Button>
+              <label className="inline-flex h-8.5 cursor-pointer items-center gap-1.5 rounded-[6px] border border-[#dce2d9] bg-white px-2.5 text-[12px] font-semibold text-ink hover:border-[#bdcdbb] hover:bg-[#f2f6ed]" title={t('TAR.GZ 아카이브로 볼륨 복원')}>
+                <Upload size={14} />
+                <span>{t('복원')}</span>
+                <input
+                  type="file"
+                  accept=".tar,.tar.gz,.tgz"
+                  className="hidden"
+                  onChange={handleArchiveRestore}
+                />
+              </label>
+            </>
+          )}
           <label className="inline-flex h-8.5 cursor-pointer items-center gap-1.5 rounded-[6px] border border-[#dce2d9] bg-white px-2.5 text-[12px] font-semibold text-ink hover:border-[#bdcdbb] hover:bg-[#f2f6ed]">
             <Upload size={14} />
             <span>{t('파일 업로드')}</span>
@@ -313,3 +367,8 @@ export function ContainerFileExplorer({ containerId }) {
     </div>
   );
 }
+
+export const ContainerFileExplorer = ({ containerId }) => (
+  <ResourceFileExplorer targetType="containers" targetId={containerId} />
+);
+
