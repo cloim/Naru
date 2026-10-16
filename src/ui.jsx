@@ -1,6 +1,7 @@
 import { t, useLocale } from './i18n.js';
 import React, {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -122,6 +123,7 @@ export const jobNames = {
   exportImage: '이미지 내보내기',
   importImage: '이미지 불러오기',
   scanImage: '이미지 분석',
+  pruneResources: '미사용 리소스 정리',
 };
 
 export const stateNames = { queued: '접수', running: '진행 중', succeeded: '완료', failed: '실패' };
@@ -158,6 +160,39 @@ export function IconButton({ icon: Icon, label, danger, className, ...props }) {
       {...props}
     >
       <Icon size={16} aria-hidden="true" />
+    </button>
+  );
+}
+
+export function CopyButton({ text, label, className }) {
+  useLocale();
+  const [copied, setCopied] = useState(false);
+  const copy = useCallback(
+    (e) => {
+      e.stopPropagation();
+      if (!text) return;
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(String(text));
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }
+    },
+    [text],
+  );
+  const title = label || (copied ? t('복사 완료') : t('클립보드에 복사'));
+  return (
+    <button
+      type="button"
+      className={cn(
+        'inline-flex h-6 w-6 flex-none items-center justify-center rounded-[4px] text-[#8c978e] transition-colors hover:bg-[#edf2e7] hover:text-brand',
+        copied && 'text-[#407543]',
+        className,
+      )}
+      title={title}
+      aria-label={title}
+      onClick={copy}
+    >
+      {copied ? <Check size={13} aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />}
     </button>
   );
 }

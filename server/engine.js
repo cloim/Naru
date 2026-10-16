@@ -159,6 +159,16 @@ export const lines = (text) =>
     .split(/\r?\n/)
     .filter(Boolean)
     .map((x) => JSON.parse(x));
+function parseLabels(raw) {
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw;
+  const labels = {};
+  for (const part of String(raw).split(',')) {
+    const idx = part.indexOf('=');
+    if (idx !== -1) labels[part.slice(0, idx).trim()] = part.slice(idx + 1).trim();
+  }
+  return labels;
+}
 export async function list(kind) {
   await requireReady();
   const cfg = await settings();
@@ -194,7 +204,7 @@ export async function list(kind) {
     await cli([kind === 'volumes' ? 'volume' : 'network', 'ls', '--format', '{{json .}}']),
   ).map((x) =>
     kind === 'volumes'
-      ? { Name: x.Name, Driver: x.Driver, Mountpoint: x.Mountpoint }
+      ? { Name: x.Name, Driver: x.Driver, Mountpoint: x.Mountpoint, Labels: parseLabels(x.Labels) }
       : { Id: x.ID, Name: x.Name, Driver: x.Driver, Scope: x.Scope },
   );
 }

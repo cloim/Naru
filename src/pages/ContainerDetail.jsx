@@ -1,11 +1,12 @@
 import { t, useLocale } from '../i18n.js';
-import React, { lazy, Suspense, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useRef, useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
-import { RotateCw, Pause, Terminal, RefreshCw } from 'lucide-react';
+import { RotateCw, Pause, Terminal, RefreshCw, Search, X, ArrowDown, Copy } from 'lucide-react';
 import {
   useActions,
   useData,
   Button,
+  CopyButton,
   Skeleton,
   ErrorState,
   bytes,
@@ -47,9 +48,12 @@ function ContainerDetail() {
   const { id } = useParams(),
     { job, notify, busy } = useActions();
   const [tab, setTab] = useState('logs'),
-    [args, setArgs] = useState('["sh", "-c", "pwd"]'),
+    [args, setArgs] = useState('pwd'),
     [output, setOutput] = useState(''),
-    [execBusy, setExecBusy] = useState(false);
+    [execBusy, setExecBusy] = useState(false),
+    [logSearch, setLogSearch] = useState(''),
+    [autoScroll, setAutoScroll] = useState(true);
+  const logEndRef = useRef(null);
   const detail = useData('inspect:' + id, `/containers/${id}/inspect`);
   const logs = useData('logs:' + id, `/containers/${id}/logs`, {
     enabled: tab === 'logs',
@@ -62,12 +66,36 @@ function ContainerDetail() {
   const inspect = Array.isArray(detail.data) ? detail.data[0] : detail.data;
   usePageTitle(inspect?.Name?.replace(/^\//, '') || id.slice(0, 12));
   const usage = stats.data ? resourceUsage(stats.data) : null;
-  const execute = async () => {
+
+  const rawLog = logs.data?.text || '';
+  const filteredLog = useMemo(() => {
+    if (!logSearch.trim()) return rawLog;
+    const q = logSearch.toLowerCase();
+    return rawLog
+      .split('\n')
+      .filter((line) => line.toLowerCase().includes(q))
+      .join('\n');
+  }, [rawLog, logSearch]);
+
+  useEffect(() => {
+    if (autoScroll && tab === 'logs') {
+      logEndRef.current?.scrollIntoView({ block: 'nearest' });
+    }
+  }, [logs.data?.text, autoScroll, tab]);
+
+  const executeCommand = async (cmdToRun) => {
+    const target = (cmdToRun !== undefined ? cmdToRun : args).trim();
+    if (!target) return;
     setExecBusy(true);
     try {
-      const parsed = JSON.parse(args);
-      if (!Array.isArray(parsed) || !parsed.length || parsed.some((arg) => typeof arg !== 'string'))
-        throw new Error(t('실행 인수를 문자열이 담긴 JSON 배열로 입력해 주세요.'));
+      let parsed;
+      if (target.startsWith('[')) {
+        parsed = JSON.parse(target);
+        if (!Array.isArray(parsed) || !parsed.length || parsed.some((arg) => typeof arg !== 'string'))
+          throw new Error(t('실행 인수를 문자열이 담긴 JSON 배열로 입력해 주세요.'));
+      } else {
+        parsed = ['sh', '-c', target];
+      }
       const result = await api(`/containers/${id}/exec`, {
         method: 'POST',
         body: { args: parsed },
@@ -125,12 +153,64 @@ function ContainerDetail() {
           ) : logs.error ? (
             <ErrorState error={logs.error} retry={() => logs.refetch()} />
           ) : (
-            <pre
-              className={cn(tw.terminal, 'min-h-[400px] rounded-none')}
-              aria-label={t('컨테이너 로그')}
-            >
-              {logs.data?.text || t('아직 출력된 로그가 없습니다.')}
-            </pre>
+            <div className="flex flex-col">
+              <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-line bg-[#fbfcf9] px-4 py-2.5">
+                <div className="flex h-8.5 w-full max-w-[280px] items-center gap-2 rounded-[6px] border border-[#e3e8df] bg-white px-2.5 text-[#8c978e]">
+                  <Search size={15} />
+                  <input
+                    className="h-full min-w-0 flex-1 bg-transparent text-[12px] text-ink outline-0 placeholder:text-[#9aa29b]"
+                    aria-label={t('로그 검색')}
+                    placeholder={t('로그 검색')}
+                    value={logSearch}
+                    onChange={(e) => setLogSearch(e.target.value)}
+                  />
+                  {logSearch && (
+                    <button
+                      type="button"
+                      aria-label={t('검색어 지우기')}
+                      className="text-[#8c978e] hover:text-ink"
+                      onClick={() => setLogSearch('')}
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    compact
+                    icon={ArrowDown}
+                    className={cn(autoScroll && 'border-[#bdcdbb] bg-[#eef5e9] text-[#407543]')}
+                    onClick={() => setAutoScroll(!autoScroll)}
+                  >
+                    {t('자동 스크롤')}
+                  </Button>
+                  <CopyButton
+                    text={filteredLog || rawLog}
+                    label={t('로그 복사')}
+                    className="h-8.5 w-8.5 border border-[#dce2d9] bg-white"
+                  />
+                  <Button
+                    compact
+                    icon={RefreshCw}
+                    disabled={logs.isFetching}
+                    onClick={() => logs.refetch()}
+                  >
+                    {t('새로고침')}
+                  </Button>
+                </div>
+              </div>
+              <pre
+                className={cn(
+                  tw.terminal,
+                  'max-h-[600px] min-h-[400px] overflow-auto rounded-none',
+                )}
+                aria-label={t('컨테이너 로그')}
+              >
+                {filteredLog ||
+                  (logSearch ? t('일치하는 로그가 없습니다.') : t('아직 출력된 로그가 없습니다.'))}
+                <span ref={logEndRef} />
+              </pre>
+            </div>
           )
         ) : null}
         {tab === 'resources' ? (
@@ -208,19 +288,50 @@ function ContainerDetail() {
             className="p-5"
             onSubmit={(e) => {
               e.preventDefault();
-              execute();
+              executeCommand();
             }}
           >
+            <div className="mb-3.5 flex flex-wrap items-center gap-1.5">
+              <span className="mr-1 text-[12px] font-semibold text-[#536454]">
+                {t('추천 명령')}:
+              </span>
+              {['pwd', 'ls -la', 'env', 'df -h', 'ps aux'].map((cmd) => (
+                <button
+                  key={cmd}
+                  type="button"
+                  className="rounded-[5px] border border-[#dce2d9] bg-white px-2.5 py-1 font-mono text-[11px] text-ink hover:border-[#bdcdbb] hover:bg-[#f2f6ed]"
+                  onClick={() => {
+                    setArgs(cmd);
+                    executeCommand(cmd);
+                  }}
+                >
+                  {cmd}
+                </button>
+              ))}
+            </div>
             <label className={tw.field}>
-              <span>{t('실행 인수 (JSON 배열)')}</span>
-              <input value={args} onChange={(e) => setArgs(e.target.value)} />
+              <span>{t('실행 인수 (셸 명령 또는 JSON 배열)')}</span>
+              <input
+                value={args}
+                placeholder="pwd 또는 [&quot;sh&quot;, &quot;-c&quot;, &quot;pwd&quot;]"
+                onChange={(e) => setArgs(e.target.value)}
+              />
+              <small>
+                {t('일반 명령(예: pwd, ls -la) 또는 JSON 배열(["sh", "-c", "..."])을 입력할 수 있습니다.')}
+              </small>
             </label>
             <Button type="submit" icon={Terminal} disabled={execBusy || busy}>
               {execBusy ? t('실행 중') : t('실행')}
             </Button>
-            <pre className={cn(tw.terminal, 'mt-5')} aria-label={t('명령 실행 결과')}>
-              {output || t('명령 결과가 여기에 표시됩니다.')}
-            </pre>
+            <div className="mt-5">
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-[12px] font-semibold text-[#536454]">{t('명령 실행 결과')}</span>
+                {output && <CopyButton text={output} label={t('결과 복사')} />}
+              </div>
+              <pre className={tw.terminal} aria-label={t('명령 실행 결과')}>
+                {output || t('명령 결과가 여기에 표시됩니다.')}
+              </pre>
+            </div>
           </form>
         )}
       </div>
