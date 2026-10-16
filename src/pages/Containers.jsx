@@ -1,3 +1,4 @@
+import { t, useLocale } from '../i18n.js';
 import React, { createContext, useContext, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
@@ -62,6 +63,7 @@ function readCollapsed() {
 const ProjectContext = createContext(null);
 
 function ProjectRow({ data: g }) {
+  useLocale();
   const { job, busy, toggle, collapsed, openLogs, openManage } = useContext(ProjectContext);
   const open = !collapsed.has(g.__group);
   const named = g.__group !== NO_PROJECT;
@@ -79,21 +81,23 @@ function ProjectRow({ data: g }) {
       <Boxes size={19} className="flex-none text-[#4f7750]" aria-hidden />
       <div className="flex min-w-0 flex-col leading-[1.5] max-tablet:flex-1">
         <strong className="truncate text-[13px] text-ink">
-          {named ? g.__group : '프로젝트 없음'}
+          {named ? g.__group : t('프로젝트 없음')}
         </strong>
         <small className="truncate font-mono text-[10px] text-[#9aa297]">
-          {named ? g.info?.workingDir || '작업 폴더 정보 없음' : 'Compose로 만들지 않은 컨테이너'}
+          {named
+            ? g.info?.workingDir || t('작업 폴더 정보 없음')
+            : t('Compose로 만들지 않은 컨테이너')}
         </small>
       </div>
       <Badge state={g.running > 0 ? 'running' : 'exited'}>
-        {g.total ? `실행 ${g.running}/${g.total}` : '컨테이너 없음'}
+        {g.total ? t('실행 {0}/{1}', [g.running, g.total]) : t('컨테이너 없음')}
       </Badge>
       {named && (
         <div className={cn(tw.rowActions, 'ml-auto')} onClick={(e) => e.stopPropagation()}>
           {g.total === 0 && (
             <IconButton
               icon={Play}
-              label={`${g.__group} 프로젝트 up`}
+              label={t('{0} 프로젝트 up', [g.__group])}
               disabled={busy || !g.info?.filesFound}
               onClick={() => run('up')}
             />
@@ -101,7 +105,7 @@ function ProjectRow({ data: g }) {
           {g.total > 0 && g.running < g.total && (
             <IconButton
               icon={Play}
-              label={`${g.__group} 프로젝트 시작`}
+              label={t('{0} 프로젝트 시작', [g.__group])}
               disabled={busy}
               onClick={() => run('start')}
             />
@@ -109,7 +113,7 @@ function ProjectRow({ data: g }) {
           {g.running > 0 && (
             <IconButton
               icon={Square}
-              label={`${g.__group} 프로젝트 정지`}
+              label={t('{0} 프로젝트 정지', [g.__group])}
               disabled={busy}
               onClick={() => run('stop')}
             />
@@ -118,7 +122,7 @@ function ProjectRow({ data: g }) {
             <IconButton
               className="max-tablet:hidden"
               icon={RotateCw}
-              label={`${g.__group} 프로젝트 재시작`}
+              label={t('{0} 프로젝트 재시작', [g.__group])}
               disabled={busy}
               onClick={() => run('restart')}
             />
@@ -127,13 +131,13 @@ function ProjectRow({ data: g }) {
             <IconButton
               className="max-tablet:hidden"
               icon={Terminal}
-              label={`${g.__group} 프로젝트 로그 보기`}
+              label={t('{0} 프로젝트 로그 보기', [g.__group])}
               onClick={() => openLogs(g.__group)}
             />
           )}
           <IconButton
             icon={Settings2}
-            label={`${g.__group} 프로젝트 관리`}
+            label={t('{0} 프로젝트 관리', [g.__group])}
             onClick={() => openManage(g)}
           />
         </div>
@@ -143,6 +147,7 @@ function ProjectRow({ data: g }) {
 }
 
 function ProjectLogs({ name, onClose }) {
+  useLocale();
   const logs = useData('project-logs:' + name, `/projects/${name}/logs`, {
     enabled: !!name,
     refetchInterval: name ? 5000 : false,
@@ -150,15 +155,16 @@ function ProjectLogs({ name, onClose }) {
   return (
     <Modal
       isOpen={!!name}
-      title={`${name || ''} 프로젝트 로그`}
+      title={t('{0} 프로젝트 로그', [name || ''])}
       onClose={onClose}
       size="lg"
       footer={
         <>
           <Button icon={RefreshCw} disabled={logs.isFetching} onClick={() => logs.refetch()}>
-            새로고침
+            {' '}
+            {t('새로고침')}{' '}
           </Button>
-          <Button onClick={onClose}>닫기</Button>
+          <Button onClick={onClose}>{t('닫기')}</Button>
         </>
       }
     >
@@ -167,8 +173,8 @@ function ProjectLogs({ name, onClose }) {
       ) : logs.error ? (
         <ErrorState error={logs.error} retry={() => logs.refetch()} />
       ) : (
-        <pre className={tw.terminal} aria-label="프로젝트 로그">
-          {logs.data?.text || '아직 출력된 로그가 없습니다.'}
+        <pre className={tw.terminal} aria-label={t('프로젝트 로그')}>
+          {logs.data?.text || t('아직 출력된 로그가 없습니다.')}
         </pre>
       )}
     </Modal>
@@ -176,6 +182,7 @@ function ProjectLogs({ name, onClose }) {
 }
 
 function ProjectManage({ group, onClose, onLogs }) {
+  useLocale();
   const { job, confirm, notify, busy } = useActions(),
     qc = useQueryClient();
   const name = group?.__group;
@@ -192,7 +199,7 @@ function ProjectManage({ group, onClose, onLogs }) {
   return (
     <Modal
       isOpen={!!name}
-      title={`${name || ''} 프로젝트 관리`}
+      title={t('{0} 프로젝트 관리', [name || ''])}
       onClose={close}
       size="lg"
       footer={
@@ -201,7 +208,8 @@ function ProjectManage({ group, onClose, onLogs }) {
             // 좁은 화면의 머리 행에는 재시작과 로그 버튼을 두지 않으므로 여기서 제공한다.
             <div className="flex gap-2.25 tablet:hidden">
               <Button icon={RotateCw} disabled={busy} onClick={() => run('restart')}>
-                재시작
+                {' '}
+                {t('재시작')}{' '}
               </Button>
               <Button
                 icon={Terminal}
@@ -210,7 +218,8 @@ function ProjectManage({ group, onClose, onLogs }) {
                   onLogs(name);
                 }}
               >
-                로그
+                {' '}
+                {t('로그')}{' '}
               </Button>
             </div>
           )}
@@ -221,10 +230,12 @@ function ProjectManage({ group, onClose, onLogs }) {
               onClick={() => {
                 close();
                 confirm(
-                  '프로젝트를 목록에서 제거',
+                  t('프로젝트를 목록에서 제거'),
                   managed
-                    ? `${name} 프로젝트와 Naru에 저장한 compose.yaml을 삭제합니다.`
-                    : `${name} 프로젝트를 목록에서 뺍니다. 원본 compose 파일은 그대로 둡니다.`,
+                    ? t('{0} 프로젝트와 Naru에 저장한 compose.yaml을 삭제합니다.', [name])
+                    : t('{0} 프로젝트를 목록에서 뺍니다. 원본 compose 파일은 그대로 둡니다.', [
+                        name,
+                      ]),
                   () =>
                     api(`/projects/${name}`, { method: 'DELETE' })
                       .then(() => qc.invalidateQueries({ queryKey: ['projects'] }))
@@ -232,7 +243,8 @@ function ProjectManage({ group, onClose, onLogs }) {
                 );
               }}
             >
-              목록에서 제거
+              {' '}
+              {t('목록에서 제거')}{' '}
             </Button>
           )}
           <div className="ml-auto flex flex-wrap justify-end gap-2.25">
@@ -242,8 +254,8 @@ function ProjectManage({ group, onClose, onLogs }) {
               onClick={() => {
                 close();
                 confirm(
-                  `${name} 프로젝트 down`,
-                  '컨테이너와 네트워크를 제거합니다. 이름 있는 볼륨은 보존됩니다.',
+                  t('{0} 프로젝트 down', [name]),
+                  t('컨테이너와 네트워크를 제거합니다. 이름 있는 볼륨은 보존됩니다.'),
                   () => job('project', { name, action: 'down' }),
                 );
               }}
@@ -262,7 +274,8 @@ function ProjectManage({ group, onClose, onLogs }) {
                 disabled={busy || draft === null}
                 onClick={() => job('compose', { name, yaml, action: 'save' }).then(close)}
               >
-                저장
+                {' '}
+                {t('저장')}{' '}
               </Button>
             )}
             <Button
@@ -275,7 +288,7 @@ function ProjectManage({ group, onClose, onLogs }) {
                   : run('up')
               }
             >
-              {managed && draft !== null ? '저장 후 up' : 'up'}
+              {managed && draft !== null ? t('저장 후 up') : 'up'}
             </Button>
           </div>
         </div>
@@ -288,14 +301,15 @@ function ProjectManage({ group, onClose, onLogs }) {
       ) : (
         <div className="flex flex-col gap-4">
           <dl className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-2 text-[12px] [&_dd]:font-mono [&_dd]:break-all [&_dt]:font-semibold [&_dt]:text-[#536454]">
-            <dt>작업 폴더</dt>
+            <dt>{t('작업 폴더')}</dt>
             <dd>{detail.data.workingDir}</dd>
-            <dt>compose 파일</dt>
-            <dd>{detail.data.configFiles.join(', ') || '없음'}</dd>
+            <dt>{t('compose 파일')}</dt>
+            <dd>{detail.data.configFiles.join(', ') || t('없음')}</dd>
           </dl>
           {!ready && (
             <p className={tw.groupText}>
-              compose 파일을 찾을 수 없어 컨테이너 시작, 정지, 재시작만 할 수 있습니다.
+              {' '}
+              {t('compose 파일을 찾을 수 없어 컨테이너 시작, 정지, 재시작만 할 수 있습니다.')}{' '}
             </p>
           )}
           {managed ? (
@@ -329,6 +343,7 @@ function ProjectManage({ group, onClose, onLogs }) {
 }
 
 function Containers() {
+  const locale = useLocale();
   const { status, job, form, confirm, busy } = useActions(),
     data = useResource('containers'),
     navigate = useNavigate();
@@ -416,7 +431,7 @@ function Containers() {
   const cols = useMemo(
     () => [
       {
-        headerName: '컨테이너',
+        headerName: t('컨테이너'),
         colId: 'name',
         minWidth: 210,
         flex: 1.3,
@@ -433,13 +448,13 @@ function Containers() {
       },
       {
         field: 'State',
-        headerName: '상태',
+        headerName: t('상태'),
         width: 125,
         cellRenderer: ({ value }) => <Badge state={value} />,
       },
-      { field: 'Image', headerName: '이미지', minWidth: 190, flex: 1.2, filterable: true },
+      { field: 'Image', headerName: t('이미지'), minWidth: 190, flex: 1.2, filterable: true },
       {
-        headerName: '포트',
+        headerName: t('포트'),
         minWidth: 140,
         flex: 0.8,
         valueGetter: ({ data: r }) =>
@@ -456,7 +471,7 @@ function Containers() {
           <div className={tw.rowActions} onClick={(e) => e.stopPropagation()}>
             <IconButton
               icon={r.State === 'running' ? Square : Play}
-              label={`${containerName(r)} ${r.State === 'running' ? '중지' : '시작'}`}
+              label={`${containerName(r)} ${r.State === 'running' ? t('중지') : t('시작')}`}
               disabled={busy}
               onClick={() =>
                 job('containerAction', {
@@ -467,18 +482,18 @@ function Containers() {
             />
             <IconButton
               icon={Terminal}
-              label={`${containerName(r)} 로그 보기`}
+              label={t('{0} 로그 보기', [containerName(r)])}
               onClick={() => navigate('/containers/' + r.Id)}
             />
             <IconButton
               icon={Trash2}
-              label={`${containerName(r)} 삭제`}
+              label={t('{0} 삭제', [containerName(r)])}
               danger="row"
               disabled={busy}
               onClick={() =>
                 confirm(
-                  '컨테이너 삭제',
-                  `${containerName(r)} 컨테이너를 삭제합니다. 연결된 볼륨은 보존됩니다.`,
+                  t('컨테이너 삭제'),
+                  t('{0} 컨테이너를 삭제합니다. 연결된 볼륨은 보존됩니다.', [containerName(r)]),
                   () => job('containerAction', { id: r.Id, action: 'remove' }),
                 )
               }
@@ -487,26 +502,26 @@ function Containers() {
         ),
       },
     ],
-    [busy, job, confirm, navigate],
+    [locale, busy, job, confirm, navigate],
   );
   if (!status?.ready) return status ? <RuntimeEmpty /> : <Skeleton />;
   return (
     <section className={tw.page}>
       <PageActions>
         <PageAction
-          label="새 Compose 프로젝트"
+          label={t('새 Compose 프로젝트')}
           icon={FolderPlus}
           disabled={busy}
           onClick={() =>
             form(
-              '새 Compose 프로젝트',
+              t('새 Compose 프로젝트'),
               [
                 {
                   key: 'name',
-                  label: '프로젝트 이름',
+                  label: t('프로젝트 이름'),
                   required: true,
                   placeholder: 'my-app',
-                  hint: '영문 소문자, 숫자, -, _만 사용합니다.',
+                  hint: t('영문 소문자, 숫자, -, _만 사용합니다.'),
                 },
                 {
                   key: 'yaml',
@@ -518,43 +533,43 @@ function Containers() {
                 },
               ],
               (v) => job('compose', { name: v.name, yaml: v.yaml, action: 'up' }),
-              'Naru 데이터 폴더에 저장하고 바로 up합니다.',
+              t('Naru 데이터 폴더에 저장하고 바로 up합니다.'),
             )
           }
         />
         <PageAction
-          label="컨테이너 실행"
+          label={t('컨테이너 실행')}
           icon={Plus}
           primary
           disabled={busy}
           onClick={() =>
             form(
-              '컨테이너 실행',
+              t('컨테이너 실행'),
               [
-                { key: 'image', label: '이미지', required: true, placeholder: 'nginx:alpine' },
-                { key: 'name', label: '이름', placeholder: 'my-web' },
+                { key: 'image', label: t('이미지'), required: true, placeholder: 'nginx:alpine' },
+                { key: 'name', label: t('이름'), placeholder: 'my-web' },
                 {
                   key: 'ports',
-                  label: '포트',
+                  label: t('포트'),
                   placeholder: '8080:80, 8443:443',
-                  hint: '호스트 포트:컨테이너 포트. Windows의 127.0.0.1에 공개합니다.',
+                  hint: t('호스트 포트:컨테이너 포트. Windows의 127.0.0.1에 공개합니다.'),
                 },
                 {
                   key: 'env',
-                  label: '환경 변수',
+                  label: t('환경 변수'),
                   type: 'textarea',
                   rows: 3,
                   placeholder: 'APP_ENV=development\nLOG_LEVEL=info',
                 },
                 {
                   key: 'mounts',
-                  label: '볼륨과 마운트 (JSON)',
+                  label: t('볼륨과 마운트 (JSON)'),
                   type: 'textarea',
                   rows: 3,
                   value: '[]',
-                  hint: '예: [{"source":"my-data","target":"/data","readOnly":false}]',
+                  hint: t('예: [{"source":"my-data","target":"/data","readOnly":false}]'),
                 },
-                { key: 'command', label: '실행 인수 (JSON)', value: '[]' },
+                { key: 'command', label: t('실행 인수 (JSON)'), value: '[]' },
               ],
               (v) =>
                 job('createContainer', {
@@ -581,9 +596,9 @@ function Containers() {
       <div className={tw.gridPanel}>
         <div className={tw.tabs}>
           {[
-            ['all', '전체'],
-            ['running', '실행 중'],
-            ['stopped', '종료됨'],
+            ['all', t('전체')],
+            ['running', t('실행 중')],
+            ['stopped', t('종료됨')],
           ].map(([key, label]) => (
             <button
               key={key}
@@ -603,8 +618,8 @@ function Containers() {
                 type="checkbox"
                 checked={showSystem}
                 onChange={(e) => setShowSystem(e.target.checked)}
-              />
-              시스템 컨테이너 표시
+              />{' '}
+              {t('시스템 컨테이너 표시')}{' '}
             </label>
           )}
         </Toolbar>

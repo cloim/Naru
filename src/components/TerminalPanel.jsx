@@ -1,3 +1,4 @@
+import { t, useLocale } from '../i18n.js';
 import React, { useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -8,6 +9,7 @@ import SelectControl from './SelectControl/SelectControl.tsx';
 import '@xterm/xterm/css/xterm.css';
 
 export default function TerminalPanel({ containerId }) {
+  useLocale();
   const hostRef = useRef(null);
   const [shell, setShell] = useState('/bin/sh');
   const [attempt, setAttempt] = useState(0);
@@ -38,8 +40,8 @@ export default function TerminalPanel({ containerId }) {
     const fit = new FitAddon();
     terminal.loadAddon(fit);
     terminal.open(hostRef.current);
-    terminal.textarea?.setAttribute('aria-label', '컨테이너 터미널 입력');
-    terminal.textarea?.setAttribute('title', '컨테이너 터미널 입력');
+    terminal.textarea?.setAttribute('aria-label', t('컨테이너 터미널 입력'));
+    terminal.textarea?.setAttribute('title', t('컨테이너 터미널 입력'));
 
     const resize = () => {
       if (disposed || !hostRef.current?.clientWidth) return;
@@ -92,14 +94,14 @@ export default function TerminalPanel({ containerId }) {
               terminal.focus();
             }
           } catch {
-            fail(new Error('터미널 응답을 해석할 수 없습니다. 다시 연결해 주세요.'));
+            fail(new Error(t('터미널 응답을 해석할 수 없습니다. 다시 연결해 주세요.')));
           }
         };
-        socket.onerror = () => fail(new Error('터미널 연결을 확인한 후 다시 연결해 주세요.'));
+        socket.onerror = () => fail(new Error(t('터미널 연결을 확인한 후 다시 연결해 주세요.')));
         socket.onclose = () => {
           ready = false;
           if (!disposed && !failure)
-            setConnection({ state: 'closed', message: '터미널 세션이 종료되었습니다.' });
+            setConnection({ state: 'closed', message: t('터미널 세션이 종료되었습니다.') });
         };
       } catch (error) {
         fail(error);
@@ -124,9 +126,9 @@ export default function TerminalPanel({ containerId }) {
     <div className="min-w-0 p-5 max-tablet:p-4">
       <div className="mb-4 flex flex-wrap items-center gap-4 max-tablet:gap-2.5">
         <label className="flex flex-none items-center gap-2.5 text-[12px]">
-          <span>셸</span>
+          <span>{t('셸')}</span>
           <SelectControl
-            aria-label="터미널 셸"
+            aria-label={t('터미널 셸')}
             value={shell}
             onChange={(e) => setShell(e.target.value)}
           >
@@ -139,14 +141,15 @@ export default function TerminalPanel({ containerId }) {
         </label>
         <span className="min-w-[100px] flex-1 text-[12px] wrap-anywhere text-muted" role="status">
           {connection.state === 'connected'
-            ? '연결됨'
+            ? t('연결됨')
             : connection.state === 'connecting'
-              ? '접속 중'
+              ? t('접속 중')
               : connection.message}
         </span>
         {['error', 'closed'].includes(connection.state) && (
           <Button icon={RefreshCw} onClick={() => setAttempt((value) => value + 1)}>
-            다시 연결
+            {' '}
+            {t('다시 연결')}{' '}
           </Button>
         )}
       </div>

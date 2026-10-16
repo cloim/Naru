@@ -1,3 +1,4 @@
+import { t } from '../../i18n.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 // 드래그와 리사이즈 중에는 문서 전체의 텍스트 선택과 커서를 고정한다.
@@ -275,8 +276,8 @@ export function useModalGeometry({
         onPointerCancel: endGesture,
         onKeyDown: onHeaderKeyDown,
         tabIndex: 0,
-        'aria-roledescription': '이동 손잡이',
-        'aria-label': '모달 이동 손잡이. 방향키로 옮기고 Home 키로 가운데에 되돌립니다.',
+        'aria-roledescription': t('이동 손잡이'),
+        'aria-label': t('모달 이동 손잡이. 방향키로 옮기고 Home 키로 가운데에 되돌립니다.'),
         'aria-keyshortcuts': 'ArrowUp ArrowDown ArrowLeft ArrowRight Home',
       }
     : {};

@@ -1,3 +1,4 @@
+import { t, useLocale } from '../../i18n.js';
 import React, { useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Filter } from 'lucide-react';
 import { ColumnFilterPopover } from './ColumnFilterPopover.jsx';
@@ -16,6 +17,7 @@ import { cn } from '../../tw.js';
  * 그 API를 호출만 한다.
  */
 export function ColumnFilterHeader(props) {
+  useLocale();
   const { displayName, column, enableSorting, setSort, context } = props;
   const [sortDirection, setSortDirection] = useState(column.getSort());
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
@@ -85,7 +87,7 @@ export function ColumnFilterHeader(props) {
             isFilterActive && 'bg-[#edf4e5] text-[#34633c] hover:bg-[#edf4e5] hover:text-[#34633c]',
           )}
           onClick={openFilterPopover}
-          aria-label={`${displayName} 필터`}
+          aria-label={t('{0} 필터', [displayName])}
         >
           <Filter size={12} aria-hidden="true" />
         </button>

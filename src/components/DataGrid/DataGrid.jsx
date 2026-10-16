@@ -1,3 +1,4 @@
+import { t, useLocale } from '../../i18n.js';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AgGridReact } from 'ag-grid-react';
 import { ModuleRegistry, AllCommunityModule } from 'ag-grid-community';
@@ -25,12 +26,13 @@ export function DataGrid({
   collapsedGroups,
   isLoading = false,
   errorMessage = '',
-  emptyMessage = '조건에 맞는 데이터가 없습니다.',
+  emptyMessage = t('조건에 맞는 데이터가 없습니다.'),
   headerHeight = 44,
   rowHeight = 52,
   className = '',
   ...gridProps
 }) {
+  const locale = useLocale();
   const [sortState, setSortState] = useState(initialSortState);
   const gridApiRef = useRef(null);
   // 엑셀 스타일 컬럼 필터 상태. { [field]: FilterState | undefined } — 키가 없으면 "필터
@@ -69,7 +71,7 @@ export function DataGrid({
       if (colDef?.filterValuesGetter) {
         const rawValues = colDef.filterValuesGetter(row);
         if (!Array.isArray(rawValues)) {
-          throw new Error(`DataGrid filterValuesGetter는 배열을 반환해야 합니다: ${field}`);
+          throw new Error(t('DataGrid filterValuesGetter는 배열을 반환해야 합니다: {0}', [field]));
         }
         const values = [...new Set(rawValues.map(formatFilterValue))];
         return values.length > 0 ? values : [''];
@@ -119,11 +121,11 @@ export function DataGrid({
             if (entry) {
               entry.count += 1;
             } else {
-              counts.set(value, { value, label: value || '(비어 있음)', count: 1 });
+              counts.set(value, { value, label: value || t('(비어 있음)'), count: 1 });
             }
           }
         }
-        return Array.from(counts.values()).sort((a, b) => a.label.localeCompare(b.label, 'ko'));
+        return Array.from(counts.values()).sort((a, b) => a.label.localeCompare(b.label, locale));
       },
       setFilter: (field, filterState) => {
         setColumnFilters((current) => {
@@ -136,7 +138,7 @@ export function DataGrid({
         });
       },
     }),
-    [columnFilters, memberRows, applyColumnFilters, getFilterValues],
+    [locale, columnFilters, memberRows, applyColumnFilters, getFilterValues],
   );
 
   // 그룹 머리 행은 필터 대상이 아니다. 걸러진 소속 행이 남은 그룹만 보이고, 소속 행이 원래 없는
@@ -434,7 +436,7 @@ export function buildDataGridSortNoteText(sortState, defaultText, columnLabelOve
   if (!sortState) {
     return defaultText;
   }
-  const directionText = sortState.direction === 'desc' ? '내림차순' : '오름차순';
+  const directionText = sortState.direction === 'desc' ? t('내림차순') : t('오름차순');
   const columnLabel = columnLabelOverrides[sortState.headerName] ?? sortState.headerName;
   return `${columnLabel} ${directionText}`;
 }
@@ -527,10 +529,11 @@ function DataGridStatus({ message }) {
 }
 
 function DataGridSkeleton({ columnCount }) {
+  useLocale();
   return (
     <div
       className="absolute inset-x-0 top-11 bottom-0 z-2 flex flex-col overflow-hidden bg-white"
-      aria-label="목록 데이터를 불러오는 중입니다."
+      aria-label={t('목록 데이터를 불러오는 중입니다.')}
     >
       {Array.from({ length: 9 }).map((_, rowIndex) => (
         <div

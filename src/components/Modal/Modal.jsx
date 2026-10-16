@@ -1,3 +1,4 @@
+import { t, useLocale } from '../../i18n.js';
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
@@ -39,6 +40,7 @@ export function Modal({
   minHeight = 200,
   className = '',
 }) {
+  useLocale();
   const panelRef = useRef(null);
   const previouslyFocusedRef = useRef(null);
   const overlayPointerDownRef = useRef(false);
@@ -169,7 +171,7 @@ export function Modal({
             type="button"
             className="flex h-7 w-7 flex-none items-center justify-center rounded-[6px] bg-transparent text-[#a29c94] hover:bg-[#f1efec] hover:text-[#4b5563]"
             onClick={onClose}
-            aria-label="닫기"
+            aria-label={t('닫기')}
             data-modal-no-drag
           >
             <X size={16} aria-hidden="true" />

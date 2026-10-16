@@ -1,3 +1,4 @@
+import { t, useLocale } from './i18n.js';
 import React, {
   createContext,
   useContext,
@@ -162,6 +163,7 @@ export function IconButton({ icon: Icon, label, danger, className, ...props }) {
 }
 
 export function Badge({ state, children }) {
+  useLocale();
   return (
     <span
       className={cn(
@@ -172,15 +174,18 @@ export function Badge({ state, children }) {
     >
       <span />
       {children ||
-        { running: '실행 중', exited: '종료', created: '생성됨', paused: '일시 정지' }[state] ||
+        { running: t('실행 중'), exited: t('종료'), created: t('생성됨'), paused: t('일시 정지') }[
+          state
+        ] ||
         state}
     </span>
   );
 }
 
 export function Skeleton() {
+  useLocale();
   return (
-    <div className="flex flex-col gap-4.5 p-7.5" aria-label="불러오는 중">
+    <div className="flex flex-col gap-4.5 p-7.5" aria-label={t('불러오는 중')}>
       {[1, 2, 3, 4].map((i) => (
         <div className={tw.skeleton} key={i} />
       ))}
@@ -192,14 +197,16 @@ const EMPTY =
   'flex flex-col items-center gap-3.5 px-7 py-17 text-center text-[#81917f] [&_h3]:text-[#3d5343] [&_p]:max-w-[640px] [&_p]:whitespace-pre-wrap [&_p]:wrap-anywhere';
 
 export function ErrorState({ error, retry }) {
+  useLocale();
   return (
     <div className={EMPTY}>
       <CircleHelp size={30} />
-      <h3>연결을 확인해 주세요</h3>
+      <h3>{t('연결을 확인해 주세요')}</h3>
       <p>{error?.message || error}</p>
       {retry && (
         <Button onClick={retry} icon={RefreshCw}>
-          다시 시도
+          {' '}
+          {t('다시 시도')}{' '}
         </Button>
       )}
     </div>
@@ -230,11 +237,13 @@ export const imageName = (r) =>
   r.RepoTags?.find((t) => t !== '<none>:<none>') || r.Id?.slice(0, 19);
 
 export function RuntimeEmpty() {
+  useLocale();
   const { status, job, busy } = useActions();
   if (status?.managed === false)
     return (
-      <Empty title="External Engine 엔진 연결을 확인해 주세요">
-        External Engine에서 Docker 엔진을 시작하면 Naru가 자동으로 연결합니다.
+      <Empty title={t('External Engine 엔진 연결을 확인해 주세요')}>
+        {' '}
+        {t('External Engine에서 Docker 엔진을 시작하면 Naru가 자동으로 연결합니다.')}{' '}
       </Empty>
     );
   return (
@@ -243,7 +252,9 @@ export function RuntimeEmpty() {
         <img className="h-16 w-16 rotate-5" src="/brand/naru-mark.png" alt="" />
       </div>
       <h2 className="mb-7 text-[34px] max-tablet:text-[28px]">
-        {status?.installed ? 'Naru 엔진이 꺼져 있습니다' : '독립 런타임이 설치되지 않았습니다'}
+        {status?.installed
+          ? t('Naru 엔진이 꺼져 있습니다')
+          : t('독립 런타임이 설치되지 않았습니다')}
       </h2>
       <Button
         primary
@@ -251,9 +262,9 @@ export function RuntimeEmpty() {
         icon={status?.installed ? Play : Download}
         onClick={() => job(status?.installed ? 'startRuntime' : 'installRuntime')}
       >
-        {status?.installed ? 'Naru 엔진 시작' : '독립 런타임 설치'}
+        {status?.installed ? t('Naru 엔진 시작') : t('독립 런타임 설치')}
       </Button>
-      <small className="mt-5 text-[11px]">Naru 전용 WSL2 환경을 사용합니다.</small>
+      <small className="mt-5 text-[11px]">{t('Naru 전용 WSL2 환경을 사용합니다.')}</small>
     </div>
   );
 }
@@ -279,6 +290,7 @@ export const rowKey = (r) =>
 const getRowId = ({ data }) => rowKey(data);
 
 export function ResourceGrid({ query, columns, filter = '', onRowClicked, ...gridProps }) {
+  useLocale();
   const rows = useMemo(
     () =>
       (query.data || []).filter((r) =>
@@ -297,7 +309,7 @@ export function ResourceGrid({ query, columns, filter = '', onRowClicked, ...gri
             getRowId={getRowId}
             isLoading={query.isLoading}
             errorMessage={query.error?.message || ''}
-            emptyMessage={filter ? '검색 결과가 없습니다.' : '아직 항목이 없습니다.'}
+            emptyMessage={filter ? t('검색 결과가 없습니다.') : t('아직 항목이 없습니다.')}
             onRowClicked={onRowClicked}
             rowHeight={62}
             {...gridProps}
@@ -310,6 +322,7 @@ export function ResourceGrid({ query, columns, filter = '', onRowClicked, ...gri
 
 // wrap은 좁은 화면에서 오른쪽 작업 영역을 다음 줄로 내리고 검색창을 넓힌다.
 export function Toolbar({ search, onSearch, children, wrap }) {
+  useLocale();
   return (
     <div
       className={cn(
@@ -326,12 +339,12 @@ export function Toolbar({ search, onSearch, children, wrap }) {
         <Search size={17} />
         <input
           className="h-full min-w-0 flex-1 bg-transparent text-[12px] text-ink outline-0 placeholder:text-[#9aa29b]"
-          aria-label="목록 검색"
-          placeholder="이름, 이미지, ID 검색"
+          aria-label={t('목록 검색')}
+          placeholder={t('이름, 이미지, ID 검색')}
           value={search}
           onChange={(e) => onSearch(e.target.value)}
         />
-        {search && <IconButton label="검색 지우기" icon={X} onClick={() => onSearch('')} />}
+        {search && <IconButton label={t('검색 지우기')} icon={X} onClick={() => onSearch('')} />}
       </div>
       {/* 빈 동작 영역을 그리면 줄바꿈 간격만큼 아래 여백이 위보다 커진다. */}
       {React.Children.toArray(children).length > 0 && (

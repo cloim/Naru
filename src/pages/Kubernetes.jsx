@@ -1,3 +1,4 @@
+import { t, useLocale, formatDate } from '../i18n.js';
 import React, { useMemo, useState } from 'react';
 import { Play, Square, Trash2, Download, Plus, Terminal, RefreshCw } from 'lucide-react';
 import {
@@ -22,15 +23,23 @@ import SelectControl from '../components/SelectControl/SelectControl.tsx';
 export function kubernetesState(kind, r) {
   const status = r.status || {};
   if (kind === 'pods') {
-    if (r.metadata.deletionTimestamp) return '종료 중';
+    if (r.metadata.deletionTimestamp) return t('종료 중');
     const containers = status.containerStatuses || [];
     const reason = [...(status.initContainerStatuses || []), ...containers]
       .map((c) => c.state?.waiting?.reason || c.state?.terminated?.reason)
       .find((reason) => reason && reason !== 'Completed');
-    return `${reason || status.reason || status.phase || '대기 중'} | ${containers.filter((c) => c.ready).length}/${r.spec?.containers?.length || 0} 준비됨`;
+    return t('{0} | {1}/{2} 준비됨', [
+      reason || status.reason || status.phase || t('대기 중'),
+      containers.filter((c) => c.ready).length,
+      r.spec?.containers?.length || 0,
+    ]);
   }
   if (kind === 'deployments')
-    return `${status.readyReplicas || 0}/${r.spec?.replicas ?? 1} 준비됨 | ${status.availableReplicas || 0} 사용 가능`;
+    return t('{0}/{1} 준비됨 | {2} 사용 가능', [
+      status.readyReplicas || 0,
+      r.spec?.replicas ?? 1,
+      status.availableReplicas || 0,
+    ]);
   if (kind === 'nodes') {
     const ready = status.conditions?.find((c) => c.type === 'Ready');
     const pressure = (status.conditions || [])
@@ -38,11 +47,11 @@ export function kubernetesState(kind, r) {
       .map((c) => c.type);
     return [
       ready?.status === 'True'
-        ? '준비됨'
+        ? t('준비됨')
         : ready?.status === 'False'
-          ? '준비 안 됨'
-          : '상태 미확인',
-      r.spec?.unschedulable ? '스케줄링 중지' : null,
+          ? t('준비 안 됨')
+          : t('상태 미확인'),
+      r.spec?.unschedulable ? t('스케줄링 중지') : null,
       ...pressure,
     ]
       .filter(Boolean)
@@ -50,10 +59,11 @@ export function kubernetesState(kind, r) {
   }
   if (kind === 'services') return r.spec?.type || 'ClusterIP';
   if (kind === 'events') return [r.type, r.reason].filter(Boolean).join(' | ');
-  return status.phase || '상태 없음';
+  return status.phase || t('상태 없음');
 }
 
 function Kubernetes() {
+  const locale = useLocale();
   const { status, job, form, confirm, view, notify, busy } = useActions();
   const [kind, setKind] = useState('pods'),
     [search, setSearch] = useState(''),
@@ -88,21 +98,21 @@ function Kubernetes() {
   const cols = useMemo(
     () => [
       {
-        headerName: '이름',
+        headerName: t('이름'),
         colId: 'name',
         minWidth: 230,
         flex: 1.3,
         valueGetter: ({ data: r }) => r.metadata.name,
       },
       {
-        headerName: '네임스페이스',
+        headerName: t('네임스페이스'),
         colId: 'namespace',
         minWidth: 160,
         flex: 0.8,
-        valueGetter: ({ data: r }) => r.metadata.namespace || '클러스터',
+        valueGetter: ({ data: r }) => r.metadata.namespace || t('클러스터'),
       },
       {
-        headerName: '상태',
+        headerName: t('상태'),
         colId: 'status',
         minWidth: 220,
         flex: 1,
@@ -110,12 +120,10 @@ function Kubernetes() {
         valueGetter: ({ data: r }) => kubernetesState(kind, r),
       },
       {
-        headerName: '생성',
+        headerName: t('생성'),
         width: 170,
         valueGetter: ({ data: r }) =>
-          r.metadata.creationTimestamp
-            ? new Date(r.metadata.creationTimestamp).toLocaleString('ko-KR')
-            : '정보 없음',
+          r.metadata.creationTimestamp ? formatDate(r.metadata.creationTimestamp) : t('정보 없음'),
       },
       {
         headerName: '',
@@ -127,7 +135,7 @@ function Kubernetes() {
             {kind === 'pods' && (
               <IconButton
                 icon={Terminal}
-                label={`${r.metadata.name} 로그 보기`}
+                label={t('{0} 로그 보기', [r.metadata.name])}
                 onClick={() => setLogPod(r)}
               />
             )}{' '}
@@ -135,12 +143,15 @@ function Kubernetes() {
               <IconButton
                 icon={Trash2}
                 danger="row"
-                label={`${r.metadata.name} 삭제`}
+                label={t('{0} 삭제', [r.metadata.name])}
                 disabled={busy}
                 onClick={() =>
                   confirm(
-                    'Kubernetes 리소스 삭제',
-                    `${r.metadata.namespace ? r.metadata.namespace + ' / ' : ''}${r.metadata.name} 리소스를 삭제합니다.`,
+                    t('Kubernetes 리소스 삭제'),
+                    t('{0}{1} 리소스를 삭제합니다.', [
+                      r.metadata.namespace ? r.metadata.namespace + ' / ' : '',
+                      r.metadata.name,
+                    ]),
                     () =>
                       job('kubeDelete', {
                         kind,
@@ -155,13 +166,14 @@ function Kubernetes() {
         ),
       },
     ],
-    [kind, busy, confirm, job],
+    [locale, kind, busy, confirm, job],
   );
   if (!status?.ready) return status ? <RuntimeEmpty /> : <Skeleton />;
   if (!status.managed)
     return (
-      <Empty title="Kubernetes는 External Engine에서 관리합니다">
-        공유 모드에서는 External Engine 화면에서 Kubernetes를 사용해 주세요.
+      <Empty title={t('Kubernetes는 External Engine에서 관리합니다')}>
+        {' '}
+        {t('공유 모드에서는 External Engine 화면에서 Kubernetes를 사용해 주세요.')}{' '}
       </Empty>
     );
   return (
@@ -169,28 +181,28 @@ function Kubernetes() {
       {running && (
         <PageActions>
           <PageAction
-            label="Kubernetes 종료"
+            label={t('Kubernetes 종료')}
             icon={Square}
             disabled={busy}
             onClick={() =>
-              confirm('Kubernetes 종료', '컨테이너 엔진은 계속 실행됩니다.', () =>
+              confirm(t('Kubernetes 종료'), t('컨테이너 엔진은 계속 실행됩니다.'), () =>
                 job('stopKubernetes'),
               )
             }
           />
           <PageAction
-            label="kubeconfig 내려받기"
+            label={t('kubeconfig 내려받기')}
             icon={Download}
             onClick={() => downloadConfig().catch(notify)}
           />
           <PageAction
-            label="YAML 적용"
+            label={t('YAML 적용')}
             primary
             icon={Plus}
             disabled={busy}
             onClick={() =>
               form(
-                '리소스 적용',
+                t('리소스 적용'),
                 [
                   {
                     key: 'yaml',
@@ -215,22 +227,25 @@ function Kubernetes() {
       ) : !running ? (
         <div className={cn(tw.panel, 'flex flex-1 items-center justify-center')}>
           <Empty
-            title="Kubernetes가 꺼져 있습니다"
+            title={t('Kubernetes가 꺼져 있습니다')}
             action={
               <Button primary icon={Play} disabled={busy} onClick={() => job('startKubernetes')}>
-                Kubernetes 시작
+                {' '}
+                {t('Kubernetes 시작')}{' '}
               </Button>
             }
           >
-            컨테이너 엔진과 별도로 k3s를 시작합니다. 엔진 시작 때 함께 시작하려면 설정에서 지정해
-            주세요.
+            {' '}
+            {t(
+              '컨테이너 엔진과 별도로 k3s를 시작합니다. 엔진 시작 때 함께 시작하려면 설정에서 지정해 주세요.',
+            )}{' '}
           </Empty>
         </div>
       ) : (
         <div className={tw.gridPanel}>
           <div className={cn(tw.actions, 'px-5.5 pt-5')}>
             <SelectControl
-              aria-label="리소스 종류"
+              aria-label={t('리소스 종류')}
               value={kind}
               onChange={(e) => {
                 setKind(e.target.value);
@@ -238,14 +253,14 @@ function Kubernetes() {
               }}
             >
               {[
-                ['pods', '파드'],
-                ['deployments', '디플로이먼트'],
-                ['services', '서비스'],
-                ['nodes', '노드'],
-                ['namespaces', '네임스페이스'],
+                ['pods', t('파드')],
+                ['deployments', t('디플로이먼트')],
+                ['services', t('서비스')],
+                ['nodes', t('노드')],
+                ['namespaces', t('네임스페이스')],
                 ['configmaps', 'ConfigMap'],
-                ['persistentvolumeclaims', '볼륨 클레임'],
-                ['events', '이벤트'],
+                ['persistentvolumeclaims', t('볼륨 클레임')],
+                ['events', t('이벤트')],
               ].map(([key, label]) => (
                 <option key={key} value={key}>
                   {label}
@@ -254,11 +269,11 @@ function Kubernetes() {
             </SelectControl>
             {namespaces.length > 0 && (
               <SelectControl
-                aria-label="네임스페이스 필터"
+                aria-label={t('네임스페이스 필터')}
                 value={namespace}
                 onChange={(e) => setNamespace(e.target.value)}
               >
-                <option value="">모든 네임스페이스</option>
+                <option value="">{t('모든 네임스페이스')}</option>
                 {namespaces.map((name) => (
                   <option key={name} value={name}>
                     {name}
@@ -274,22 +289,26 @@ function Kubernetes() {
             filter={search}
             onRowClicked={({ data: r, event }) => {
               if (event.target.closest('button')) return;
-              view(`${r.metadata.name} 구성`, r);
+              view(t('{0} 구성', [r.metadata.name]), r);
             }}
           />
         </div>
       )}
       <Modal
         isOpen={!!logPod}
-        title={`${logPod?.metadata.namespace || 'default'} / ${logPod?.metadata.name || ''} 로그`}
+        title={t('{0} / {1} 로그', [
+          logPod?.metadata.namespace || 'default',
+          logPod?.metadata.name || '',
+        ])}
         onClose={() => setLogPod(null)}
         size="lg"
         footer={
           <>
             <Button icon={RefreshCw} disabled={logs.isFetching} onClick={() => logs.refetch()}>
-              새로고침
+              {' '}
+              {t('새로고침')}{' '}
             </Button>
-            <Button onClick={() => setLogPod(null)}>닫기</Button>
+            <Button onClick={() => setLogPod(null)}>{t('닫기')}</Button>
           </>
         }
       >
@@ -298,8 +317,8 @@ function Kubernetes() {
         ) : logs.error ? (
           <ErrorState error={logs.error} retry={() => logs.refetch()} />
         ) : (
-          <pre className={tw.terminal} aria-label="파드 로그">
-            {logs.data?.text || '아직 출력된 로그가 없습니다.'}
+          <pre className={tw.terminal} aria-label={t('파드 로그')}>
+            {logs.data?.text || t('아직 출력된 로그가 없습니다.')}
           </pre>
         )}
       </Modal>

@@ -1,3 +1,4 @@
+import { t, useLocale } from '../i18n.js';
 import React, { useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -18,6 +19,7 @@ import { cn, tw } from '../tw.js';
 import { api } from '../api.js';
 
 export default function Extensions() {
+  useLocale();
   const { id } = useParams(),
     navigate = useNavigate(),
     frame = useRef();
@@ -30,7 +32,7 @@ export default function Extensions() {
     staleTime: Infinity,
     refetchOnWindowFocus: false,
   });
-  usePageTitle(id ? session.data?.title || '확장' : null);
+  usePageTitle(id ? session.data?.title || t('확장') : null);
   useEffect(() => {
     if (!session.data) return;
     const listener = (event) => {
@@ -66,7 +68,7 @@ export default function Extensions() {
         <PageActions>
           <PageAction
             icon={ArrowLeft}
-            label="설치된 확장으로 돌아가기"
+            label={t('설치된 확장으로 돌아가기')}
             onClick={() => navigate('/extensions')}
           />
         </PageActions>
@@ -79,7 +81,7 @@ export default function Extensions() {
           <iframe
             ref={frame}
             className="min-h-[520px] w-full flex-1 rounded-[12px] border border-line bg-white"
-            title={session.data?.title || '확장 UI'}
+            title={session.data?.title || t('확장 UI')}
             src={session.data?.url}
             sandbox="allow-scripts allow-same-origin allow-forms allow-downloads"
             referrerPolicy="no-referrer"
@@ -91,29 +93,31 @@ export default function Extensions() {
     <section className={tw.page}>
       <PageActions>
         <PageAction
-          label="확장 설치"
+          label={t('확장 설치')}
           icon={Plus}
           primary
           disabled={busy || !status?.ready}
           onClick={() =>
             form(
-              '확장 설치',
+              t('확장 설치'),
               [
                 {
                   key: 'image',
-                  label: '확장 이미지',
+                  label: t('확장 이미지'),
                   required: true,
                   placeholder: 'registry.example.com/my-extension:1.0',
                 },
                 {
                   key: 'confirmation',
-                  label: '신뢰하는 확장이면 TRUST 입력',
+                  label: t('신뢰하는 확장이면 TRUST 입력'),
                   required: true,
                   pattern: 'TRUST',
                 },
               ],
               (v) => job('installExtension', v),
-              '확장은 Docker 엔진에 접근하고, 패키지가 선언한 Windows 실행파일 및 VM 서비스를 실행할 수 있습니다.',
+              t(
+                '확장은 Docker 엔진에 접근하고, 패키지가 선언한 Windows 실행파일 및 VM 서비스를 실행할 수 있습니다.',
+              ),
             )
           }
         />
@@ -138,18 +142,19 @@ export default function Extensions() {
               <div className={tw.cardActions}>
                 {ext.metadata.ui?.['dashboard-tab'] && (
                   <Button icon={ChevronRight} onClick={() => navigate('/extensions/' + ext.id)}>
-                    열기
+                    {' '}
+                    {t('열기')}{' '}
                   </Button>
                 )}
                 <IconButton
                   icon={Trash2}
-                  label="확장 제거"
+                  label={t('확장 제거')}
                   danger
                   disabled={busy}
                   onClick={() =>
                     confirm(
-                      '확장 제거',
-                      `${ext.title}의 UI, 호스트 실행파일과 VM 서비스를 제거합니다.`,
+                      t('확장 제거'),
+                      t('{0}의 UI, 호스트 실행파일과 VM 서비스를 제거합니다.', [ext.title]),
                       (v) =>
                         job('uninstallExtension', { id: ext.id, confirmation: v.confirmation }),
                       'REMOVE',
@@ -162,7 +167,9 @@ export default function Extensions() {
         </div>
       ) : (
         <div className={tw.panel}>
-          <Empty title="설치된 확장이 없습니다">자주 사용하는 개발 도구를 추가해 보세요.</Empty>
+          <Empty title={t('설치된 확장이 없습니다')}>
+            {t('자주 사용하는 개발 도구를 추가해 보세요.')}
+          </Empty>
         </div>
       )}
     </section>

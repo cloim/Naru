@@ -1,3 +1,4 @@
+import { t, useLocale, formatDate } from '../i18n.js';
 import React, {
   createContext,
   useContext,
@@ -47,36 +48,37 @@ import { api, downloadConfig } from '../api.js';
 import { Modal } from '../components/Modal/Modal.jsx';
 import SelectControl from '../components/SelectControl/SelectControl.tsx';
 function Jobs({ openJob }) {
+  const locale = useLocale();
   const data = useData('jobs', '/jobs', { refetchInterval: 2000 });
   const cols = useMemo(
     () => [
       {
         field: 'type',
-        headerName: '작업',
+        headerName: t('작업'),
         minWidth: 250,
         flex: 1,
-        valueFormatter: ({ value }) => jobNames[value] || value,
+        valueFormatter: ({ value }) => t(jobNames[value]) || value,
         filterable: true,
-        filterValueGetter: (r) => jobNames[r.type] || r.type,
+        filterValueGetter: (r) => t(jobNames[r.type]) || r.type,
       },
       {
         field: 'state',
-        headerName: '상태',
+        headerName: t('상태'),
         width: 150,
         filterable: true,
-        filterValueGetter: (r) => stateNames[r.state] || r.state,
-        cellRenderer: ({ value }) => <Badge state={value}>{stateNames[value]}</Badge>,
+        filterValueGetter: (r) => t(stateNames[r.state]) || r.state,
+        cellRenderer: ({ value }) => <Badge state={value}>{t(stateNames[value])}</Badge>,
       },
       {
         field: 'createdAt',
-        headerName: '시작',
+        headerName: t('시작'),
         minWidth: 200,
         flex: 1,
-        valueFormatter: ({ value }) => new Date(value).toLocaleString('ko-KR'),
+        valueFormatter: ({ value }) => formatDate(value),
       },
-      { field: 'error', headerName: '결과', minWidth: 250, flex: 1.2 },
+      { field: 'error', headerName: t('결과'), minWidth: 250, flex: 1.2 },
     ],
-    [],
+    [locale],
   );
   return (
     <section className={tw.page}>

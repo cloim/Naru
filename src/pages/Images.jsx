@@ -1,3 +1,4 @@
+import { t, useLocale, formatDate } from '../i18n.js';
 import React, {
   createContext,
   useContext,
@@ -62,13 +63,14 @@ import { api, downloadConfig } from '../api.js';
 import { Modal } from '../components/Modal/Modal.jsx';
 import SelectControl from '../components/SelectControl/SelectControl.tsx';
 function Images() {
+  const locale = useLocale();
   const { status, job, form, confirm, busy } = useActions(),
     data = useResource('images');
   const [search, setSearch] = useState('');
   const cols = useMemo(
     () => [
       {
-        headerName: '이미지',
+        headerName: t('이미지'),
         colId: 'image',
         minWidth: 270,
         flex: 1.6,
@@ -84,17 +86,17 @@ function Images() {
         ),
       },
       {
-        headerName: '크기',
+        headerName: t('크기'),
         field: 'Size',
         width: 130,
         valueFormatter: ({ value }) => bytes(value),
       },
       {
-        headerName: '생성',
+        headerName: t('생성'),
         field: 'Created',
         minWidth: 160,
         valueFormatter: ({ value }) =>
-          typeof value === 'number' ? new Date(value * 1000).toLocaleString('ko-KR') : value || '—',
+          typeof value === 'number' ? formatDate(value * 1000) : value || '—',
       },
       {
         headerName: '',
@@ -104,13 +106,13 @@ function Images() {
         cellRenderer: ({ data: r }) => (
           <div className={tw.rowActions}>
             <IconButton
-              label="실행"
+              label={t('실행')}
               icon={Play}
               disabled={busy}
               onClick={() =>
                 form(
-                  '이미지 실행',
-                  [{ key: 'name', label: '컨테이너 이름', placeholder: 'my-container' }],
+                  t('이미지 실행'),
+                  [{ key: 'name', label: t('컨테이너 이름'), placeholder: 'my-container' }],
                   (v) =>
                     job('createContainer', {
                       image: imageName(r),
@@ -120,16 +122,16 @@ function Images() {
               }
             />
             <IconButton
-              label="이미지 내보내기"
+              label={t('이미지 내보내기')}
               icon={Download}
               disabled={busy}
               onClick={() =>
                 form(
-                  '이미지 내보내기',
+                  t('이미지 내보내기'),
                   [
                     {
                       key: 'file',
-                      label: 'Windows TAR 저장 경로',
+                      label: t('Windows TAR 저장 경로'),
                       required: true,
                       placeholder: 'D:\\MySetting\\Downloads\\image.tar',
                     },
@@ -139,22 +141,22 @@ function Images() {
               }
             />
             <IconButton
-              label="취약점 분석"
+              label={t('취약점 분석')}
               icon={Search}
               disabled={busy}
               onClick={() => job('scanImage', { image: imageName(r) })}
             />
             <IconButton
-              label="태그 추가"
+              label={t('태그 추가')}
               icon={Tag}
               disabled={busy}
               onClick={() =>
                 form(
-                  '이미지 태그',
+                  t('이미지 태그'),
                   [
                     {
                       key: 'target',
-                      label: '새 태그',
+                      label: t('새 태그'),
                       required: true,
                       placeholder: 'my-app:latest',
                     },
@@ -164,26 +166,28 @@ function Images() {
               }
             />
             <IconButton
-              label="레지스트리로 보내기"
+              label={t('레지스트리로 보내기')}
               icon={ArrowUpRight}
               disabled={busy}
               onClick={() =>
                 confirm(
-                  '이미지 보내기',
-                  `${imageName(r)} 이미지를 지정된 레지스트리에 보냅니다.`,
+                  t('이미지 보내기'),
+                  t('{0} 이미지를 지정된 레지스트리에 보냅니다.', [imageName(r)]),
                   () => job('pushImage', { image: imageName(r) }),
                 )
               }
             />
             <IconButton
-              label="이미지 삭제"
+              label={t('이미지 삭제')}
               icon={Trash2}
               danger="row"
               disabled={busy}
               onClick={() =>
                 confirm(
-                  '이미지 삭제',
-                  `${imageName(r)} 이미지를 삭제합니다. 사용 중인 이미지는 엔진이 보호합니다.`,
+                  t('이미지 삭제'),
+                  t('{0} 이미지를 삭제합니다. 사용 중인 이미지는 엔진이 보호합니다.', [
+                    imageName(r),
+                  ]),
                   () => job('removeImage', { id: r.Id }),
                 )
               }
@@ -192,23 +196,23 @@ function Images() {
         ),
       },
     ],
-    [busy, form, job, confirm],
+    [locale, busy, form, job, confirm],
   );
   if (!status?.ready) return status ? <RuntimeEmpty /> : <Skeleton />;
   return (
     <section className={tw.page}>
       <PageActions>
         <PageAction
-          label="이미지 불러오기"
+          label={t('이미지 불러오기')}
           icon={Upload}
           disabled={busy}
           onClick={() =>
             form(
-              '이미지 불러오기',
+              t('이미지 불러오기'),
               [
                 {
                   key: 'file',
-                  label: 'Windows TAR 파일',
+                  label: t('Windows TAR 파일'),
                   required: true,
                   placeholder: 'D:\\MySetting\\Downloads\\image.tar',
                 },
@@ -218,20 +222,20 @@ function Images() {
           }
         />
         <PageAction
-          label="이미지 빌드"
+          label={t('이미지 빌드')}
           icon={Hammer}
           disabled={busy}
           onClick={() =>
             form(
-              '이미지 빌드',
+              t('이미지 빌드'),
               [
                 {
                   key: 'context',
-                  label: 'Windows 소스 폴더',
+                  label: t('Windows 소스 폴더'),
                   required: true,
                   placeholder: 'D:\\PROJECTS\\my-app',
                 },
-                { key: 'tag', label: '이미지 태그', required: true, placeholder: 'my-app:dev' },
+                { key: 'tag', label: t('이미지 태그'), required: true, placeholder: 'my-app:dev' },
                 { key: 'dockerfile', label: 'Dockerfile', value: 'Dockerfile' },
               ],
               (v) => job('buildImage', v),
@@ -239,17 +243,17 @@ function Images() {
           }
         />
         <PageAction
-          label="이미지 가져오기"
+          label={t('이미지 가져오기')}
           icon={Download}
           primary
           disabled={busy}
           onClick={() =>
             form(
-              '이미지 가져오기',
+              t('이미지 가져오기'),
               [
                 {
                   key: 'image',
-                  label: '이미지 주소',
+                  label: t('이미지 주소'),
                   required: true,
                   placeholder: 'nginx:alpine',
                 },

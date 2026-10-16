@@ -1,3 +1,4 @@
+import { t, useLocale } from '../../i18n.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Search, X } from 'lucide-react';
@@ -23,6 +24,7 @@ import { cn } from '../../tw.js';
  * @param onClose      팝업 닫기(바깥 클릭, ESC, 취소).
  */
 export function ColumnFilterPopover({ anchorRect, options, filterState, onApply, onClose }) {
+  useLocale();
   const [activeTab, setActiveTab] = useState(
     filterState?.mode === 'condition' ? 'condition' : 'values',
   );
@@ -145,7 +147,7 @@ export function ColumnFilterPopover({ anchorRect, options, filterState, onApply,
       style={style}
       ref={popoverRef}
       role="dialog"
-      aria-label="필터"
+      aria-label={t('필터')}
     >
       <div className="flex flex-none border-b border-[#eeeae6] pr-8" role="tablist">
         <button
@@ -158,7 +160,8 @@ export function ColumnFilterPopover({ anchorRect, options, filterState, onApply,
           )}
           onClick={() => setActiveTab('values')}
         >
-          값 목록
+          {' '}
+          {t('값 목록')}{' '}
         </button>
         <button
           type="button"
@@ -170,7 +173,8 @@ export function ColumnFilterPopover({ anchorRect, options, filterState, onApply,
           )}
           onClick={() => setActiveTab('condition')}
         >
-          조건
+          {' '}
+          {t('조건')}{' '}
         </button>
       </div>
 
@@ -183,18 +187,18 @@ export function ColumnFilterPopover({ anchorRect, options, filterState, onApply,
               autoFocus
               className="min-w-0 flex-1 bg-transparent text-[12.5px] text-[#202634] outline-none focus-visible:outline-none"
               value={keyword}
-              placeholder="값 검색"
-              aria-label="필터 값 검색"
+              placeholder={t('값 검색')}
+              aria-label={t('필터 값 검색')}
               onChange={(event) => setKeyword(event.target.value)}
             />
           </div>
           <label className="flex flex-none cursor-pointer items-center gap-2 px-2.5 py-1.5 text-[#202634] hover:bg-[#f8f7f5] [&_input]:flex-none border-b border-[#eeeae6] font-extrabold">
             <input type="checkbox" checked={allFilteredChecked} onChange={toggleAllFiltered} />
-            <span>전체 선택</span>
+            <span>{t('전체 선택')}</span>
           </label>
           <div className="flex flex-col overflow-y-auto">
             {filteredOptions.length === 0 ? (
-              <div className="px-2.5 py-4 text-center text-[#a29c94]">검색 결과 없음</div>
+              <div className="px-2.5 py-4 text-center text-[#a29c94]">{t('검색 결과 없음')}</div>
             ) : (
               filteredOptions.map((option) => (
                 <label
@@ -220,14 +224,16 @@ export function ColumnFilterPopover({ anchorRect, options, filterState, onApply,
               className="h-7.5 flex-1 rounded-[6px] bg-[#f1efec] text-[12px] font-extrabold text-[#55504a] hover:bg-[#e7e4df]"
               onClick={resetFilter}
             >
-              초기화
+              {' '}
+              {t('초기화')}{' '}
             </button>
             <button
               type="button"
               className="h-7.5 flex-1 rounded-[6px] bg-brand text-[12px] font-extrabold text-white hover:bg-brand-hover"
               onClick={applyValuesFilter}
             >
-              적용
+              {' '}
+              {t('적용')}{' '}
             </button>
           </div>
         </>
@@ -237,12 +243,12 @@ export function ColumnFilterPopover({ anchorRect, options, filterState, onApply,
             <select
               className="h-7.5 rounded-[6px] border border-[#dedbd6] bg-white px-2 text-[12.5px] text-[#202634]"
               value={conditionOp}
-              aria-label="필터 조건"
+              aria-label={t('필터 조건')}
               onChange={(event) => setConditionOp(event.target.value)}
             >
               {COLUMN_FILTER_CONDITION_OPERATORS.map(([op, label]) => (
                 <option value={op} key={op}>
-                  {label}
+                  {t(label)}
                 </option>
               ))}
             </select>
@@ -250,8 +256,8 @@ export function ColumnFilterPopover({ anchorRect, options, filterState, onApply,
               autoFocus
               className="h-7.5 rounded-[6px] border border-[#dedbd6] bg-white px-2 text-[12.5px] text-[#202634]"
               value={conditionValue}
-              placeholder="값 입력"
-              aria-label="필터 조건 값"
+              placeholder={t('값 입력')}
+              aria-label={t('필터 조건 값')}
               onChange={(event) => setConditionValue(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
@@ -266,14 +272,16 @@ export function ColumnFilterPopover({ anchorRect, options, filterState, onApply,
               className="h-7.5 flex-1 rounded-[6px] bg-[#f1efec] text-[12px] font-extrabold text-[#55504a] hover:bg-[#e7e4df]"
               onClick={resetFilter}
             >
-              초기화
+              {' '}
+              {t('초기화')}{' '}
             </button>
             <button
               type="button"
               className="h-7.5 flex-1 rounded-[6px] bg-brand text-[12px] font-extrabold text-white hover:bg-brand-hover"
               onClick={applyConditionFilter}
             >
-              적용
+              {' '}
+              {t('적용')}{' '}
             </button>
           </div>
         </>
@@ -282,7 +290,7 @@ export function ColumnFilterPopover({ anchorRect, options, filterState, onApply,
         type="button"
         className="absolute top-1.75 right-1.75 flex h-4.5 w-4.5 items-center justify-center rounded-[4px] text-[#a29c94] hover:bg-[#ece9e5] hover:text-[#4b5563]"
         onClick={onClose}
-        aria-label="필터 팝업 닫기"
+        aria-label={t('필터 팝업 닫기')}
       >
         <X size={14} aria-hidden="true" />
       </button>
