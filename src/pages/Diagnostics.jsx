@@ -60,9 +60,6 @@ function Diagnostics() {
     { status } = useActions();
   return (
     <section className={tw.page}>
-      <PageActions>
-        <PageAction label="새로고침" icon={RefreshCw} onClick={() => data.refetch()} />
-      </PageActions>
       {data.isLoading ? (
         <Skeleton />
       ) : data.error ? (

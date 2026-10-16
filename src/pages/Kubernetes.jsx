@@ -267,9 +267,7 @@ function Kubernetes() {
               </SelectControl>
             )}
           </div>
-          <Toolbar search={search} onSearch={setSearch}>
-            <IconButton icon={RefreshCw} label="새로고침" onClick={() => data.refetch()} />
-          </Toolbar>
+          <Toolbar search={search} onSearch={setSearch} />
           <ResourceGrid
             query={{ ...data, data: rows }}
             columns={cols}

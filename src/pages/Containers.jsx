@@ -342,6 +342,9 @@ function Containers() {
     [collapsed, setCollapsed] = useState(readCollapsed),
     [logProject, setLogProject] = useState(null),
     [manageGroup, setManageGroup] = useState(null);
+  // Kubernetes를 쓰지 않으면 숨길 시스템 컨테이너가 없으므로 표시 선택도 보이지 않는다.
+  const hasSystem = useMemo(() => (data.data || []).some(isSystemContainer), [data.data]);
+  const systemToggle = !!status?.kubernetes?.enabled || hasSystem;
   const candidates = useMemo(
     () => (data.data || []).filter((r) => showSystem || !isSystemContainer(r)),
     [data.data, showSystem],
@@ -594,22 +597,16 @@ function Containers() {
           ))}
         </div>
         <Toolbar search={search} onSearch={setSearch} wrap>
-          <label className={cn(tw.checkbox, 'whitespace-nowrap')}>
-            <input
-              type="checkbox"
-              checked={showSystem}
-              onChange={(e) => setShowSystem(e.target.checked)}
-            />
-            시스템 컨테이너 표시
-          </label>
-          <IconButton
-            icon={RefreshCw}
-            label="새로고침"
-            onClick={() => {
-              data.refetch();
-              projects.refetch();
-            }}
-          />
+          {systemToggle && (
+            <label className={cn(tw.checkbox, 'whitespace-nowrap')}>
+              <input
+                type="checkbox"
+                checked={showSystem}
+                onChange={(e) => setShowSystem(e.target.checked)}
+              />
+              시스템 컨테이너 표시
+            </label>
+          )}
         </Toolbar>
         <ProjectContext.Provider value={projectContext}>
           <ResourceGrid
