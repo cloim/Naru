@@ -9,9 +9,11 @@ import * as runtime from './runtime.js';
 import * as engine from './engine.js';
 import { validateJob } from './jobs.js';
 import { createForward, stopForward } from './forwarding.js';
-import { ensureCompose, ensureWindowsTool } from './tools.js';
+import { ensureWindowsTool } from './tools.js';
 import { installExtension, uninstallExtension } from './extensions.js';
 import { ensureCredentialHelper } from './registry.js';
+import * as projects from './projects.js';
+import { LABEL, findProject, saveManagedProject } from './projects.js';
 
 const id = process.argv[2];
 if (!/^[a-f0-9-]{36}$/.test(id || '')) throw new Error('Invalid job id');
@@ -299,24 +301,26 @@ try {
       const value = parse(p.yaml);
       if (!value?.services || typeof value.services !== 'object')
         throw new Error('Compose services 정의를 확인해 주세요.');
-      const folder = path.join(DATA, external ? 'compose-shared' : 'compose', p.name);
-      await fs.mkdir(folder, { recursive: true });
-      const composeFile = path.join(folder, 'compose.yaml');
-      await fs.writeFile(composeFile, p.yaml);
-      if (cfg.engine === 'moby' && !external) await ensureCompose(log);
-      const linuxFile = external ? composeFile : await wsl(['wslpath', '-a', composeFile]);
-      await engine.cli(
-        [
-          'compose',
-          '-p',
-          p.name,
-          '-f',
-          linuxFile,
-          p.action,
-          ...(p.action === 'up' ? ['-d'] : p.action === 'logs' ? ['--tail', '300'] : []),
-        ],
-        { timeout: 15 * 60 * 1000, log },
-      );
+      await saveManagedProject(p.name, p.yaml);
+      log('compose.yaml을 저장했습니다.\n');
+      if (p.action === 'up') {
+        const containers = await engine.list('containers');
+        await projects.compose(await findProject(p.name, containers), ['up', '--detach'], { log });
+      }
+      break;
+    }
+    case 'project': {
+      const containers = await engine.list('containers');
+      const project = await findProject(p.name, containers);
+      const members = containers.filter((c) => c.Labels?.[LABEL.project] === p.name);
+      if (project.filesFound) {
+        const args = { up: ['up', '--detach'], down: ['down'] }[p.action] || [p.action];
+        await projects.compose(project, args, { log });
+      } else if (['start', 'stop', 'restart'].includes(p.action)) {
+        // Without the compose file only the existing containers can be driven.
+        log('compose 파일이 없어 컨테이너를 직접 제어합니다.\n');
+        for (const c of members) await engine.containerAction(c.Id, p.action, log);
+      } else throw new Error('compose 파일을 찾을 수 없어 이 작업을 실행할 수 없습니다.');
       break;
     }
     case 'kubeApply': {

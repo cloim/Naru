@@ -21,6 +21,8 @@ export function DataGrid({
   // 컬럼 필터와 사용자 정렬까지 적용된 "지금 화면에 보이는 행"을 보이는 순서 그대로
   // 넘겨준다. 엑셀 내보내기가 화면과 같은 결과를 내려면 이 값을 써야 한다.
   onDisplayedRowsChange,
+  // 그룹 머리 행은 __group(키)을, 소속 행은 __groupKey를 가진다. 접힌 그룹 키 집합의 소속 행은 숨긴다.
+  collapsedGroups,
   isLoading = false,
   errorMessage = '',
   emptyMessage = '조건에 맞는 데이터가 없습니다.',
@@ -38,6 +40,11 @@ export function DataGrid({
   // 값 목록을 계산할 때는 다른 컬럼의 필터만 적용된 행 기준으로 계산한다(엑셀과 동일한 동작 —
   // 자기 자신의 필터는 값 목록에 영향을 주지 않아야 모든 값이 계속 보인다).
   const [columnFilters, setColumnFilters] = useState({});
+  const hasGroups = useMemo(() => (rowData || []).some(isGroupRow), [rowData]);
+  const memberRows = useMemo(
+    () => (hasGroups ? rowData.filter((row) => !isGroupRow(row)) : rowData || []),
+    [rowData, hasGroups],
+  );
 
   // filterable 컬럼만 모은 맵(field -> colDef). filterValuesGetter는 한 셀의 개별 배지처럼
   // 여러 값을, filterValueGetter는 가공된 단일 값을 제공한다. 둘 다 없으면 row[field]를 쓴다.
@@ -104,7 +111,7 @@ export function DataGrid({
       isActive: (field) => Boolean(columnFilters[field]),
       getFilterState: (field) => columnFilters[field] ?? null,
       getOptions: (field) => {
-        const baseRows = applyColumnFilters(rowData, field);
+        const baseRows = applyColumnFilters(memberRows, field);
         const counts = new Map();
         for (const row of baseRows) {
           for (const value of getFilterValues(field, row)) {
@@ -129,13 +136,60 @@ export function DataGrid({
         });
       },
     }),
-    [columnFilters, rowData, applyColumnFilters, getFilterValues],
+    [columnFilters, memberRows, applyColumnFilters, getFilterValues],
   );
 
-  const filteredRowData = useMemo(
-    () => (filterableFields.length === 0 ? rowData : applyColumnFilters(rowData, null)),
-    [rowData, filterableFields, applyColumnFilters],
+  // 그룹 머리 행은 필터 대상이 아니다. 걸러진 소속 행이 남은 그룹만 보이고, 소속 행이 원래 없는
+  // 그룹(__keepEmpty)은 필터가 없을 때만 보인다.
+  const filteredRowData = useMemo(() => {
+    const kept = filterableFields.length === 0 ? memberRows : applyColumnFilters(memberRows, null);
+    if (!hasGroups) return kept;
+    const keptRows = new Set(kept),
+      keptGroups = new Set(kept.map((row) => row.__groupKey));
+    const filtering = Object.keys(columnFilters).length > 0;
+    return rowData.filter((row) =>
+      isGroupRow(row)
+        ? keptGroups.has(row.__group) || (!filtering && row.__keepEmpty)
+        : keptRows.has(row) && !collapsedGroups?.has(row.__groupKey),
+    );
+  }, [
+    rowData,
+    memberRows,
+    hasGroups,
+    filterableFields,
+    applyColumnFilters,
+    columnFilters,
+    collapsedGroups,
+  ]);
+
+  // 헤더 정렬은 그룹 안에서만 적용한다. 그룹 순서는 rowData 순서를 따른다.
+  const postSortRows = useCallback(
+    ({ nodes }) => {
+      const order = new Map();
+      rowData.forEach((row, index) => isGroupRow(row) && order.set(row.__group, index));
+      const heads = new Map(),
+        members = new Map(),
+        orphans = [];
+      for (const node of nodes) {
+        if (isGroupRow(node.data)) heads.set(node.data.__group, node);
+        else if (order.has(node.data.__groupKey)) {
+          if (!members.has(node.data.__groupKey)) members.set(node.data.__groupKey, []);
+          members.get(node.data.__groupKey).push(node);
+        } else orphans.push(node);
+      }
+      const keys = [...new Set([...heads.keys(), ...members.keys()])].sort(
+        (a, b) => order.get(a) - order.get(b),
+      );
+      nodes.length = 0;
+      for (const key of keys) {
+        if (heads.has(key)) nodes.push(heads.get(key));
+        nodes.push(...(members.get(key) || []));
+      }
+      nodes.push(...orphans);
+    },
+    [rowData],
   );
+  const isFullWidthRow = useCallback(({ rowNode }) => isGroupRow(rowNode.data), []);
 
   // suppressRepeat를 켠 컬럼의 키를 columnDefs 순서대로 모은다. 이 순서가 곧 반복값 억제의
   // 계층(상위 → 하위)이 된다.
@@ -350,6 +404,8 @@ export function DataGrid({
           onViewportChanged={handleViewportChanged}
           onModelUpdated={handleModelUpdated}
           overlayNoRowsTemplate={emptyMessage}
+          postSortRows={hasGroups ? postSortRows : undefined}
+          isFullWidthRow={hasGroups ? isFullWidthRow : undefined}
           {...gridProps}
           onGridReady={onGridReady}
           onColumnResized={(event) => {
@@ -488,6 +544,10 @@ function DataGridSkeleton({ columnCount }) {
       ))}
     </div>
   );
+}
+
+function isGroupRow(row) {
+  return row?.__group !== undefined;
 }
 
 // 컬럼 필터 값 비교와 표시에 쓰는 문자열 정규화. null/undefined는 빈 값 하나로 묶는다

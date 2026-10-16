@@ -15,6 +15,14 @@ import { wsl, distributions } from './runner.js';
 import { startDockerBridge, startCompatBridge, startKubernetesBridge } from './bridge.js';
 import { listForwards } from './forwarding.js';
 import { registerExtensions } from './extensions.js';
+import {
+  LABEL,
+  projectName,
+  listProjects,
+  findProject,
+  forgetProject,
+  readProjectFiles,
+} from './projects.js';
 
 const port = Number(process.env.PORT || 49170),
   token = randomBytes(32).toString('hex');
@@ -198,24 +206,35 @@ app.get('/api/snapshots', async (req, res) => {
     ),
   );
 });
-app.get('/api/compose', async (req, res) => {
-  const dir = path.join(
-    DATA,
-    (await settings()).connection === 'external-engine' ? 'compose-shared' : 'compose',
-  );
-  await fs.mkdir(dir, { recursive: true });
-  const entries = await fs.readdir(dir, { withFileTypes: true });
-  res.json(
-    await Promise.all(
-      entries
-        .filter((e) => e.isDirectory())
-        .map(async (e) => ({
-          name: e.name,
-          yaml: await fs.readFile(path.join(dir, e.name, 'compose.yaml'), 'utf8'),
-        })),
-    ),
-  );
+const projectContainers = async () => {
+  await runtime.requireReady();
+  return engine.list('containers');
+};
+app.get('/api/projects', async (req, res) =>
+  res.json(await cached('projects', async () => listProjects(await projectContainers()))),
+);
+app.get('/api/projects/:name/files', async (req, res) => {
+  const project = await findProject(projectName.parse(req.params.name), await projectContainers());
+  res.json({ ...project, files: await readProjectFiles(project) });
 });
+app.get('/api/projects/:name/logs', async (req, res) => {
+  const name = projectName.parse(req.params.name);
+  const members = (await projectContainers()).filter((c) => c.Labels?.[LABEL.project] === name);
+  const sections = await Promise.all(
+    members.map(async (c) => {
+      const service = c.Labels[LABEL.service] || containerLabel(c);
+      const text = await engine.logs(c.Id, 200).catch((e) => e.message);
+      return `== ${service} (${containerLabel(c)}) ==\n${text || '아직 출력된 로그가 없습니다.'}`;
+    }),
+  );
+  res.json({ text: sections.join('\n\n') });
+});
+app.delete('/api/projects/:name', async (req, res) => {
+  await forgetProject(projectName.parse(req.params.name), await projectContainers());
+  cache.delete('projects');
+  res.json({ ok: true });
+});
+const containerLabel = (c) => (c.Names?.[0] || c.Id.slice(0, 12)).replace(/^\//, '');
 registerExtensions(app, port);
 app.get('/api/diagnostics', async (req, res) => {
   const state = await runtime.status();

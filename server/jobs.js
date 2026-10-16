@@ -4,6 +4,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import { DATA, ROOT, atomicJSON, readJSON, settings } from './state.js';
 import { detached } from './runner.js';
+import { projectName } from './projects.js';
 
 export const identifier = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_.:/@+-]{0,511}$/);
 export const image = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_.:/@+-]{0,511}$/);
@@ -73,14 +74,20 @@ export const jobSchemas = {
   removeVolume: z.object({ name }).strict(),
   createNetwork: z.object({ name }).strict(),
   removeNetwork: z.object({ id: identifier }).strict(),
+  project: z
+    .object({
+      name: projectName,
+      action: z.enum(['start', 'stop', 'restart', 'up', 'down', 'pull', 'build']),
+    })
+    .strict(),
   compose: z
     .object({
-      name: name,
+      name: projectName,
       yaml: z
         .string()
         .min(1)
         .max(1024 * 1024),
-      action: z.enum(['up', 'down', 'stop', 'logs']),
+      action: z.enum(['save', 'up']),
     })
     .strict(),
   kubeApply: z
