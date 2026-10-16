@@ -65,3 +65,13 @@ export async function saveSettings(input) {
   await atomicJSON(path.join(DATA, 'settings.json'), value);
   return value;
 }
+
+// These only affect the screen or the next server start, so they can change while the engine runs.
+export const LIVE_SETTINGS = ['pollSeconds', 'autoStart'];
+export function engineSettingsChanged(previous, next) {
+  const strip = (value) =>
+    JSON.stringify(
+      Object.fromEntries(Object.entries(value).filter(([k]) => !LIVE_SETTINGS.includes(k))),
+    );
+  return strip(previous) !== strip(next);
+}

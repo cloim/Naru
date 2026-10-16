@@ -6,7 +6,16 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
-import { ROOT, DATA, settings, saveSettings, readJSON, atomicJSON } from './state.js';
+import {
+  ROOT,
+  DATA,
+  settings,
+  saveSettings,
+  settingsSchema,
+  engineSettingsChanged,
+  readJSON,
+  atomicJSON,
+} from './state.js';
 import { security, loadRemote } from './security.js';
 import { jobList, submit, identifier, reconcileJobs } from './jobs.js';
 import * as runtime from './runtime.js';
@@ -52,8 +61,12 @@ app.get('/api/status', async (req, res) => res.json(await cached('status', runti
 app.get('/api/settings', async (req, res) => res.json(await settings()));
 app.put('/api/settings', async (req, res) => {
   const current = await runtime.status();
-  if (current.managed && current.running)
-    throw new Error('설정을 변경하려면 Naru 런타임을 종료해 주세요.');
+  if (
+    current.managed &&
+    current.running &&
+    engineSettingsChanged(await settings(), settingsSchema.parse(req.body))
+  )
+    throw new Error('엔진 설정을 변경하려면 Naru 런타임을 종료해 주세요.');
   const value = await saveSettings(req.body);
   if (current.kubernetes.port !== value.kubernetes.port) {
     kubernetesBridge?.stop();

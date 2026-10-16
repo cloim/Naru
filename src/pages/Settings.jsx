@@ -9,7 +9,7 @@ import React, {
   Suspense,
 } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Box,
   Layers,
@@ -54,18 +54,31 @@ import { cn, tw } from '../tw.js';
 import { api, downloadConfig } from '../api.js';
 import { Modal } from '../components/Modal/Modal.jsx';
 import SelectControl from '../components/SelectControl/SelectControl.tsx';
+const SETTING_TABS = [
+  ['engine', '엔진'],
+  ['kubernetes', 'Kubernetes'],
+  ['proxy', '프록시'],
+  ['screen', '화면'],
+  ['cli', 'CLI와 레지스트리'],
+];
+const fieldset = 'm-0 min-w-0 border-0 p-0 disabled:opacity-65';
 function Settings() {
   const data = useData('settings', '/settings'),
     { status, notify } = useActions(),
     qc = useQueryClient();
   const [value, setValue] = useState(null),
-    [saving, setSaving] = useState(false);
+    [saving, setSaving] = useState(false),
+    [params, setParams] = useSearchParams();
+  const tab = SETTING_TABS.some(([key]) => key === params.get('tab'))
+    ? params.get('tab')
+    : 'engine';
   useEffect(() => {
     if (data.data && !value) setValue(data.data);
   }, [data.data, value]);
   if (data.error) return <ErrorState error={data.error} />;
   if (!value) return <Skeleton />;
   const locked = !!status?.running && status?.managed !== false;
+  const managedLocked = locked || saving || value.connection === 'rancher-desktop';
   return (
     <section className={cn(tw.page, 'max-w-[1150px]')}>
       <PageActions>
@@ -73,7 +86,7 @@ function Settings() {
           label="설정 저장"
           primary
           icon={Check}
-          disabled={locked || saving}
+          disabled={saving}
           onClick={async () => {
             setSaving(true);
             try {
@@ -88,162 +101,189 @@ function Settings() {
           }}
         />
       </PageActions>
-      <section className={cn(tw.panel, tw.group)}>
-        <h3>연결할 엔진</h3>
-        <SelectControl
-          aria-label="엔진 연결"
-          disabled={locked || saving}
-          value={value.connection}
-          onChange={(e) => setValue({ ...value, connection: e.target.value, engine: 'moby' })}
-        >
-          <option value="rancher-desktop">Rancher Desktop의 Docker 엔진 공유</option>
-          <option value="managed">Naru 독립 엔진</option>
-        </SelectControl>
-        {(locked || value.connection === 'rancher-desktop') && (
-          <p className={cn(tw.groupText, 'mt-3')}>
+      {(locked || value.connection === 'rancher-desktop') &&
+        ['engine', 'kubernetes', 'proxy'].includes(tab) && (
+          <p className={cn(tw.panel, tw.groupText, 'px-5 py-3.5')}>
             {locked
-              ? '설정을 변경하려면 엔진을 정상 종료해 주세요.'
+              ? '엔진, Kubernetes와 프록시 설정은 엔진을 정상 종료한 뒤 바꿀 수 있습니다. 서버 시작 시 엔진 자동 시작과 화면 설정은 바로 저장됩니다.'
               : '공유 모드에서는 엔진 설정을 Rancher Desktop에서 관리합니다.'}
           </p>
         )}
-      </section>
-      <fieldset
-        disabled={locked || saving || value.connection === 'rancher-desktop'}
-        className="m-0 border-0 p-0 disabled:opacity-65"
-      >
-        <section className={cn(tw.panel, tw.group)}>
-          <h3>컨테이너 엔진</h3>
-          <div className="mb-5.5 flex gap-3.5 max-desktop:flex-col">
-            {[
-              ['moby', 'Docker (Moby)'],
-              ['containerd', 'containerd'],
-            ].map(([key, title]) => (
-              <label
-                className={cn(
-                  'flex flex-1 items-center gap-3 rounded-[9px] border border-line p-5 [&_input]:accent-brand',
-                  value.engine === key && 'border-[#4f7750] bg-[#f6faef]',
-                )}
-                key={key}
-              >
-                <input
-                  type="radio"
-                  name="engine"
-                  checked={value.engine === key}
-                  onChange={() => setValue({ ...value, engine: key })}
-                />
-                <strong>{title}</strong>
-              </label>
-            ))}
-          </div>
-          <label className={tw.field}>
-            <span>containerd 네임스페이스</span>
-            <input
-              value={value.namespace}
-              onChange={(e) => setValue({ ...value, namespace: e.target.value })}
-            />
-          </label>
-          <label className={tw.checkbox}>
-            <input
-              type="checkbox"
-              checked={value.autoStart}
-              onChange={(e) => setValue({ ...value, autoStart: e.target.checked })}
-            />
-            Naru 서버 시작 시 엔진도 시작
-          </label>
-        </section>
-        <section className={cn(tw.panel, tw.group)}>
-          <h3>Kubernetes</h3>
-          <label className={tw.checkbox}>
-            <input
-              type="checkbox"
-              checked={value.kubernetes.enabled}
-              onChange={(e) =>
-                setValue({
-                  ...value,
-                  kubernetes: { ...value.kubernetes, enabled: e.target.checked },
-                })
-              }
-            />
-            엔진 시작 시 Kubernetes도 시작
-          </label>
-          <div className={tw.formRow}>
-            <label className={tw.field}>
-              <span>k3s 버전</span>
-              <input
-                value={value.kubernetes.version}
-                onChange={(e) =>
-                  setValue({
-                    ...value,
-                    kubernetes: { ...value.kubernetes, version: e.target.value },
-                  })
-                }
-              />
-            </label>
-            <label className={tw.field}>
-              <span>API 포트</span>
-              <input
-                type="number"
-                min="1024"
-                max="65535"
-                value={value.kubernetes.port}
-                onChange={(e) =>
-                  setValue({
-                    ...value,
-                    kubernetes: { ...value.kubernetes, port: Number(e.target.value) },
-                  })
-                }
-              />
-            </label>
-          </div>
-          <label className={tw.checkbox}>
-            <input
-              type="checkbox"
-              checked={value.kubernetes.traefik}
-              onChange={(e) =>
-                setValue({
-                  ...value,
-                  kubernetes: { ...value.kubernetes, traefik: e.target.checked },
-                })
-              }
-            />
-            Traefik Ingress 사용
-          </label>
-        </section>
-        <section className={cn(tw.panel, tw.group)}>
-          <h3>프록시</h3>
-          {[
-            ['http', 'HTTP_PROXY'],
-            ['https', 'HTTPS_PROXY'],
-            ['noProxy', 'NO_PROXY'],
-          ].map(([key, label]) => (
-            <label className={tw.field} key={key}>
-              <span>{label}</span>
-              <input
-                autoComplete="off"
-                type={key === 'noProxy' ? 'text' : 'password'}
-                value={value.proxy[key]}
-                onChange={(e) =>
-                  setValue({ ...value, proxy: { ...value.proxy, [key]: e.target.value } })
-                }
-              />
-            </label>
+      <div className={cn(tw.panel, 'flex flex-col')}>
+        <div className={tw.tabs} role="tablist" aria-label="설정 분류">
+          {SETTING_TABS.map(([key, label]) => (
+            <button
+              key={key}
+              role="tab"
+              aria-selected={tab === key}
+              className={cn(tw.tab, tab === key && tw.tabSelected)}
+              onClick={() => setParams({ tab: key }, { replace: true })}
+            >
+              {label}
+            </button>
           ))}
-        </section>
-        <section className={cn(tw.panel, tw.group)}>
-          <h3>화면 갱신</h3>
-          <label className={tw.field}>
-            <span>자동 갱신 간격, 초</span>
-            <input
-              type="number"
-              min="3"
-              max="60"
-              value={value.pollSeconds}
-              onChange={(e) => setValue({ ...value, pollSeconds: Number(e.target.value) })}
-            />
-          </label>
-        </section>
-      </fieldset>
-      <ConnectionTools />
+        </div>
+        <div className="px-7.5 py-6.5 max-tablet:px-5 max-tablet:py-5.5 [&_h3]:mb-4.5">
+          {tab === 'engine' && (
+            <>
+              <section className="mb-8">
+                <h3>연결할 엔진</h3>
+                <SelectControl
+                  aria-label="엔진 연결"
+                  disabled={locked || saving}
+                  value={value.connection}
+                  onChange={(e) =>
+                    setValue({ ...value, connection: e.target.value, engine: 'moby' })
+                  }
+                >
+                  <option value="rancher-desktop">Rancher Desktop의 Docker 엔진 공유</option>
+                  <option value="managed">Naru 독립 엔진</option>
+                </SelectControl>
+              </section>
+              <fieldset disabled={managedLocked} className={fieldset}>
+                <h3>컨테이너 엔진</h3>
+                <div className="mb-5.5 flex gap-3.5 max-desktop:flex-col">
+                  {[
+                    ['moby', 'Docker (Moby)'],
+                    ['containerd', 'containerd'],
+                  ].map(([key, title]) => (
+                    <label
+                      className={cn(
+                        'flex flex-1 items-center gap-3 rounded-[9px] border border-line p-5 [&_input]:accent-brand',
+                        value.engine === key && 'border-[#4f7750] bg-[#f6faef]',
+                      )}
+                      key={key}
+                    >
+                      <input
+                        type="radio"
+                        name="engine"
+                        checked={value.engine === key}
+                        onChange={() => setValue({ ...value, engine: key })}
+                      />
+                      <strong>{title}</strong>
+                    </label>
+                  ))}
+                </div>
+                <label className={tw.field}>
+                  <span>containerd 네임스페이스</span>
+                  <input
+                    value={value.namespace}
+                    onChange={(e) => setValue({ ...value, namespace: e.target.value })}
+                  />
+                </label>
+              </fieldset>
+              <fieldset
+                disabled={saving || value.connection === 'rancher-desktop'}
+                className={fieldset}
+              >
+                <label className={tw.checkbox}>
+                  <input
+                    type="checkbox"
+                    checked={value.autoStart}
+                    onChange={(e) => setValue({ ...value, autoStart: e.target.checked })}
+                  />
+                  Naru 서버 시작 시 엔진도 시작
+                </label>
+              </fieldset>
+            </>
+          )}
+          {tab === 'kubernetes' && (
+            <fieldset disabled={managedLocked} className={fieldset}>
+              <label className={tw.checkbox}>
+                <input
+                  type="checkbox"
+                  checked={value.kubernetes.enabled}
+                  onChange={(e) =>
+                    setValue({
+                      ...value,
+                      kubernetes: { ...value.kubernetes, enabled: e.target.checked },
+                    })
+                  }
+                />
+                엔진 시작 시 Kubernetes도 시작
+              </label>
+              <div className={tw.formRow}>
+                <label className={tw.field}>
+                  <span>k3s 버전</span>
+                  <input
+                    value={value.kubernetes.version}
+                    onChange={(e) =>
+                      setValue({
+                        ...value,
+                        kubernetes: { ...value.kubernetes, version: e.target.value },
+                      })
+                    }
+                  />
+                </label>
+                <label className={tw.field}>
+                  <span>API 포트</span>
+                  <input
+                    type="number"
+                    min="1024"
+                    max="65535"
+                    value={value.kubernetes.port}
+                    onChange={(e) =>
+                      setValue({
+                        ...value,
+                        kubernetes: { ...value.kubernetes, port: Number(e.target.value) },
+                      })
+                    }
+                  />
+                </label>
+              </div>
+              <label className={tw.checkbox}>
+                <input
+                  type="checkbox"
+                  checked={value.kubernetes.traefik}
+                  onChange={(e) =>
+                    setValue({
+                      ...value,
+                      kubernetes: { ...value.kubernetes, traefik: e.target.checked },
+                    })
+                  }
+                />
+                Traefik Ingress 사용
+              </label>
+            </fieldset>
+          )}
+          {tab === 'proxy' && (
+            <fieldset disabled={managedLocked} className={fieldset}>
+              {[
+                ['http', 'HTTP_PROXY'],
+                ['https', 'HTTPS_PROXY'],
+                ['noProxy', 'NO_PROXY'],
+              ].map(([key, label]) => (
+                <label className={tw.field} key={key}>
+                  <span>{label}</span>
+                  <input
+                    autoComplete="off"
+                    type={key === 'noProxy' ? 'text' : 'password'}
+                    value={value.proxy[key]}
+                    onChange={(e) =>
+                      setValue({ ...value, proxy: { ...value.proxy, [key]: e.target.value } })
+                    }
+                  />
+                </label>
+              ))}
+            </fieldset>
+          )}
+          {tab === 'screen' && (
+            <fieldset disabled={saving} className={fieldset}>
+              <label className={tw.field}>
+                <span>자동 갱신 간격, 초</span>
+                <input
+                  type="number"
+                  min="3"
+                  max="60"
+                  value={value.pollSeconds}
+                  onChange={(e) => setValue({ ...value, pollSeconds: Number(e.target.value) })}
+                />
+              </label>
+            </fieldset>
+          )}
+          {tab === 'cli' && <ConnectionTools />}
+        </div>
+      </div>
     </section>
   );
 }
@@ -251,8 +291,7 @@ function Settings() {
 function ConnectionTools() {
   const { job, form, busy, status } = useActions();
   return (
-    <section className={cn(tw.panel, tw.group)}>
-      <h3>CLI와 레지스트리</h3>
+    <section>
       <div className={tw.actions}>
         <Button icon={Terminal} disabled={busy} onClick={() => job('installCLI')}>
           Windows CLI 설치
