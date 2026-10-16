@@ -56,11 +56,15 @@ function Jobs({ openJob }) {
         minWidth: 250,
         flex: 1,
         valueFormatter: ({ value }) => jobNames[value] || value,
+        filterable: true,
+        filterValueGetter: (r) => jobNames[r.type] || r.type,
       },
       {
         field: 'state',
         headerName: '상태',
         width: 150,
+        filterable: true,
+        filterValueGetter: (r) => stateNames[r.state] || r.state,
         cellRenderer: ({ value }) => <Badge state={value}>{stateNames[value]}</Badge>,
       },
       {
@@ -76,13 +80,7 @@ function Jobs({ openJob }) {
   );
   return (
     <section className={tw.page}>
-      <div className={tw.pageIntro}>
-        <div>
-          <h2>작업 기록</h2>
-          <p>진행 상태와 결과를 확인하세요. 행을 선택하면 로그가 열립니다.</p>
-        </div>
-      </div>
-      <div className={tw.panel}>
+      <div className={tw.gridPanel}>
         <ResourceGrid query={data} columns={cols} onRowClicked={({ data: r }) => openJob(r.id)} />
       </div>
     </section>

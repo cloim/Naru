@@ -41,7 +41,16 @@ import {
   ShipWheel,
   Tag,
 } from 'lucide-react';
-import { useActions, useData, Button, IconButton, Badge, ResourceGrid } from '../ui.jsx';
+import {
+  useActions,
+  useData,
+  Button,
+  IconButton,
+  Badge,
+  ResourceGrid,
+  PageActions,
+  PageAction,
+} from '../ui.jsx';
 import { cn, tw } from '../tw.js';
 import { api, downloadConfig } from '../api.js';
 import { Modal } from '../components/Modal/Modal.jsx';
@@ -51,7 +60,7 @@ function Forwards() {
     { job, form, busy, status } = useActions();
   const columns = useMemo(
     () => [
-      { field: 'resource', headerName: '리소스', minWidth: 230, flex: 1.2, filterable: true },
+      { field: 'resource', headerName: '리소스', minWidth: 230, flex: 1.2 },
       {
         field: 'namespace',
         headerName: '네임스페이스',
@@ -90,12 +99,9 @@ function Forwards() {
   );
   return (
     <section className={tw.page}>
-      <div className={tw.pageIntro}>
-        <div>
-          <h2>로컬에서 바로 연결</h2>
-          <p>Kubernetes 서비스를 Windows의 localhost로 연결하세요.</p>
-        </div>
-        <Button
+      <PageActions>
+        <PageAction
+          label="포트 연결"
           primary
           icon={Plus}
           disabled={busy || !status?.ready}
@@ -134,11 +140,9 @@ function Forwards() {
                 }),
             )
           }
-        >
-          포트 연결
-        </Button>
-      </div>
-      <div className={tw.panel}>
+        />
+      </PageActions>
+      <div className={tw.gridPanel}>
         <ResourceGrid query={data} columns={columns} />
       </div>
     </section>

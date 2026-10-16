@@ -50,6 +50,8 @@ import {
   useResource,
   ResourceGrid,
   Toolbar,
+  PageActions,
+  PageAction,
 } from '../ui.jsx';
 import { cn, tw } from '../tw.js';
 import { api, downloadConfig } from '../api.js';
@@ -69,10 +71,9 @@ function Resources({ kind }) {
         headerName: '이름',
         minWidth: 230,
         flex: 1.4,
-        filterable: true,
         cellRenderer: ({ value }) => <strong>{value}</strong>,
       },
-      { field: 'Driver', headerName: '드라이버', minWidth: 140, flex: 0.6, filterable: true },
+      { field: 'Driver', headerName: '드라이버', minWidth: 140, flex: 0.6, filterable: !volume },
       {
         field: volume ? 'Mountpoint' : 'Scope',
         headerName: volume ? '마운트 경로' : '범위',
@@ -110,16 +111,9 @@ function Resources({ kind }) {
   if (!status?.ready) return status ? <RuntimeEmpty /> : <Skeleton />;
   return (
     <section className={tw.page}>
-      <div className={tw.pageIntro}>
-        <div>
-          <h2>{volume ? '데이터 저장소' : '컨테이너 네트워크'}</h2>
-          <p>
-            {volume
-              ? '컨테이너 수명과 독립적으로 데이터를 보관하세요.'
-              : '서비스가 연결되는 네트워크를 관리하세요.'}
-          </p>
-        </div>
-        <Button
+      <PageActions>
+        <PageAction
+          label={`${label} 생성`}
           primary
           icon={Plus}
           disabled={busy}
@@ -128,11 +122,9 @@ function Resources({ kind }) {
               job(volume ? 'createVolume' : 'createNetwork', v),
             )
           }
-        >
-          {label} 생성
-        </Button>
-      </div>
-      <div className={tw.panel}>
+        />
+      </PageActions>
+      <div className={tw.gridPanel}>
         <Toolbar search={search} onSearch={setSearch} />
         <ResourceGrid
           query={data}

@@ -1,7 +1,17 @@
 import React, { lazy, Suspense, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { RotateCw, Pause, Terminal, RefreshCw } from 'lucide-react';
-import { useActions, useData, Button, Skeleton, ErrorState, bytes } from '../ui.jsx';
+import {
+  useActions,
+  useData,
+  Button,
+  Skeleton,
+  ErrorState,
+  bytes,
+  PageActions,
+  PageAction,
+  usePageTitle,
+} from '../ui.jsx';
 import { cn, tw } from '../tw.js';
 import { api } from '../api.js';
 const TerminalPanel = lazy(() => import('../components/TerminalPanel.jsx'));
@@ -48,6 +58,7 @@ function ContainerDetail() {
     refetchInterval: 5000,
   });
   const inspect = Array.isArray(detail.data) ? detail.data[0] : detail.data;
+  usePageTitle(inspect?.Name?.replace(/^\//, '') || id.slice(0, 12));
   const usage = stats.data ? resourceUsage(stats.data) : null;
   const execute = async () => {
     setExecBusy(true);
@@ -71,30 +82,22 @@ function ContainerDetail() {
   };
   return (
     <section className={tw.page}>
-      <div className={tw.pageIntro}>
-        <div>
-          <h2>{inspect?.Name?.replace(/^\//, '') || id.slice(0, 12)}</h2>
-          <p className="max-w-[600px] font-mono text-[12px]! wrap-anywhere">{id}</p>
-        </div>
-        <div className={tw.introActions}>
-          <Button
-            icon={RotateCw}
-            disabled={busy}
-            onClick={() => job('containerAction', { id, action: 'restart' })}
-          >
-            재시작
-          </Button>
-          <Button
-            icon={Pause}
-            disabled={busy || !inspect?.State?.Running}
-            onClick={() =>
-              job('containerAction', { id, action: inspect?.State?.Paused ? 'unpause' : 'pause' })
-            }
-          >
-            {inspect?.State?.Paused ? '계속 실행' : '일시 정지'}
-          </Button>
-        </div>
-      </div>
+      <PageActions>
+        <PageAction
+          label="재시작"
+          icon={RotateCw}
+          disabled={busy}
+          onClick={() => job('containerAction', { id, action: 'restart' })}
+        />
+        <PageAction
+          label={inspect?.State?.Paused ? '계속 실행' : '일시 정지'}
+          icon={Pause}
+          disabled={busy || !inspect?.State?.Running}
+          onClick={() =>
+            job('containerAction', { id, action: inspect?.State?.Paused ? 'unpause' : 'pause' })
+          }
+        />
+      </PageActions>
       <div className={cn(tw.panel, 'flex-1')}>
         <div className={tw.tabs}>
           {[
@@ -142,17 +145,7 @@ function ContainerDetail() {
             </pre>
           ) : usage ? (
             <div className="p-6 max-tablet:p-5">
-              <div className="flex items-center justify-between gap-4">
-                <h3>현재 사용량</h3>
-                <Button
-                  icon={RefreshCw}
-                  disabled={stats.isFetching}
-                  onClick={() => stats.refetch()}
-                >
-                  새로고침
-                </Button>
-              </div>
-              <dl className="my-7 grid grid-cols-2 gap-6 max-tablet:grid-cols-1 [&_dd]:my-3 [&_dd]:text-[23px] [&_dd]:tracking-[-0.5px] [&_dd]:tabular-nums [&_dd]:wrap-anywhere [&_dt]:text-[12px] [&_dt]:text-muted [&_progress]:mt-3 [&_progress]:block [&_progress]:h-1.5 [&_progress]:w-full [&_progress]:accent-accent [&_small]:block [&_small]:leading-[1.6] [&>div]:min-w-0 [&>div]:border-b [&>div]:border-line [&>div]:pb-5">
+              <dl className="grid grid-cols-2 gap-6 max-tablet:grid-cols-1 [&_dd]:my-3 [&_dd]:text-[23px] [&_dd]:tracking-[-0.5px] [&_dd]:tabular-nums [&_dd]:wrap-anywhere [&_dt]:text-[12px] [&_dt]:text-muted [&_progress]:mt-3 [&_progress]:block [&_progress]:h-1.5 [&_progress]:w-full [&_progress]:accent-accent [&_small]:block [&_small]:leading-[1.6] [&>div]:min-w-0 [&>div]:border-b [&>div]:border-line [&>div]:pb-5">
                 <div>
                   <dt>CPU</dt>
                   <dd>{usage.cpu === null ? '수집 중' : `${usage.cpu.toFixed(2)}%`}</dd>
@@ -188,9 +181,6 @@ function ContainerDetail() {
                   <dd>{usage.pids ?? '수집 중'}</dd>
                 </div>
               </dl>
-              <p className="text-[12px] text-muted">
-                5초마다 갱신합니다. 메모리는 파일 캐시를 제외한 사용량입니다.
-              </p>
             </div>
           ) : null
         ) : null}

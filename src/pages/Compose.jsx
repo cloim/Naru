@@ -41,7 +41,15 @@ import {
   ShipWheel,
   Tag,
 } from 'lucide-react';
-import { useActions, useData, Button, Skeleton, ErrorState } from '../ui.jsx';
+import {
+  useActions,
+  useData,
+  Button,
+  Skeleton,
+  ErrorState,
+  PageActions,
+  PageAction,
+} from '../ui.jsx';
 import { cn, tw } from '../tw.js';
 import { api, downloadConfig } from '../api.js';
 import { Modal } from '../components/Modal/Modal.jsx';
@@ -56,21 +64,16 @@ function Compose() {
     [yaml, setYaml] = useState(composeExample);
   return (
     <section className={tw.page}>
-      <div className={tw.pageIntro}>
-        <div>
-          <h2>함께 움직이는 서비스</h2>
-          <p>Compose 파일 하나로 개발 환경을 실행하세요.</p>
-        </div>
-        <Button
+      <PageActions>
+        <PageAction
+          label="새 프로젝트"
           icon={Plus}
           onClick={() => {
             setName('my-app');
             setYaml(composeExample);
           }}
-        >
-          새 프로젝트
-        </Button>
-      </div>
+        />
+      </PageActions>
       <div className="flex min-h-[580px] flex-1 gap-5.5 max-tablet:min-h-0 max-tablet:flex-col">
         <div
           className={cn(

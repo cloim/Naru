@@ -41,25 +41,28 @@ import {
   ShipWheel,
   Tag,
 } from 'lucide-react';
-import { useActions, useData, Button, Skeleton, ErrorState, bytes } from '../ui.jsx';
+import {
+  useActions,
+  useData,
+  Button,
+  Skeleton,
+  ErrorState,
+  bytes,
+  PageActions,
+  PageAction,
+} from '../ui.jsx';
 import { cn, tw } from '../tw.js';
 import { api, downloadConfig } from '../api.js';
 import { Modal } from '../components/Modal/Modal.jsx';
 import SelectControl from '../components/SelectControl/SelectControl.tsx';
 function Diagnostics() {
   const data = useData('diagnostics', '/diagnostics'),
-    { notify } = useActions();
+    { status } = useActions();
   return (
     <section className={tw.page}>
-      <div className={tw.pageIntro}>
-        <div>
-          <h2>환경 상태와 로그</h2>
-          <p>실제 실행 환경을 확인하고 문제의 원인을 살펴보세요.</p>
-        </div>
-        <Button icon={RefreshCw} onClick={() => data.refetch()}>
-          다시 확인
-        </Button>
-      </div>
+      <PageActions>
+        <PageAction label="새로고침" icon={RefreshCw} onClick={() => data.refetch()} />
+      </PageActions>
       {data.isLoading ? (
         <Skeleton />
       ) : data.error ? (
@@ -84,23 +87,10 @@ function Diagnostics() {
               <span>Node</span>
               <strong>{data.data.node}</strong>
             </div>
-          </div>
-          <div className={cn(tw.panel, tw.group)}>
-            <h3>Docker CLI 사용</h3>
-            <code className="mb-3.75 block rounded-[6px] bg-[#f3f6ed] p-3.75 text-[12px] wrap-anywhere">
-              docker ps
-            </code>
-            <Button
-              icon={Copy}
-              onClick={() =>
-                navigator.clipboard
-                  .writeText('docker ps')
-                  .then(() => notify('명령을 복사했습니다.'))
-                  .catch(notify)
-              }
-            >
-              복사
-            </Button>
+            <div>
+              <span>데이터 경로</span>
+              <strong>{status?.dataPath}</strong>
+            </div>
           </div>
           {Object.entries(data.data.logs).map(([key, value]) => (
             <section className={tw.panel} key={key}>

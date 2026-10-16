@@ -12,6 +12,8 @@ import {
   useResource,
   ResourceGrid,
   Toolbar,
+  PageActions,
+  PageAction,
 } from '../ui.jsx';
 import { cn, tw } from '../tw.js';
 export const isSystemContainer = (r) =>
@@ -41,7 +43,6 @@ function Containers() {
         colId: 'name',
         minWidth: 210,
         flex: 1.3,
-        filterable: true,
         valueGetter: ({ data: r }) => containerName(r),
         cellRenderer: ({ data: r }) => (
           <div className={tw.nameCell}>
@@ -57,7 +58,6 @@ function Containers() {
         field: 'State',
         headerName: '상태',
         width: 125,
-        filterable: true,
         cellRenderer: ({ value }) => <Badge state={value} />,
       },
       { field: 'Image', headerName: '이미지', minWidth: 190, flex: 1.2, filterable: true },
@@ -121,12 +121,9 @@ function Containers() {
   };
   return (
     <section className={tw.page}>
-      <div className={tw.pageIntro}>
-        <div>
-          <h2>내 컨테이너</h2>
-          <p>실행 상태를 확인하고 바로 작업을 이어가세요.</p>
-        </div>
-        <Button
+      <PageActions>
+        <PageAction
+          label="컨테이너 실행"
           icon={Plus}
           primary
           disabled={busy}
@@ -179,11 +176,9 @@ function Containers() {
                 }),
             )
           }
-        >
-          컨테이너 실행
-        </Button>
-      </div>
-      <div className={tw.panel}>
+        />
+      </PageActions>
+      <div className={tw.gridPanel}>
         <div className={tw.tabs}>
           {[
             ['all', '전체'],
