@@ -67,6 +67,12 @@ function Images() {
   const { status, job, form, confirm, busy } = useActions(),
     data = useResource('images');
   const [search, setSearch] = useState('');
+  const sortedData = useMemo(() => {
+    if (!data.data) return data.data;
+    return [...data.data].sort((a, b) =>
+      (imageName(a) || '').localeCompare(imageName(b) || '', locale),
+    );
+  }, [data.data, locale]);
   const cols = useMemo(
     () => [
       {
@@ -74,6 +80,7 @@ function Images() {
         colId: 'image',
         minWidth: 270,
         flex: 1.6,
+        sort: 'asc',
         valueGetter: ({ data: r }) => imageName(r),
         cellRenderer: ({ data: r }) => (
           <div className={tw.nameCell}>
@@ -265,7 +272,7 @@ function Images() {
       </PageActions>
       <div className={tw.gridPanel}>
         <Toolbar search={search} onSearch={setSearch} />
-        <ResourceGrid query={data} columns={cols} filter={search} />
+        <ResourceGrid query={{ ...data, data: sortedData }} columns={cols} filter={search} />
       </div>
     </section>
   );

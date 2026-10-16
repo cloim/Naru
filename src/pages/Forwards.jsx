@@ -47,6 +47,7 @@ import {
   useData,
   Button,
   IconButton,
+  CopyButton,
   Badge,
   ResourceGrid,
   PageActions,
@@ -72,9 +73,34 @@ function Forwards() {
       },
       {
         headerName: t('로컬 주소'),
-        minWidth: 200,
+        minWidth: 220,
         flex: 1,
         valueGetter: ({ data: r }) => `127.0.0.1:${r.localPort} → ${r.remotePort}`,
+        cellRenderer: ({ data: r }) => {
+          const url = `http://127.0.0.1:${r.localPort}`;
+          return (
+            <div
+              className="flex items-center gap-1.5 py-1 text-[12px]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {r.state === 'running' ? (
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 font-mono text-[#2c6e49] underline decoration-[#2c6e49]/30 hover:decoration-[#2c6e49]"
+                  title={t('{0} 브라우저에서 열기', [url])}
+                >
+                  <span>{`127.0.0.1:${r.localPort} → ${r.remotePort}`}</span>
+                  <ArrowUpRight size={13} className="flex-none opacity-70" />
+                </a>
+              ) : (
+                <span className="font-mono text-[#8c978e]">{`127.0.0.1:${r.localPort} → ${r.remotePort}`}</span>
+              )}
+              <CopyButton text={url} label={t('{0} 주소 복사', [url])} />
+            </div>
+          );
+        },
       },
       {
         field: 'state',

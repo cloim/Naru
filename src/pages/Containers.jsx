@@ -1,5 +1,5 @@
 import { t, useLocale } from '../i18n.js';
-import React, { createContext, useContext, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -18,12 +18,17 @@ import {
   Download,
   Hammer,
   Save,
+  ArrowUpRight,
+  Search,
+  X,
+  Sparkles,
 } from 'lucide-react';
 import {
   useActions,
   useData,
   Button,
   IconButton,
+  CopyButton,
   Badge,
   Skeleton,
   ErrorState,
@@ -38,6 +43,7 @@ import {
 import { cn, tw } from '../tw.js';
 import { api } from '../api.js';
 import { Modal } from '../components/Modal/Modal.jsx';
+import { CreateContainerModal } from '../components/CreateContainerModal.jsx';
 
 export const isSystemContainer = (r) =>
   Boolean(
@@ -51,11 +57,19 @@ const COLLAPSED_KEY = 'naru.collapsedProjects';
 const composeExample =
   'services:\n  web:\n    image: nginx:alpine\n    ports:\n      - "127.0.0.1:8080:80"\n';
 
-function readCollapsed() {
+function readCollapsedState() {
   try {
-    return new Set(JSON.parse(localStorage.getItem(COLLAPSED_KEY) || '[]'));
+    const raw = localStorage.getItem(COLLAPSED_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      const obj = {};
+      for (const k of parsed) obj[k] = true;
+      return obj;
+    }
+    return typeof parsed === 'object' && parsed !== null ? parsed : {};
   } catch {
-    return new Set();
+    return {};
   }
 }
 
@@ -148,10 +162,21 @@ function ProjectRow({ data: g }) {
 
 function ProjectLogs({ name, onClose }) {
   useLocale();
+  const [logSearch, setLogSearch] = useState('');
   const logs = useData('project-logs:' + name, `/projects/${name}/logs`, {
     enabled: !!name,
     refetchInterval: name ? 5000 : false,
   });
+  const rawLog = logs.data?.text || '';
+  const filteredLog = useMemo(() => {
+    if (!logSearch.trim()) return rawLog;
+    const q = logSearch.toLowerCase();
+    return rawLog
+      .split('\n')
+      .filter((line) => line.toLowerCase().includes(q))
+      .join('\n');
+  }, [rawLog, logSearch]);
+
   return (
     <Modal
       isOpen={!!name}
@@ -160,21 +185,49 @@ function ProjectLogs({ name, onClose }) {
       size="lg"
       footer={
         <>
+          <CopyButton
+            text={filteredLog || rawLog}
+            label={t('로그 복사')}
+            className="mr-auto h-9 w-9 border border-[#dce2d9] bg-white"
+          />
           <Button icon={RefreshCw} disabled={logs.isFetching} onClick={() => logs.refetch()}>
-            {' '}
-            {t('새로고침')}{' '}
+            {t('새로고침')}
           </Button>
           <Button onClick={onClose}>{t('닫기')}</Button>
         </>
       }
     >
+      <div className="mb-2.5 flex h-8.5 w-full items-center gap-2 rounded-[6px] border border-[#e3e8df] bg-[#fcfdfb] px-2.5 text-[#8c978e]">
+        <Search size={15} />
+        <input
+          className="h-full min-w-0 flex-1 bg-transparent text-[12px] text-ink outline-0 placeholder:text-[#9aa29b]"
+          aria-label={t('로그 검색')}
+          placeholder={t('로그 검색')}
+          value={logSearch}
+          onChange={(e) => setLogSearch(e.target.value)}
+        />
+        {logSearch && (
+          <button
+            type="button"
+            aria-label={t('검색어 지우기')}
+            className="text-[#8c978e] hover:text-ink"
+            onClick={() => setLogSearch('')}
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
       {logs.isLoading ? (
         <Skeleton />
       ) : logs.error ? (
         <ErrorState error={logs.error} retry={() => logs.refetch()} />
       ) : (
-        <pre className={tw.terminal} aria-label={t('프로젝트 로그')}>
-          {logs.data?.text || t('아직 출력된 로그가 없습니다.')}
+        <pre
+          className={cn(tw.terminal, 'max-h-[500px] overflow-auto')}
+          aria-label={t('프로젝트 로그')}
+        >
+          {filteredLog ||
+            (logSearch ? t('일치하는 로그가 없습니다.') : t('아직 출력된 로그가 없습니다.'))}
         </pre>
       )}
     </Modal>
@@ -354,9 +407,11 @@ function Containers() {
   const [search, setSearch] = useState(''),
     [tab, setTab] = useState('all'),
     [showSystem, setShowSystem] = useState(false),
-    [collapsed, setCollapsed] = useState(readCollapsed),
+    [collapsedState, setCollapsedState] = useState(readCollapsedState),
     [logProject, setLogProject] = useState(null),
-    [manageGroup, setManageGroup] = useState(null);
+    [manageGroup, setManageGroup] = useState(null),
+    [createModal, setCreateModal] = useState(false),
+    [selectedIds, setSelectedIds] = useState(() => new Set());
   // Kubernetes를 쓰지 않으면 숨길 시스템 컨테이너가 없으므로 표시 선택도 보이지 않는다.
   const hasSystem = useMemo(() => (data.data || []).some(isSystemContainer), [data.data]);
   const systemToggle = !!status?.kubernetes?.enabled || hasSystem;
@@ -409,39 +464,113 @@ function Containers() {
     }
     return result;
   }, [candidates, visible, projects.data, tab, search]);
+  const collapsed = useMemo(() => {
+    const set = new Set();
+    for (const r of rows) {
+      if (r.__group !== undefined) {
+        const key = r.__group;
+        const isCollapsed =
+          collapsedState[key] !== undefined ? collapsedState[key] : r.running === 0;
+        if (isCollapsed) set.add(key);
+      }
+    }
+    return set;
+  }, [rows, collapsedState]);
+  const toggle = useCallback(
+    (key) =>
+      setCollapsedState((current) => {
+        const currentlyCollapsed = collapsed.has(key);
+        const next = { ...current, [key]: !currentlyCollapsed };
+        try {
+          localStorage.setItem(COLLAPSED_KEY, JSON.stringify(next));
+        } catch {}
+        return next;
+      }),
+    [collapsed],
+  );
   const projectContext = useMemo(
     () => ({
       job,
       busy,
       collapsed,
-      toggle: (key) =>
-        setCollapsed((current) => {
-          const next = new Set(current);
-          next.has(key) ? next.delete(key) : next.add(key);
-          try {
-            localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...next]));
-          } catch {}
-          return next;
-        }),
+      toggle,
       openLogs: setLogProject,
       openManage: setManageGroup,
     }),
-    [job, busy, collapsed],
+    [job, busy, collapsed, toggle],
   );
   const cols = useMemo(
     () => [
       {
+        headerName: '',
+        colId: 'selection',
+        width: 44,
+        minWidth: 44,
+        maxWidth: 44,
+        sortable: false,
+        headerComponent: () => {
+          const selectableIds = candidates.map((c) => c.Id).filter(Boolean);
+          const allChecked =
+            selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id));
+          return (
+            <div className="flex h-full items-center justify-center">
+              <input
+                type="checkbox"
+                className="cursor-pointer"
+                aria-label={t('전체 선택')}
+                checked={allChecked}
+                onChange={(e) => {
+                  if (e.target.checked) setSelectedIds(new Set(selectableIds));
+                  else setSelectedIds(new Set());
+                }}
+              />
+            </div>
+          );
+        },
+        cellRenderer: ({ data: r }) => {
+          if (r.__group !== undefined) return null;
+          const checked = selectedIds.has(r.Id);
+          return (
+            <div
+              className="flex h-full items-center justify-center"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <input
+                type="checkbox"
+                className="cursor-pointer"
+                aria-label={`${containerName(r)} 선택`}
+                checked={checked}
+                onChange={() => {
+                  setSelectedIds((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(r.Id)) next.delete(r.Id);
+                    else next.add(r.Id);
+                    return next;
+                  });
+                }}
+              />
+            </div>
+          );
+        },
+      },
+      {
         headerName: t('컨테이너'),
         colId: 'name',
-        minWidth: 210,
+        minWidth: 230,
         flex: 1.3,
         valueGetter: ({ data: r }) => containerName(r),
         cellRenderer: ({ data: r }) => (
           <div className={cn(tw.nameCell, 'pl-7 max-tablet:pl-4')}>
             <Box size={19} />
-            <div>
-              <strong>{containerName(r)}</strong>
-              <small>{r.Id?.slice(0, 12)}</small>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <strong className="truncate">{containerName(r)}</strong>
+                <CopyButton text={containerName(r)} label={t('{0} 이름 복사', [containerName(r)])} />
+              </div>
+              <div className="flex items-center gap-1 text-[11px] text-[#8c978e]">
+                <small>{r.Id?.slice(0, 12)}</small>
+                <CopyButton text={r.Id?.slice(0, 12)} label={t('{0} ID 복사', [containerName(r)])} />
+              </div>
             </div>
           </div>
         ),
@@ -455,12 +584,41 @@ function Containers() {
       { field: 'Image', headerName: t('이미지'), minWidth: 190, flex: 1.2, filterable: true },
       {
         headerName: t('포트'),
-        minWidth: 140,
-        flex: 0.8,
+        minWidth: 170,
+        flex: 0.9,
         valueGetter: ({ data: r }) =>
           r.Ports?.filter((p) => p.PublicPort)
             .map((p) => `${p.PublicPort} → ${p.PrivatePort}`)
-            .join(', ') || '—',
+            .join(', ') || '-',
+        cellRenderer: ({ data: r }) => {
+          const publicPorts = r.Ports?.filter((p) => p.PublicPort) || [];
+          if (!publicPorts.length) return <span className="text-[#8c978e]">-</span>;
+          return (
+            <div
+              className="flex flex-wrap items-center gap-2 py-1 leading-normal"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {publicPorts.map((p, idx) => {
+                const url = `http://127.0.0.1:${p.PublicPort}`;
+                return (
+                  <div key={idx} className="inline-flex items-center gap-1 text-[12px]">
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-0.5 font-mono text-[#2c6e49] underline decoration-[#2c6e49]/30 hover:decoration-[#2c6e49]"
+                      title={t('{0} 브라우저에서 열기', [url])}
+                    >
+                      <span>{`${p.PublicPort} → ${p.PrivatePort}`}</span>
+                      <ArrowUpRight size={13} className="flex-none opacity-70" />
+                    </a>
+                    <CopyButton text={url} label={t('{0} 주소 복사', [url])} />
+                  </div>
+                );
+              })}
+            </div>
+          );
+        },
       },
       {
         headerName: '',
@@ -502,7 +660,7 @@ function Containers() {
         ),
       },
     ],
-    [locale, busy, job, confirm, navigate],
+    [locale, busy, job, confirm, navigate, selectedIds, candidates],
   );
   if (!status?.ready) return status ? <RuntimeEmpty /> : <Skeleton />;
   return (
@@ -538,59 +696,25 @@ function Containers() {
           }
         />
         <PageAction
+          label={t('미사용 리소스 정리')}
+          icon={Sparkles}
+          disabled={busy}
+          onClick={() =>
+            confirm(
+              t('미사용 리소스 정리'),
+              t(
+                '중지된 컨테이너, 태그 없는 이미지와 미사용 네트워크를 일괄 삭제하여 가상 디스크 용량을 확보합니다. 볼륨 데이터는 유지됩니다.',
+              ),
+              () => job('pruneResources', { all: true, volumes: false }),
+            )
+          }
+        />
+        <PageAction
           label={t('컨테이너 실행')}
           icon={Plus}
           primary
           disabled={busy}
-          onClick={() =>
-            form(
-              t('컨테이너 실행'),
-              [
-                { key: 'image', label: t('이미지'), required: true, placeholder: 'nginx:alpine' },
-                { key: 'name', label: t('이름'), placeholder: 'my-web' },
-                {
-                  key: 'ports',
-                  label: t('포트'),
-                  placeholder: '8080:80, 8443:443',
-                  hint: t('호스트 포트:컨테이너 포트. Windows의 127.0.0.1에 공개합니다.'),
-                },
-                {
-                  key: 'env',
-                  label: t('환경 변수'),
-                  type: 'textarea',
-                  rows: 3,
-                  placeholder: 'APP_ENV=development\nLOG_LEVEL=info',
-                },
-                {
-                  key: 'mounts',
-                  label: t('볼륨과 마운트 (JSON)'),
-                  type: 'textarea',
-                  rows: 3,
-                  value: '[]',
-                  hint: t('예: [{"source":"my-data","target":"/data","readOnly":false}]'),
-                },
-                { key: 'command', label: t('실행 인수 (JSON)'), value: '[]' },
-              ],
-              (v) =>
-                job('createContainer', {
-                  image: v.image,
-                  ...(v.name ? { name: v.name } : {}),
-                  ports: v.ports
-                    ? v.ports.split(',').map((x) => {
-                        const [host, container] = x.trim().split(':');
-                        return {
-                          host: Number(host),
-                          container: Number(container),
-                          protocol: 'tcp',
-                        };
-                      })
-                    : [],
-                  env: v.env.split('\n').filter(Boolean),
-                  mounts: JSON.parse(v.mounts),
-                  command: JSON.parse(v.command),
-                }),
-            )
-          }
+          onClick={() => setCreateModal(true)}
         />
       </PageActions>
       <div className={tw.gridPanel}>
@@ -612,6 +736,62 @@ function Containers() {
           ))}
         </div>
         <Toolbar search={search} onSearch={setSearch} wrap>
+          {selectedIds.size > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 rounded-[6px] border border-[#d6e5cd] bg-[#f0f6ec] px-2.5 py-1 text-[12px] text-[#345c2f]">
+              <strong className="font-semibold">{t('{0}대 선택', [selectedIds.size])}</strong>
+              <Button
+                compact
+                icon={Play}
+                disabled={busy}
+                onClick={async () => {
+                  for (const id of selectedIds) {
+                    await job('containerAction', { id, action: 'start' });
+                  }
+                  setSelectedIds(new Set());
+                }}
+              >
+                {t('일괄 시작')}
+              </Button>
+              <Button
+                compact
+                icon={Square}
+                disabled={busy}
+                onClick={async () => {
+                  for (const id of selectedIds) {
+                    await job('containerAction', { id, action: 'stop' });
+                  }
+                  setSelectedIds(new Set());
+                }}
+              >
+                {t('일괄 중지')}
+              </Button>
+              <Button
+                compact
+                icon={Trash2}
+                disabled={busy}
+                className="border-danger/30 text-danger hover:border-danger hover:bg-[#faeeeb]"
+                onClick={() => {
+                  confirm(
+                    t('선택한 컨테이너 일괄 삭제'),
+                    t('선택한 {0}개 컨테이너를 삭제합니다. 연결된 볼륨은 보존됩니다.', [
+                      selectedIds.size,
+                    ]),
+                    async () => {
+                      for (const id of selectedIds) {
+                        await job('containerAction', { id, action: 'remove' });
+                      }
+                      setSelectedIds(new Set());
+                    },
+                  );
+                }}
+              >
+                {t('일괄 삭제')}
+              </Button>
+              <Button compact onClick={() => setSelectedIds(new Set())}>
+                {t('선택 해제')}
+              </Button>
+            </div>
+          )}
           {systemToggle && (
             <label className={cn(tw.checkbox, 'whitespace-nowrap')}>
               <input
@@ -644,6 +824,15 @@ function Containers() {
           onLogs={setLogProject}
         />
       )}
+      <CreateContainerModal
+        isOpen={createModal}
+        onClose={() => setCreateModal(false)}
+        busy={busy}
+        onSubmit={async (payload) => {
+          await job('createContainer', payload);
+          setCreateModal(false);
+        }}
+      />
     </section>
   );
 }

@@ -43,6 +43,7 @@ import {
   Network,
   Settings2,
   Activity,
+  History,
   Camera,
   Play,
   Square,
@@ -70,6 +71,7 @@ import {
 } from 'lucide-react';
 
 import { Modal } from './components/Modal/Modal.jsx';
+import { CommandPalette } from './components/CommandPalette/CommandPalette.jsx';
 import SelectControl from './components/SelectControl/SelectControl.tsx';
 import { api, downloadConfig } from './api.js';
 import { cn, tw } from './tw.js';
@@ -113,7 +115,28 @@ function Shell() {
     [alert, setAlert] = useState(null),
     [jobId, setJobId] = useState(null),
     [drawer, setDrawer] = useState(false),
-    [submitting, setSubmitting] = useState(false);
+    [submitting, setSubmitting] = useState(false),
+    [paletteOpen, setPaletteOpen] = useState(false);
+
+  const containers = useData('containers', '/containers', {
+    enabled: !!status.data?.ready,
+    refetchInterval: (status.data?.pollSeconds || 5) * 1000,
+  });
+  const runningCount = useMemo(
+    () => (containers.data || []).filter((c) => c.State === 'running').length,
+    [containers.data],
+  );
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
   const [mobile, setMobile] = useState(() => window.matchMedia('(max-width: 760px)').matches);
   const sidebarRef = useRef(null),
     menuRef = useRef(null);
@@ -300,7 +323,7 @@ function Shell() {
             </nav>
             <div className="mt-auto flex flex-col gap-0.5 border-t border-[#ffffff16] pt-4.5">
               <NavLink to="/jobs" className={navLink}>
-                <Activity size={18} /> {t('작업 기록')}{' '}
+                <History size={18} /> {t('작업 기록')}{' '}
               </NavLink>
               <NavLink to="/diagnostics" className={navLink}>
                 <Activity size={18} /> {t('진단')}{' '}
@@ -335,8 +358,30 @@ function Shell() {
                 ) : (
                   <h1 className="min-w-0 truncate">{pageTitle || title}</h1>
                 )}
+                {status.data?.ready && (
+                  <Link
+                    to="/"
+                    className="ml-2 inline-flex flex-none items-center gap-1.5 rounded-[6px] bg-[#edf5e7] px-2.5 py-1 text-[11px] font-semibold text-[#3b6d47] transition-colors hover:bg-[#e2edd9]"
+                    title={t('실행 중인 컨테이너 목록으로 이동')}
+                  >
+                    <span className="h-1.75 w-1.75 rounded-full bg-[#407543]" />
+                    {t('실행 중 {0}', [runningCount])}
+                  </Link>
+                )}
               </div>
               <div className="flex items-center gap-2 max-tablet:gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setPaletteOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-[7px] border border-[#e3e8df] bg-white px-2.5 py-1 text-[12px] text-[#7a857c] transition-colors hover:border-[#bdcdbb] hover:text-ink max-tablet:hidden"
+                  title={t('빠른 이동 (Ctrl+K)')}
+                >
+                  <Search size={14} />
+                  <span>{t('빠른 이동')}</span>
+                  <kbd className="rounded bg-[#f0f2ee] px-1 py-0.5 text-[10px] font-mono text-[#7a837c]">
+                    Ctrl+K
+                  </kbd>
+                </button>
                 <div ref={setActionSlot} className="flex items-center gap-2 max-tablet:gap-1.5" />
                 {status.error ? (
                   <PageAction
@@ -428,6 +473,19 @@ function Shell() {
             }}
           />
         )}
+        <CommandPalette
+          isOpen={paletteOpen}
+          onClose={() => setPaletteOpen(false)}
+          onPrune={() => {
+            confirm(
+              t('미사용 리소스 정리'),
+              t(
+                '중지된 컨테이너, 태그 없는 이미지와 미사용 네트워크를 일괄 삭제하여 가상 디스크 용량을 확보합니다. 볼륨 데이터는 유지됩니다.',
+              ),
+              () => job('pruneResources', { all: true, volumes: false }),
+            );
+          }}
+        />
       </TopBar.Provider>
     </Actions.Provider>
   );

@@ -155,6 +155,12 @@ export const jobSchemas = {
   uninstallExtension: z
     .object({ id: z.string().regex(/^[a-f0-9]{24}$/), confirmation: z.literal('REMOVE') })
     .strict(),
+  pruneResources: z
+    .object({
+      all: z.boolean().default(true),
+      volumes: z.boolean().default(false),
+    })
+    .default({}),
 };
 export function validateJob(type, payload) {
   const schema = jobSchemas[type];

@@ -268,6 +268,14 @@ try {
     case 'removeNetwork':
       await engine.cli(['network', 'rm', p.id], { log });
       break;
+    case 'pruneResources': {
+      const pruneArgs = ['system', 'prune', '-f'];
+      if (p.all) pruneArgs.push('--all');
+      if (p.volumes) pruneArgs.push('--volumes');
+      await engine.cli(pruneArgs, { timeout: 15 * 60 * 1000, log });
+      log('미사용 리소스 정리(Prune) 완료.\n');
+      break;
+    }
     case 'createContainer': {
       const args = ['run', '-d', '--restart', p.restart];
       if (p.name) args.push('--name', p.name);
