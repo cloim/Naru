@@ -10,6 +10,7 @@ import * as engine from './engine.js';
 import { validateJob } from './jobs.js';
 import { createForward, stopForward, removeForward } from './forwarding.js';
 import { ensureWindowsTool } from './tools.js';
+import { compactDisk } from './disk.js';
 import { installExtension, uninstallExtension } from './extensions.js';
 import { ensureCredentialHelper } from './registry.js';
 import * as projects from './projects.js';
@@ -49,10 +50,10 @@ try {
     case 'stopForward':
       await stopForward(p.id, log);
       break;
-    case 'registryLogin':
     case 'removeForward':
       await removeForward(p.id, log);
       break;
+    case 'registryLogin':
       if (!external) await ensureCredentialHelper(log);
       await engine.cli(['login', p.server, '--username', p.username, '--password-stdin'], {
         input: p.password,
@@ -151,6 +152,9 @@ try {
       break;
     case 'stopRuntime':
       await runtime.stop(log);
+      break;
+    case 'compactDisk':
+      await compactDisk(log);
       break;
     case 'startKubernetes':
       await runtime.startKubernetes(log);

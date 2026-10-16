@@ -7,7 +7,7 @@ import http from 'node:http';
 import { spawn } from 'node:child_process';
 import { Duplex } from 'node:stream';
 import { settings, DISTRO } from './state.js';
-import { wsl } from './runner.js';
+import { wsl, assertDistroAvailable } from './runner.js';
 import { requireReady } from './runtime.js';
 
 // The engine socket stays inside WSL. No unauthenticated Docker TCP port is exposed.
@@ -22,6 +22,15 @@ function createAgent(keepAlive, external = false) {
 }
 // A socket-like stream to the engine's Unix socket inside the naru distribution.
 export function naruSocket() {
+  try {
+    assertDistroAvailable();
+  } catch (e) {
+    const blocked = new Duplex({ read() {}, write: (chunk, encoding, done) => done() });
+    // 실제 소켓처럼 기본 오류 수신자를 둔다. 요청 쪽은 에이전트가 붙인 수신자로 오류를 받는다.
+    blocked.on('error', () => {});
+    process.nextTick(() => blocked.destroy(e));
+    return blocked;
+  }
   const p = spawn(
     'wsl.exe',
     ['-d', DISTRO, '-u', 'root', '--exec', 'socat', '-', 'UNIX-CONNECT:/run/naru/docker.sock'],

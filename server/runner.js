@@ -1,7 +1,22 @@
 import { spawn, execFile } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { promisify } from 'node:util';
 import path from 'node:path';
-import { ROOT, DISTRO } from './state.js';
+import { ROOT, DATA, DISTRO } from './state.js';
+
+// 디스크 압축 중에는 배포판을 깨우면 안 된다. 압축 작업 프로세스만 배포판을 다룰 수 있다.
+export const MAINTENANCE_FILE = path.join(DATA, 'maintenance.json');
+export function assertDistroAvailable() {
+  let pid;
+  try {
+    pid = JSON.parse(readFileSync(MAINTENANCE_FILE, 'utf8')).pid;
+    process.kill(pid, 0);
+  } catch {
+    return;
+  }
+  if (pid !== process.pid)
+    throw new Error('디스크를 압축하는 중입니다. 끝나면 엔진이 다시 시작됩니다.');
+}
 
 export function command(
   exe,
@@ -72,8 +87,14 @@ export function command(
     child.stdin.end(input);
   });
 }
-export const wsl = (args, options) =>
-  command('wsl.exe', ['--distribution', DISTRO, '--user', 'root', '--exec', ...args], options);
+export async function wsl(args, options) {
+  assertDistroAvailable();
+  return command(
+    'wsl.exe',
+    ['--distribution', DISTRO, '--user', 'root', '--exec', ...args],
+    options,
+  );
+}
 export async function distributions(running = false) {
   const text = await command('wsl.exe', ['--list', '--quiet', ...(running ? ['--running'] : [])], {
     timeout: 10000,
