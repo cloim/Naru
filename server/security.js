@@ -9,8 +9,14 @@ export function loadRemote(file) {
   } catch {
     return null;
   }
-  const host = String(raw?.host || '').trim().toLowerCase(),
-    users = new Set((Array.isArray(raw?.users) ? raw.users : []).map((u) => String(u).trim().toLowerCase()).filter(Boolean));
+  const host = String(raw?.host || '')
+      .trim()
+      .toLowerCase(),
+    users = new Set(
+      (Array.isArray(raw?.users) ? raw.users : [])
+        .map((u) => String(u).trim().toLowerCase())
+        .filter(Boolean),
+    );
   return /^[a-z0-9.-]+\.ts\.net(:\d{1,5})?$/.test(host) && users.size ? { host, users } : null;
 }
 
@@ -22,7 +28,9 @@ export function access(req, port, remote) {
   const headers = req.headers,
     origin = headers.origin;
   if (new Set([`127.0.0.1:${port}`, `localhost:${port}`]).has(headers.host))
-    return !origin || new Set([`http://127.0.0.1:${port}`, `http://localhost:${port}`]).has(origin) ? 'http' : null;
+    return !origin || new Set([`http://127.0.0.1:${port}`, `http://localhost:${port}`]).has(origin)
+      ? 'http'
+      : null;
   if (
     remote &&
     String(headers.host || '').toLowerCase() === remote.host &&

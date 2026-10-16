@@ -159,7 +159,9 @@ try {
   await page.setViewportSize({ width: 1440, height: 1000 });
   statsMode = 'error';
   // 리소스 탭은 5초마다 자동으로 갱신되므로 다음 갱신에서 오류 상태가 나타난다.
-  await page.getByText('stats temporarily unavailable', { exact: true }).waitFor({ timeout: 15000 });
+  await page
+    .getByText('stats temporarily unavailable', { exact: true })
+    .waitFor({ timeout: 15000 });
   statsMode = 'containerd';
   await page.getByRole('button', { name: '다시 시도', exact: true }).click();
   await page.getByLabel('containerd 리소스 사용량').waitFor();
