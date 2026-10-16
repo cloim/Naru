@@ -60,11 +60,18 @@ test('API requires exact token and accepts only local same-origin request', () =
 test('Tailscale remote access requires serve host, loopback proxy and an allowed tailnet login', () => {
   const remote = { host: 'pc.tail1.ts.net:8461', users: new Set(['owner@example.com']) };
   const req = (headers, address = '127.0.0.1') => ({ headers, socket: { remoteAddress: address } });
-  const ok = { host: 'pc.tail1.ts.net:8461', origin: 'https://pc.tail1.ts.net:8461', 'tailscale-user-login': 'Owner@example.com' };
+  const ok = {
+    host: 'pc.tail1.ts.net:8461',
+    origin: 'https://pc.tail1.ts.net:8461',
+    'tailscale-user-login': 'Owner@example.com',
+  };
   assert.equal(access(req(ok), 49170, remote), 'https');
   assert.equal(access(req(ok), 49170, null), null);
   assert.equal(access(req(ok, '100.64.0.2'), 49170, remote), null);
-  assert.equal(access(req({ ...ok, 'tailscale-user-login': 'other@example.com' }), 49170, remote), null);
+  assert.equal(
+    access(req({ ...ok, 'tailscale-user-login': 'other@example.com' }), 49170, remote),
+    null,
+  );
   assert.equal(access(req({ ...ok, 'tailscale-user-login': undefined }), 49170, remote), null);
   assert.equal(access(req({ ...ok, origin: 'https://evil.example' }), 49170, remote), null);
   assert.equal(access(req({ ...ok, host: 'evil.example' }), 49170, remote), null);
@@ -76,7 +83,10 @@ test('Tailscale remote access requires serve host, loopback proxy and an allowed
   assert.equal(loadRemote(file), null);
   fs.writeFileSync(file, JSON.stringify({ host: 'PC.tail1.ts.net:8461', users: [] }));
   assert.equal(loadRemote(file), null);
-  fs.writeFileSync(file, JSON.stringify({ host: 'PC.tail1.ts.net:8461', users: ['Owner@example.com'] }));
+  fs.writeFileSync(
+    file,
+    JSON.stringify({ host: 'PC.tail1.ts.net:8461', users: ['Owner@example.com'] }),
+  );
   assert.equal(loadRemote(file).host, 'pc.tail1.ts.net:8461');
   fs.rmSync(dir, { recursive: true, force: true });
 });

@@ -31,7 +31,10 @@ export function registerTerminal(app, server, port, remote = null) {
       expires: Date.now() + 30000,
     });
     const scheme = access(req, port, remote) === 'https' ? 'wss' : 'ws';
-    res.json({ url: `${scheme}://${req.headers.host}/api/terminal?ticket=${ticket}`, engine: cfg.engine });
+    res.json({
+      url: `${scheme}://${req.headers.host}/api/terminal?ticket=${ticket}`,
+      engine: cfg.engine,
+    });
   });
   const wsServer = new WebSocketServer({ noServer: true, maxPayload: 65536 });
   server.on('upgrade', (req, socket, head) => {
