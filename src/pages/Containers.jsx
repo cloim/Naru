@@ -22,6 +22,7 @@ import {
   Search,
   X,
   Sparkles,
+  Copy,
 } from 'lucide-react';
 import {
   useActions,
@@ -234,13 +235,15 @@ function ProjectLogs({ name, onClose }) {
   );
 }
 
-function ProjectManage({ group, onClose, onLogs }) {
+function ProjectManage({ group, onClose, onLogs, containers = [] }) {
   useLocale();
   const { job, confirm, notify, busy } = useActions(),
-    qc = useQueryClient();
+    qc = useQueryClient(),
+    navigate = useNavigate();
   const name = group?.__group;
   const detail = useData('project-files:' + name, `/projects/${name}/files`, { enabled: !!name });
   const [draft, setDraft] = useState(null);
+  const [tab, setTab] = useState('topology');
   const managed = detail.data?.managed;
   const yaml = draft ?? detail.data?.files?.[0]?.text ?? '';
   const close = () => {
@@ -249,12 +252,16 @@ function ProjectManage({ group, onClose, onLogs }) {
   };
   const run = (action) => job('project', { name, action }).then(close);
   const ready = !!detail.data?.filesFound;
+  const members = useMemo(
+    () => (containers || []).filter((c) => c.Labels?.[PROJECT_LABEL] === name),
+    [containers, name],
+  );
   return (
     <Modal
       isOpen={!!name}
       title={t('{0} 프로젝트 관리', [name || ''])}
       onClose={close}
-      size="lg"
+      size="xl"
       footer={
         <div className="flex w-full flex-wrap items-center gap-2.25">
           {group?.total > 0 && (
@@ -353,41 +360,193 @@ function ProjectManage({ group, onClose, onLogs }) {
         <Skeleton />
       ) : (
         <div className="flex flex-col gap-4">
-          <dl className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-2 text-[12px] [&_dd]:font-mono [&_dd]:break-all [&_dt]:font-semibold [&_dt]:text-[#536454]">
+          <div className="flex border-b border-[#e3e8df]">
+            <button
+              type="button"
+              onClick={() => setTab('topology')}
+              className={cn(
+                'flex items-center gap-2 border-b-2 px-4 py-2.5 text-[13px] font-semibold transition-colors',
+                tab === 'topology'
+                  ? 'border-brand text-brand'
+                  : 'border-transparent text-[#7a857c] hover:text-ink',
+              )}
+            >
+              <Boxes size={15} />
+              {t('아키텍처 맵')}
+              <span className="rounded-[4px] bg-[#f0f2ed] px-1.5 py-0.5 text-[11px] text-[#808a82]">
+                {members.length}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab('compose')}
+              className={cn(
+                'flex items-center gap-2 border-b-2 px-4 py-2.5 text-[13px] font-semibold transition-colors',
+                tab === 'compose'
+                  ? 'border-brand text-brand'
+                  : 'border-transparent text-[#7a857c] hover:text-ink',
+              )}
+            >
+              <Settings2 size={15} />
+              {t('설정 파일')}
+            </button>
+          </div>
+
+          <dl className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-1.5 text-[12px] [&_dd]:font-mono [&_dd]:break-all [&_dt]:font-semibold [&_dt]:text-[#536454]">
             <dt>{t('작업 폴더')}</dt>
             <dd>{detail.data.workingDir}</dd>
             <dt>{t('compose 파일')}</dt>
             <dd>{detail.data.configFiles.join(', ') || t('없음')}</dd>
           </dl>
-          {!ready && (
-            <p className={tw.groupText}>
-              {' '}
-              {t('compose 파일을 찾을 수 없어 컨테이너 시작, 정지, 재시작만 할 수 있습니다.')}{' '}
-            </p>
-          )}
-          {managed ? (
-            <label
-              className={cn(
-                tw.field,
-                'my-0 [&_textarea]:min-h-[320px] [&_textarea]:font-mono [&_textarea]:text-[12px]',
+
+          {tab === 'topology' ? (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between text-[12px] font-semibold text-[#536454]">
+                <span>{t('소속 서비스 및 연결 리소스')}</span>
+                <span className="text-[11px] font-normal text-muted">
+                  {t('실행 중 {0}개 / 총 {1}개', [
+                    members.filter((c) => c.State === 'running').length,
+                    members.length,
+                  ])}
+                </span>
+              </div>
+              {members.length === 0 ? (
+                <div className="rounded-[8px] border border-dashed border-[#dce4d6] p-6 text-center text-[12px] text-muted">
+                  {t('프로젝트에 생성된 컨테이너가 없습니다. 아래 up 버튼으로 서비스를 기동할 수 있습니다.')}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {members.map((c) => {
+                    const cName = containerName(c);
+                    const cleanName = cName.replace(/^\//, '');
+                    const subDomain = cleanName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+                    const serviceName = c.Labels?.['com.docker.compose.service'] || cleanName;
+                    const networks = Object.keys(c.NetworkSettings?.Networks || {});
+                    const ports = (c.Ports || []).filter((p) => p.PublicPort);
+                    return (
+                      <div
+                        key={c.Id}
+                        className="flex flex-col justify-between rounded-[8px] border border-[#dce4d6] bg-[#fbfcf9] p-3.5 transition-colors hover:border-[#b8cbb8]"
+                      >
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex min-w-0 items-center gap-1.5">
+                              <Box size={16} className="flex-none text-[#64816f]" />
+                              <strong className="truncate text-[13px] text-ink">{serviceName}</strong>
+                              {serviceName !== cleanName && (
+                                <span className="truncate text-[11px] text-muted">({cleanName})</span>
+                              )}
+                            </div>
+                            <Badge state={c.State} />
+                          </div>
+
+                          <div className="font-mono text-[11px] text-[#718073] truncate" title={c.Image}>
+                            {c.Image}
+                          </div>
+
+                          {networks.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-1 text-[11px]">
+                              <span className="text-[11px] text-[#7a857c]">{t('네트워크')}:</span>
+                              {networks.map((net) => (
+                                <span
+                                  key={net}
+                                  className="rounded-[4px] bg-[#eef3ec] px-1.5 py-0.5 font-mono text-[10px] text-[#4d6650]"
+                                >
+                                  {net}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          {ports.length > 0 ? (
+                            <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                              <span className="text-[11px] text-[#7a857c]">{t('포트')}:</span>
+                              {ports.map((p) => {
+                                const directUrl = `http://localhost:${p.PublicPort}`;
+                                const vhostUrl = `http://${subDomain}.naru.localhost:${window.location.port || '49170'}`;
+                                return (
+                                  <div key={`${p.PublicPort}-${p.PrivatePort}`} className="flex items-center gap-1">
+                                    <a
+                                      href={directUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="inline-flex items-center gap-0.5 rounded-[4px] border border-[#d2ddd0] bg-white px-1.5 py-0.5 font-mono text-[11px] font-semibold text-brand hover:underline"
+                                      title={t('직접 접속')}
+                                    >
+                                      :{p.PublicPort}
+                                      <ArrowUpRight size={11} />
+                                    </a>
+                                    <a
+                                      href={vhostUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="inline-flex items-center gap-0.5 rounded-[4px] border border-[#bfe2ca] bg-[#eefaf2] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[#1e6b37] hover:underline"
+                                      title={vhostUrl}
+                                    >
+                                      .localhost
+                                      <ArrowUpRight size={10} />
+                                    </a>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="text-[11px] text-[#9aa29b]">{t('외부 포트 매핑 없음')}</div>
+                          )}
+                        </div>
+
+                        <div className="mt-3 flex items-center justify-end border-t border-[#edf1ea] pt-2">
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand hover:underline"
+                            onClick={() => {
+                              close();
+                              navigate('/containers/' + c.Id);
+                            }}
+                          >
+                            {t('컨테이너 상세')}
+                            <ArrowUpRight size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
-            >
-              <span>compose.yaml</span>
-              <textarea
-                spellCheck={false}
-                value={yaml}
-                onChange={(e) => setDraft(e.target.value)}
-              />
-            </label>
+            </div>
           ) : (
-            detail.data.files
-              .filter((f) => f.text !== null)
-              .map((f) => (
-                <section key={f.path} className="flex flex-col gap-2">
-                  <span className="font-mono text-[11px] text-muted">{f.path}</span>
-                  <pre className={tw.jsonView}>{f.text}</pre>
-                </section>
-              ))
+            <>
+              {!ready && (
+                <p className={tw.groupText}>
+                  {' '}
+                  {t('compose 파일을 찾을 수 없어 컨테이너 시작, 정지, 재시작만 할 수 있습니다.')}{' '}
+                </p>
+              )}
+              {managed ? (
+                <label
+                  className={cn(
+                    tw.field,
+                    'my-0 [&_textarea]:min-h-[320px] [&_textarea]:font-mono [&_textarea]:text-[12px]',
+                  )}
+                >
+                  <span>compose.yaml</span>
+                  <textarea
+                    spellCheck={false}
+                    value={yaml}
+                    onChange={(e) => setDraft(e.target.value)}
+                  />
+                </label>
+              ) : (
+                detail.data.files
+                  .filter((f) => f.text !== null)
+                  .map((f) => (
+                    <section key={f.path} className="flex flex-col gap-2">
+                      <span className="font-mono text-[11px] text-muted">{f.path}</span>
+                      <pre className={tw.jsonView}>{f.text}</pre>
+                    </section>
+                  ))
+              )}
+            </>
           )}
         </div>
       )}
@@ -411,6 +570,7 @@ function Containers() {
     [logProject, setLogProject] = useState(null),
     [manageGroup, setManageGroup] = useState(null),
     [createModal, setCreateModal] = useState(false),
+    [cloneTarget, setCloneTarget] = useState(null),
     [selectedIds, setSelectedIds] = useState(() => new Set());
   // Kubernetes를 쓰지 않으면 숨길 시스템 컨테이너가 없으므로 표시 선택도 보이지 않는다.
   const hasSystem = useMemo(() => (data.data || []).some(isSystemContainer), [data.data]);
@@ -600,8 +760,10 @@ function Containers() {
             >
               {publicPorts.map((p, idx) => {
                 const url = `http://127.0.0.1:${p.PublicPort}`;
+                const naruPort = window.location.port ? `:${window.location.port}` : '';
+                const virtualUrl = `http://${containerName(r).toLowerCase()}.naru.localhost${naruPort}`;
                 return (
-                  <div key={idx} className="inline-flex items-center gap-1 text-[12px]">
+                  <div key={idx} className="inline-flex items-center gap-1.5 text-[12px]">
                     <a
                       href={url}
                       target="_blank"
@@ -611,6 +773,16 @@ function Containers() {
                     >
                       <span>{`${p.PublicPort} → ${p.PrivatePort}`}</span>
                       <ArrowUpRight size={13} className="flex-none opacity-70" />
+                    </a>
+                    <a
+                      href={virtualUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-0.5 rounded bg-[#edf5e7] px-1 py-0.5 font-mono text-[10px] text-[#3b6d47] hover:bg-[#e2edd9]"
+                      title={t('{0} 가상 도메인으로 열기', [virtualUrl])}
+                    >
+                      <span>.localhost</span>
+                      <ArrowUpRight size={10} className="flex-none opacity-70" />
                     </a>
                     <CopyButton text={url} label={t('{0} 주소 복사', [url])} />
                   </div>
@@ -623,7 +795,7 @@ function Containers() {
       {
         headerName: '',
         colId: 'actions',
-        width: 154,
+        width: 188,
         sortable: false,
         cellRenderer: ({ data: r }) => (
           <div className={tw.rowActions} onClick={(e) => e.stopPropagation()}>
@@ -642,6 +814,51 @@ function Containers() {
               icon={Terminal}
               label={t('{0} 로그 보기', [containerName(r)])}
               onClick={() => navigate('/containers/' + r.Id)}
+            />
+            <IconButton
+              icon={Copy}
+              label={t('{0} 설정 복제', [containerName(r)])}
+              disabled={busy}
+              onClick={async () => {
+                try {
+                  const inspect = await api('/containers/' + r.Id + '/inspect');
+                  const data = Array.isArray(inspect) ? inspect[0] : inspect;
+                  const cfg = data.Config || {};
+                  const hostConfig = data.HostConfig || {};
+                  const portBindings = hostConfig.PortBindings || {};
+                  const portsStr = Object.entries(portBindings)
+                    .map(([cPort, bindings]) => {
+                      const p = bindings?.[0]?.HostPort;
+                      const target = cPort.split('/')[0];
+                      const nextPort = Number(p) ? Number(p) + 1 : p;
+                      return p ? `${nextPort}:${target}` : '';
+                    })
+                    .filter(Boolean)
+                    .join(', ');
+                  const mountsStr = (data.Mounts || [])
+                    .map(
+                      (m) =>
+                        `${m.Source || m.Name}:${m.Destination}${m.RW === false ? ':ro' : ''}`,
+                    )
+                    .join('\n');
+                  const envStr = (cfg.Env || [])
+                    .filter((e) => !e.startsWith('PATH='))
+                    .join('\n');
+                  const cmdStr = Array.isArray(cfg.Cmd) ? cfg.Cmd.join(' ') : cfg.Cmd || '';
+
+                  setCloneTarget({
+                    image: cfg.Image || r.Image,
+                    name: `${containerName(r)}-clone`,
+                    ports: portsStr,
+                    env: envStr,
+                    mounts: mountsStr,
+                    command: cmdStr,
+                  });
+                  setCreateModal(true);
+                } catch (e) {
+                  notify(e);
+                }
+              }}
             />
             <IconButton
               icon={Trash2}
@@ -822,15 +1039,21 @@ function Containers() {
           group={manageGroup}
           onClose={() => setManageGroup(null)}
           onLogs={setLogProject}
+          containers={candidates}
         />
       )}
       <CreateContainerModal
         isOpen={createModal}
-        onClose={() => setCreateModal(false)}
+        initialValues={cloneTarget}
+        onClose={() => {
+          setCreateModal(false);
+          setCloneTarget(null);
+        }}
         busy={busy}
         onSubmit={async (payload) => {
           await job('createContainer', payload);
           setCreateModal(false);
+          setCloneTarget(null);
         }}
       />
     </section>

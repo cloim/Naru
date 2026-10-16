@@ -1,7 +1,7 @@
 import { t, useLocale } from '../i18n.js';
 import React, { lazy, Suspense, useEffect, useRef, useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
-import { RotateCw, Pause, Terminal, RefreshCw, Search, X, ArrowDown, Copy } from 'lucide-react';
+import { RotateCw, Pause, Terminal, RefreshCw, Search, X, ArrowDown, Copy, TriangleAlert } from 'lucide-react';
 import {
   useActions,
   useData,
@@ -16,6 +16,7 @@ import {
 } from '../ui.jsx';
 import { cn, tw } from '../tw.js';
 import { api } from '../api.js';
+import { ContainerFileExplorer } from '../components/ContainerFileExplorer.jsx';
 const TerminalPanel = lazy(() => import('../components/TerminalPanel.jsx'));
 
 export function resourceUsage(stats) {
@@ -133,6 +134,7 @@ function ContainerDetail() {
           {[
             ['logs', t('로그')],
             ['resources', t('리소스')],
+            ['files', t('파일')],
             ['terminal', t('터미널')],
             ['exec', t('명령 실행')],
             ['inspect', t('구성')],
@@ -227,6 +229,30 @@ function ContainerDetail() {
             </pre>
           ) : usage ? (
             <div className="p-6 max-tablet:p-5">
+              {((usage.cpu !== null && usage.cpu > 80) ||
+                (usage.percent !== null && usage.percent > 85)) && (
+                <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-[#f5c6cb] bg-[#fdf2f2] p-3.5 text-[12px] text-[#721c24]">
+                  <div className="flex items-center gap-2">
+                    <TriangleAlert size={17} className="flex-none text-danger" />
+                    <span>
+                      {t(
+                        '리소스 사용량이 높습니다 (CPU {0}%, 메모리 {1}%). 누수가 발생했을 수 있습니다.',
+                        [
+                          usage.cpu ? usage.cpu.toFixed(1) : '-',
+                          usage.percent ? usage.percent.toFixed(1) : '-',
+                        ],
+                      )}
+                    </span>
+                  </div>
+                  <Button
+                    compact
+                    disabled={busy}
+                    onClick={() => job('containerAction', { id, action: 'restart' })}
+                  >
+                    {t('컨테이너 재시작')}
+                  </Button>
+                </div>
+              )}
               <dl className="grid grid-cols-2 gap-6 max-tablet:grid-cols-1 [&_dd]:my-3 [&_dd]:text-[23px] [&_dd]:tracking-[-0.5px] [&_dd]:tabular-nums [&_dd]:wrap-anywhere [&_dt]:text-[12px] [&_dt]:text-muted [&_progress]:mt-3 [&_progress]:block [&_progress]:h-1.5 [&_progress]:w-full [&_progress]:accent-accent [&_small]:block [&_small]:leading-[1.6] [&>div]:min-w-0 [&>div]:border-b [&>div]:border-line [&>div]:pb-5">
                 <div>
                   <dt>CPU</dt>
@@ -269,6 +295,7 @@ function ContainerDetail() {
             </div>
           ) : null
         ) : null}
+        {tab === 'files' && <ContainerFileExplorer containerId={id} />}
         {tab === 'inspect' ? (
           detail.isLoading ? (
             <Skeleton />

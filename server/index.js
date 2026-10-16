@@ -1,5 +1,5 @@
 import { requireManaged } from './external.js';
-import { createServer as createHttpServer } from 'node:http';
+import http, { createServer as createHttpServer } from 'node:http';
 import { registerTerminal } from './terminal.js';
 import express from 'express';
 import fs from 'node:fs/promises';
@@ -42,6 +42,57 @@ const server = createHttpServer(app);
 let kubernetesBridge;
 engine.enableDockerPool();
 app.disable('x-powered-by');
+
+// *.localhost 가상 도메인 자동 리버스 프록시
+app.use(async (req, res, next) => {
+  const host = String(req.headers.host || '');
+  const match = host.match(/^([a-zA-Z0-9_-]+)\.(?:naru\.)?localhost(?::\d+)?$/);
+  if (!match) return next();
+  const targetSubdomain = match[1].toLowerCase();
+  if (['naru', 'www', 'app', 'localhost'].includes(targetSubdomain)) return next();
+  try {
+    const list = await engine.list('containers');
+    const container = (list || []).find((c) => {
+      const name = (c.Names?.[0] || c.Id || '').replace(/^\//, '').toLowerCase();
+      return name === targetSubdomain;
+    });
+    const publicPort = container?.Ports?.find((p) => p.PublicPort)?.PublicPort;
+    if (!publicPort) {
+      return res.status(502).send(`
+        <!DOCTYPE html>
+        <html>
+          <head><meta charset="utf-8"><title>Naru - Container Proxy</title></head>
+          <body style="font-family:sans-serif;padding:40px;text-align:center;color:#333;">
+            <h2>컨테이너 프록시 연결 안내</h2>
+            <p>'<strong>${targetSubdomain}</strong>' 컨테이너가 실행 중이지 않거나 공개된 포트가 없습니다.</p>
+            <p><a href="http://127.0.0.1:${port}">Naru 대시보드로 이동</a></p>
+          </body>
+        </html>
+      `);
+    }
+    const headers = { ...req.headers, host: `127.0.0.1:${publicPort}` };
+    const proxyReq = http.request(
+      {
+        host: '127.0.0.1',
+        port: publicPort,
+        path: req.url,
+        method: req.method,
+        headers,
+      },
+      (proxyRes) => {
+        res.writeHead(proxyRes.statusCode, proxyRes.headers);
+        proxyRes.pipe(res);
+      },
+    );
+    proxyReq.on('error', (err) => {
+      res.status(502).send(`컨테이너 프록시 오류: ${err.message}`);
+    });
+    req.pipe(proxyReq);
+  } catch {
+    next();
+  }
+});
+
 app.use(security(port, token, remote));
 app.use(express.json({ limit: '2mb' }));
 const cache = new Map();
@@ -112,6 +163,90 @@ app.get('/api/containers/:id/stats', async (req, res) => {
         )
       : { text: await engine.cli(['stats', '--no-stream', identifier.parse(req.params.id)]) },
   );
+});
+app.get('/api/containers/:id/files', async (req, res) => {
+  const id = identifier.parse(req.params.id);
+  const rawPath = String(req.query.path || '/');
+  const targetPath = path.posix.normalize(rawPath.startsWith('/') ? rawPath : '/' + rawPath);
+  try {
+    const output = await engine.cli(
+      [
+        'exec',
+        id,
+        'sh',
+        '-c',
+        `ls -la --time-style=long-iso "${targetPath}" 2>/dev/null || ls -la "${targetPath}"`,
+      ],
+      { timeout: 15000 },
+    );
+    const lines = output.split(/\r?\n/).filter(Boolean);
+    const entries = [];
+    for (const line of lines) {
+      if (line.startsWith('total')) continue;
+      const parts = line.trim().split(/\s+/);
+      if (parts.length < 8) continue;
+      const mode = parts[0];
+      const isDir = mode.startsWith('d');
+      const name = parts.slice(mode.length > 0 && parts[5]?.includes('-') ? 7 : 8).join(' ');
+      if (!name || name === '.' || name === '..') continue;
+      const size = Number(parts[4]) || 0;
+      entries.push({
+        name,
+        path: path.posix.join(targetPath, name),
+        isDir,
+        size,
+        mode,
+      });
+    }
+    entries.sort((a, b) => b.isDir - a.isDir || a.name.localeCompare(b.name));
+    res.json({ path: targetPath, entries });
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
+});
+app.get('/api/containers/:id/files/content', async (req, res) => {
+  const id = identifier.parse(req.params.id);
+  const targetPath = path.posix.normalize(String(req.query.path || ''));
+  if (!targetPath || targetPath === '/') throw new Error('파일 경로를 지정해 주세요.');
+  try {
+    const text = await engine.cli(['exec', id, 'sh', '-c', `cat "${targetPath}"`], {
+      timeout: 15000,
+    });
+    res.json({ path: targetPath, text });
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
+});
+app.put('/api/containers/:id/files/content', async (req, res) => {
+  const id = identifier.parse(req.params.id);
+  const p = z
+    .object({
+      path: z.string().min(1).max(4096),
+      text: z.string().max(10 * 1024 * 1024),
+    })
+    .strict()
+    .parse(req.body);
+  const targetPath = path.posix.normalize(p.path);
+  try {
+    await engine.cli(['exec', '-i', id, 'sh', '-c', `cat > "${targetPath}"`], {
+      input: p.text,
+      timeout: 15000,
+    });
+    res.json({ ok: true, path: targetPath });
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
+});
+app.delete('/api/containers/:id/files', async (req, res) => {
+  const id = identifier.parse(req.params.id);
+  const targetPath = path.posix.normalize(String(req.query.path || ''));
+  if (!targetPath || targetPath === '/') throw new Error('루트 디렉터리는 삭제할 수 없습니다.');
+  try {
+    await engine.cli(['exec', id, 'sh', '-c', `rm -rf "${targetPath}"`], { timeout: 15000 });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
 });
 let completedJobs = '';
 app.get('/api/jobs', async (req, res) => {
