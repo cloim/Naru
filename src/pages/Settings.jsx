@@ -49,6 +49,7 @@ import {
   ErrorState,
   PageActions,
   PageAction,
+  Badge,
 } from '../ui.jsx';
 import { cn, tw } from '../tw.js';
 import { api, downloadConfig } from '../api.js';
@@ -64,7 +65,7 @@ const SETTING_TABS = [
 const fieldset = 'm-0 min-w-0 border-0 p-0 disabled:opacity-65';
 function Settings() {
   const data = useData('settings', '/settings'),
-    { status, notify } = useActions(),
+    { status, notify, job, confirm, busy } = useActions(),
     qc = useQueryClient();
   const [value, setValue] = useState(null),
     [saving, setSaving] = useState(false),
@@ -126,6 +127,49 @@ function Settings() {
         <div className="px-7.5 py-6.5 max-tablet:px-5 max-tablet:py-5.5 [&_h3]:mb-4.5">
           {tab === 'engine' && (
             <>
+              {status && status.managed !== false && (
+                <section className="mb-8">
+                  <h3>엔진 실행</h3>
+                  <div className="flex flex-wrap items-center gap-3.5">
+                    <Badge state={status.running ? 'running' : 'exited'}>
+                      {!status.installed ? '설치 안 됨' : status.running ? '실행 중' : '꺼짐'}
+                    </Badge>
+                    {!status.installed ? (
+                      <Button
+                        primary
+                        icon={Download}
+                        disabled={busy}
+                        onClick={() => job('installRuntime')}
+                      >
+                        런타임 설치
+                      </Button>
+                    ) : status.running ? (
+                      <Button
+                        icon={Square}
+                        disabled={busy}
+                        onClick={() =>
+                          confirm(
+                            '엔진 종료',
+                            'Naru의 컨테이너와 Kubernetes를 정상 종료합니다.',
+                            () => job('stopRuntime'),
+                          )
+                        }
+                      >
+                        엔진 종료
+                      </Button>
+                    ) : (
+                      <Button
+                        primary
+                        icon={Play}
+                        disabled={busy}
+                        onClick={() => job('startRuntime')}
+                      >
+                        엔진 시작
+                      </Button>
+                    )}
+                  </div>
+                </section>
+              )}
               <section className="mb-8">
                 <h3>연결할 엔진</h3>
                 <SelectControl
