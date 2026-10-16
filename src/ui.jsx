@@ -102,7 +102,8 @@ export const jobNames = {
   removeVolume: '볼륨 삭제',
   createNetwork: '네트워크 생성',
   removeNetwork: '네트워크 삭제',
-  compose: 'Compose 작업',
+  compose: '프로젝트 저장',
+  project: '프로젝트 작업',
   kubeApply: '리소스 적용',
   kubeDelete: '리소스 삭제',
   snapshot: '스냅샷 생성',
@@ -275,7 +276,7 @@ export const rowKey = (r) =>
   );
 const getRowId = ({ data }) => rowKey(data);
 
-export function ResourceGrid({ query, columns, filter = '', onRowClicked }) {
+export function ResourceGrid({ query, columns, filter = '', onRowClicked, ...gridProps }) {
   const rows = useMemo(
     () =>
       (query.data || []).filter((r) =>
@@ -297,6 +298,7 @@ export function ResourceGrid({ query, columns, filter = '', onRowClicked }) {
             emptyMessage={filter ? '검색 결과가 없습니다.' : '아직 항목이 없습니다.'}
             onRowClicked={onRowClicked}
             rowHeight={62}
+            {...gridProps}
           />
         </Suspense>
       </div>

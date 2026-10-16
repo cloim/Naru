@@ -5,7 +5,6 @@ const Containers = lazy(() => import('./pages/Containers.jsx'));
 const ContainerDetail = lazy(() => import('./pages/ContainerDetail.jsx'));
 const Images = lazy(() => import('./pages/Images.jsx'));
 const Resources = lazy(() => import('./pages/Resources.jsx'));
-const Compose = lazy(() => import('./pages/Compose.jsx'));
 const Kubernetes = lazy(() => import('./pages/Kubernetes.jsx'));
 const Forwards = lazy(() => import('./pages/Forwards.jsx'));
 const Snapshots = lazy(() => import('./pages/Snapshots.jsx'));
@@ -32,6 +31,7 @@ import {
   Link,
   useLocation,
   useNavigate,
+  Navigate,
   useParams,
 } from 'react-router-dom';
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -52,7 +52,6 @@ import {
   Search,
   ChevronRight,
   Terminal,
-  FileCode,
   Menu,
   X,
   Copy,
@@ -237,7 +236,6 @@ function Shell() {
   const nav = [
     ['/', '컨테이너', Container],
     ['/images', '이미지', Layers],
-    ['/compose', 'Compose', FileCode],
     ['/kubernetes', 'Kubernetes', ShipWheel],
     ['/ports', '포트 전달', ArrowUpRight],
     ['/volumes', '볼륨', HardDrive],
@@ -391,7 +389,7 @@ function Shell() {
                     <Route path="/images" element={<Images />} />
                     <Route path="/volumes" element={<Resources kind="volumes" />} />
                     <Route path="/networks" element={<Resources kind="networks" />} />
-                    <Route path="/compose" element={<Compose />} />
+                    <Route path="/compose" element={<Navigate to="/" replace />} />
                     <Route path="/kubernetes" element={<Kubernetes />} />
                     <Route path="/ports" element={<Forwards />} />
                     <Route path="/extensions" element={<Extensions />} />

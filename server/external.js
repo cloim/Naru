@@ -48,6 +48,7 @@ export function assertSharedJob(type, cfg) {
       'exportImage',
       'importImage',
       'compose',
+      'project',
       'registryLogin',
       'registryLogout',
     ]).has(type)
