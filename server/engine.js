@@ -17,39 +17,45 @@ export function enableDockerPool() {
 }
 function createAgent(keepAlive, external = false) {
   const agent = new http.Agent({ keepAlive, maxSockets: 6, maxFreeSockets: 2, timeout: 10000 });
-  agent.createConnection = () => {
-    if (external) return net.connect(EXTERNAL_PIPE);
-    const p = spawn(
-      'wsl.exe',
-      ['-d', DISTRO, '-u', 'root', '--exec', 'socat', '-', 'UNIX-CONNECT:/run/naru/docker.sock'],
-      { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] },
-    );
-    const socket = Duplex.from({ readable: p.stdout, writable: p.stdin });
-    // Agent removes its listeners before destroy; Duplexify may emit ABORT_ERR during teardown.
-    socket.on('error', () => {});
-    let idleTimer;
-    socket.setTimeout = (milliseconds, callback) => {
-      clearTimeout(idleTimer);
-      if (callback) socket.once('timeout', callback);
-      if (milliseconds) idleTimer = setTimeout(() => socket.emit('timeout'), milliseconds).unref();
-      return socket;
-    };
-    socket.setNoDelay = () => socket;
-    socket.setKeepAlive = () => socket;
-    socket.ref = () => {
-      socket.setTimeout(0);
-      return socket;
-    };
-    socket.unref = () => socket;
-    p.on('error', (e) => socket.destroy(e));
-    p.stderr.on('data', () => {});
-    socket.on('close', () => {
-      clearTimeout(idleTimer);
-      if (!p.killed) p.kill();
-    });
+  agent.createConnection = () => (external ? net.connect(EXTERNAL_PIPE) : naruSocket());
+  return agent;
+}
+// A socket-like stream to the engine's Unix socket inside the naru distribution.
+export function naruSocket() {
+  const p = spawn(
+    'wsl.exe',
+    ['-d', DISTRO, '-u', 'root', '--exec', 'socat', '-', 'UNIX-CONNECT:/run/naru/docker.sock'],
+    { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] },
+  );
+  const socket = Duplex.from({ readable: p.stdout, writable: p.stdin });
+  // Agent removes its listeners before destroy; Duplexify may emit ABORT_ERR during teardown.
+  socket.on('error', () => {});
+  let idleTimer, onTimeout;
+  // Pooled sockets get a new timeout callback on every reuse; keep only the latest one.
+  socket.setTimeout = (milliseconds, callback) => {
+    clearTimeout(idleTimer);
+    if (callback) {
+      if (onTimeout) socket.removeListener('timeout', onTimeout);
+      onTimeout = callback;
+      socket.once('timeout', callback);
+    }
+    if (milliseconds) idleTimer = setTimeout(() => socket.emit('timeout'), milliseconds).unref();
     return socket;
   };
-  return agent;
+  socket.setNoDelay = () => socket;
+  socket.setKeepAlive = () => socket;
+  socket.ref = () => {
+    socket.setTimeout(0);
+    return socket;
+  };
+  socket.unref = () => socket;
+  p.on('error', (e) => socket.destroy(e));
+  p.stderr.on('data', () => {});
+  socket.on('close', () => {
+    clearTimeout(idleTimer);
+    if (!p.killed) p.kill();
+  });
+  return socket;
 }
 export async function dockerRequest(method, route, body, { timeout = 30000, stream = false } = {}) {
   const external = (await settings()).connection === 'external-engine';
