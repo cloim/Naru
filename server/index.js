@@ -131,9 +131,26 @@ app.post('/api/jobs', async (req, res) => {
   res.status(202).json(await submit(p.type, p.payload));
   cache.clear();
 });
+async function kubernetesRunning() {
+  try {
+    await wsl(['sh', '-c', 'test -f /run/naru/k3s.pid && kill -0 "$(cat /run/naru/k3s.pid)"'], {
+      timeout: 5000,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+app.get('/api/kubernetes/state', async (req, res) => {
+  await requireManaged();
+  await runtime.requireReady();
+  res.json({ running: await cached('kube:state', kubernetesRunning) });
+});
 app.get('/api/kubernetes', async (req, res) => {
   await requireManaged();
   await runtime.requireReady();
+  if (!(await cached('kube:state', kubernetesRunning)))
+    throw new Error('Kubernetes가 꺼져 있습니다. 상단의 Kubernetes 시작으로 실행해 주세요.');
   const kind = z
     .enum([
       'pods',
