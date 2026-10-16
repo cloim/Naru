@@ -1,3 +1,4 @@
+import { t, useLocale } from './i18n.js';
 import { Actions, TopBar, Button, PageAction, Skeleton, Empty, useData, jobNames } from './ui.jsx';
 import { FormDialog, JobDialog } from './dialogs.jsx';
 const Extensions = lazy(() => import('./pages/Extensions.jsx'));
@@ -88,6 +89,10 @@ const navLink = ({ isActive }) =>
   );
 
 function Shell() {
+  const locale = useLocale();
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
   const queryClient = useQueryClient(),
     navigate = useNavigate(),
     location = useLocation();
@@ -169,7 +174,7 @@ function Shell() {
   const notify = useCallback(
     (e) =>
       setAlert({
-        title: e instanceof Error ? '작업을 확인해 주세요' : '알림',
+        title: e instanceof Error ? t('작업을 확인해 주세요') : t('알림'),
         text: e.message || e,
       }),
     [],
@@ -202,7 +207,7 @@ function Shell() {
         fields: [
           {
             key: 'value',
-            label: '내용',
+            label: t('내용'),
             value: typeof value === 'string' ? value : JSON.stringify(value, null, 2),
             type: 'textarea',
             rows: 20,
@@ -222,7 +227,7 @@ function Shell() {
           ? [
               {
                 key: 'confirmation',
-                label: `계속하려면 ${word} 입력`,
+                label: t('계속하려면 {0} 입력', [word]),
                 required: true,
                 pattern: word,
               },
@@ -238,20 +243,23 @@ function Shell() {
     [status.data, job, form, confirm, view, notify, busy],
   );
   const nav = [
-    ['/', '컨테이너', Container],
-    ['/images', '이미지', Layers],
+    ['/', t('컨테이너'), Container],
+    ['/images', t('이미지'), Layers],
     ['/kubernetes', 'Kubernetes', ShipWheel],
-    ['/ports', '포트 전달', ArrowUpRight],
-    ['/volumes', '볼륨', HardDrive],
-    ['/networks', '네트워크', Network],
-    ['/snapshots', '스냅샷', Camera],
-    ['/extensions', '확장', Puzzle],
+    ['/ports', t('포트 전달'), ArrowUpRight],
+    ['/volumes', t('볼륨'), HardDrive],
+    ['/networks', t('네트워크'), Network],
+    ['/snapshots', t('스냅샷'), Camera],
+    ['/extensions', t('확장'), Puzzle],
   ];
   const title = location.pathname.startsWith('/containers/')
-    ? '컨테이너 상세'
-    : [...nav, ['/settings', '설정'], ['/diagnostics', '진단'], ['/jobs', '작업 기록']].find(
-        ([p]) => p === location.pathname,
-      )?.[1] || 'Naru';
+    ? t('컨테이너 상세')
+    : [
+        ...nav,
+        ['/settings', t('설정')],
+        ['/diagnostics', t('진단')],
+        ['/jobs', t('작업 기록')],
+      ].find(([p]) => p === location.pathname)?.[1] || 'Naru';
   return (
     <Actions.Provider value={context}>
       <TopBar.Provider value={topBar}>
@@ -259,7 +267,7 @@ function Shell() {
           {drawer && (
             <button
               className="fixed inset-0 z-99 hidden bg-[#102c2466] max-tablet:block"
-              aria-label="메뉴 닫기"
+              aria-label={t('메뉴 닫기')}
               onClick={() => setDrawer(false)}
             />
           )}
@@ -282,7 +290,7 @@ function Shell() {
               </span>
               <img className="h-6.5 w-auto" src="/brand/naru-wordmark-light.png" alt="Naru" />
             </Link>
-            <nav aria-label="주요 메뉴" className="flex flex-col gap-1.25">
+            <nav aria-label={t('주요 메뉴')} className="flex flex-col gap-1.25">
               {nav.map(([to, label, Icon]) => (
                 <NavLink end={to === '/'} key={to} to={to} className={navLink}>
                   <Icon size={19} aria-hidden="true" />
@@ -292,16 +300,13 @@ function Shell() {
             </nav>
             <div className="mt-auto flex flex-col gap-0.5 border-t border-[#ffffff16] pt-4.5">
               <NavLink to="/jobs" className={navLink}>
-                <Activity size={18} />
-                작업 기록
+                <Activity size={18} /> {t('작업 기록')}{' '}
               </NavLink>
               <NavLink to="/diagnostics" className={navLink}>
-                <Activity size={18} />
-                진단
+                <Activity size={18} /> {t('진단')}{' '}
               </NavLink>
               <NavLink to="/settings" className={navLink}>
-                <Settings2 size={18} />
-                설정
+                <Settings2 size={18} /> {t('설정')}{' '}
               </NavLink>
             </div>
           </aside>
@@ -314,17 +319,18 @@ function Shell() {
                   aria-controls="main-navigation"
                   className="hidden min-h-8.5 min-w-8.5 flex-none items-center justify-center rounded-[6px] bg-transparent p-2 text-[#738177] hover:bg-[#edf2e7] hover:text-brand max-tablet:inline-flex max-tablet:min-h-9.5 max-tablet:min-w-9.5"
                   onClick={() => setDrawer(!drawer)}
-                  aria-label="메뉴 열기"
+                  aria-label={t('메뉴 열기')}
                 >
                   <Menu size={22} />
                 </button>
                 {location.pathname.startsWith('/containers/') ? (
                   <div className="flex min-w-0 items-center gap-3 text-[18px] [&_a]:text-muted">
                     <Link to="/" className="flex-none whitespace-nowrap">
-                      컨테이너
+                      {' '}
+                      {t('컨테이너')}{' '}
                     </Link>
                     <ChevronRight size={18} className="flex-none" />
-                    <span className="min-w-0 truncate">{pageTitle || '상세'}</span>
+                    <span className="min-w-0 truncate">{pageTitle || t('상세')}</span>
                   </div>
                 ) : (
                   <h1 className="min-w-0 truncate">{pageTitle || title}</h1>
@@ -335,7 +341,7 @@ function Shell() {
                 {status.error ? (
                   <PageAction
                     icon={TriangleAlert}
-                    label="엔진 상태 조회 실패 원인 보기"
+                    label={t('엔진 상태 조회 실패 원인 보기')}
                     className="text-danger"
                     onClick={() => notify(status.error)}
                   />
@@ -348,9 +354,10 @@ function Shell() {
                 onClick={() => setJobId(active.id)}
               >
                 <LoaderCircle size={15} className="animate-spin [animation-duration:1.2s]" />
-                {jobNames[active.type] || active.type}
+                {t(jobNames[active.type]) || active.type}
                 <span className="ml-auto flex items-center gap-2">
-                  진행 보기 <ChevronRight size={14} />
+                  {' '}
+                  {t('진행 보기')} <ChevronRight size={14} />
                 </span>
               </button>
             )}
@@ -360,9 +367,11 @@ function Shell() {
                 ['/kubernetes', '/ports', '/snapshots', '/extensions'].some((route) =>
                   location.pathname.startsWith(route),
                 ) ? (
-                  <Empty title="Rancher Desktop에서 관리하는 기능입니다">
-                    Naru는 같은 Docker 엔진의 컨테이너, 이미지, 볼륨, 네트워크와 Compose를
-                    관리합니다. 실행 환경과 Kubernetes는 Rancher Desktop에서 관리해 주세요.
+                  <Empty title={t('Rancher Desktop에서 관리하는 기능입니다')}>
+                    {' '}
+                    {t(
+                      'Naru는 같은 Docker 엔진의 컨테이너, 이미지, 볼륨, 네트워크와 Compose를 관리합니다. 실행 환경과 Kubernetes는 Rancher Desktop에서 관리해 주세요.',
+                    )}{' '}
                   </Empty>
                 ) : (
                   <Routes>
@@ -384,8 +393,8 @@ function Shell() {
                       path="*"
                       element={
                         <Empty
-                          title="페이지를 찾을 수 없습니다"
-                          action={<Link to="/">컨테이너로 이동</Link>}
+                          title={t('페이지를 찾을 수 없습니다')}
+                          action={<Link to="/">{t('컨테이너로 이동')}</Link>}
                         />
                       }
                     />
@@ -398,12 +407,13 @@ function Shell() {
         {dialog && <FormDialog value={dialog} close={() => setDialog(null)} busy={submitting} />}
         <Modal
           isOpen={!!alert}
-          title={alert?.title || '알림'}
+          title={alert?.title || t('알림')}
           onClose={() => setAlert(null)}
           size="sm"
           footer={
             <Button primary onClick={() => setAlert(null)}>
-              확인
+              {' '}
+              {t('확인')}{' '}
             </Button>
           }
         >

@@ -1,3 +1,4 @@
+import { t, useLocale } from '../i18n.js';
 import React, {
   createContext,
   useContext,
@@ -58,25 +59,26 @@ import { api, downloadConfig } from '../api.js';
 import { Modal } from '../components/Modal/Modal.jsx';
 import SelectControl from '../components/SelectControl/SelectControl.tsx';
 function Resources({ kind }) {
+  const locale = useLocale();
   const { status, job, form, confirm, busy, notify } = useActions(),
     data = useResource(kind);
   const [search, setSearch] = useState(''),
     [inspect, setInspect] = useState(null);
   const volume = kind === 'volumes',
-    label = volume ? '볼륨' : '네트워크';
+    label = volume ? t('볼륨') : t('네트워크');
   const cols = useMemo(
     () => [
       {
         field: 'Name',
-        headerName: '이름',
+        headerName: t('이름'),
         minWidth: 230,
         flex: 1.4,
         cellRenderer: ({ value }) => <strong>{value}</strong>,
       },
-      { field: 'Driver', headerName: '드라이버', minWidth: 140, flex: 0.6, filterable: !volume },
+      { field: 'Driver', headerName: t('드라이버'), minWidth: 140, flex: 0.6, filterable: !volume },
       {
         field: volume ? 'Mountpoint' : 'Scope',
-        headerName: volume ? '마운트 경로' : '범위',
+        headerName: volume ? t('마운트 경로') : t('범위'),
         minWidth: 210,
         flex: 1.2,
       },
@@ -88,13 +90,16 @@ function Resources({ kind }) {
         cellRenderer: ({ data: r }) => (
           <IconButton
             icon={Trash2}
-            label={`${label} 삭제`}
+            label={t(volume ? '볼륨 삭제' : '네트워크 삭제')}
             danger
             disabled={busy}
             onClick={() =>
               confirm(
-                `${label} 삭제`,
-                `${r.Name}${volume ? '에 저장된 데이터도 함께 삭제됩니다.' : ' 네트워크를 삭제합니다.'}`,
+                t(volume ? '볼륨 삭제' : '네트워크 삭제'),
+                t(
+                  volume ? '{0}에 저장된 데이터도 함께 삭제됩니다.' : '{0} 네트워크를 삭제합니다.',
+                  [r.Name],
+                ),
                 () =>
                   job(
                     volume ? 'removeVolume' : 'removeNetwork',
@@ -106,20 +111,22 @@ function Resources({ kind }) {
         ),
       },
     ],
-    [volume, label, busy, confirm, job],
+    [locale, volume, label, busy, confirm, job],
   );
   if (!status?.ready) return status ? <RuntimeEmpty /> : <Skeleton />;
   return (
     <section className={tw.page}>
       <PageActions>
         <PageAction
-          label={`${label} 생성`}
+          label={t(volume ? '볼륨 생성' : '네트워크 생성')}
           primary
           icon={Plus}
           disabled={busy}
           onClick={() =>
-            form(`${label} 생성`, [{ key: 'name', label: '이름', required: true }], (v) =>
-              job(volume ? 'createVolume' : 'createNetwork', v),
+            form(
+              t(volume ? '볼륨 생성' : '네트워크 생성'),
+              [{ key: 'name', label: t('이름'), required: true }],
+              (v) => job(volume ? 'createVolume' : 'createNetwork', v),
             )
           }
         />
@@ -145,7 +152,7 @@ function Resources({ kind }) {
       <Modal
         isOpen={!!inspect}
         onClose={() => setInspect(null)}
-        title={`${label} 구성`}
+        title={t('{0} 구성', [label])}
         size="lg"
         resizable
         storageKey="resource-inspect"

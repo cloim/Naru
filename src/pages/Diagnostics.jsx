@@ -1,3 +1,4 @@
+import { t, useLocale } from '../i18n.js';
 import React, {
   createContext,
   useContext,
@@ -56,6 +57,7 @@ import { api, downloadConfig } from '../api.js';
 import { Modal } from '../components/Modal/Modal.jsx';
 import SelectControl from '../components/SelectControl/SelectControl.tsx';
 function Diagnostics() {
+  useLocale();
   const data = useData('diagnostics', '/diagnostics'),
     { status } = useActions();
   return (
@@ -73,11 +75,11 @@ function Diagnostics() {
             )}
           >
             <div>
-              <span>WSL 배포판</span>
+              <span>{t('WSL 배포판')}</span>
               <strong>{data.data.distributions.join(', ')}</strong>
             </div>
             <div>
-              <span>제어 서버 메모리</span>
+              <span>{t('제어 서버 메모리')}</span>
               <strong>{bytes(data.data.memory.rss)}</strong>
             </div>
             <div>
@@ -85,17 +87,22 @@ function Diagnostics() {
               <strong>{data.data.node}</strong>
             </div>
             <div>
-              <span>데이터 경로</span>
+              <span>{t('데이터 경로')}</span>
               <strong>{status?.dataPath}</strong>
             </div>
           </div>
           {Object.entries(data.data.logs).map(([key, value]) => (
             <section className={tw.panel} key={key}>
               <h3 className="px-6 py-5">
-                {key === 'engine' ? '엔진' : key === 'kubernetes' ? 'Kubernetes' : '빌드 엔진'} 로그
+                {key === 'engine'
+                  ? t('엔진')
+                  : key === 'kubernetes'
+                    ? 'Kubernetes'
+                    : t('빌드 엔진')}{' '}
+                {t('로그')}{' '}
               </h3>
               <pre className={cn(tw.terminal, 'max-h-[400px] min-h-[100px] rounded-none')}>
-                {value || '아직 로그가 없습니다.'}
+                {value || t('아직 로그가 없습니다.')}
               </pre>
             </section>
           ))}

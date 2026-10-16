@@ -1,3 +1,4 @@
+import { t, useLocale } from './i18n.js';
 import React, {
   createContext,
   useContext,
@@ -45,6 +46,7 @@ import { Button, Badge, Skeleton, ErrorState, useData, jobNames, stateNames } fr
 import { cn, tw } from './tw.js';
 import { Modal } from './components/Modal/Modal.jsx';
 export function FormDialog({ value, close, busy }) {
+  useLocale();
   const [values, setValues] = useState(
       Object.fromEntries(value.fields.map((f) => [f.key, f.value || ''])),
     ),
@@ -70,10 +72,11 @@ export function FormDialog({ value, close, busy }) {
       footer={
         <>
           <Button disabled={busy} onClick={close}>
-            취소
+            {' '}
+            {t('취소')}{' '}
           </Button>
           <Button primary disabled={busy} type="submit" form="action-form">
-            {value.readOnly ? '닫기' : busy ? '접수 중…' : '실행'}
+            {value.readOnly ? t('닫기') : busy ? t('접수 중…') : t('실행')}
           </Button>
         </>
       }
@@ -117,6 +120,7 @@ export function FormDialog({ value, close, busy }) {
 }
 
 export function JobDialog({ id, close }) {
+  useLocale();
   const data = useData('job:' + id, '/jobs/' + id, {
     refetchInterval: (q) =>
       ['queued', 'running'].includes(q.state.data?.job?.state || 'queued') ? 1000 : false,
@@ -130,7 +134,7 @@ export function JobDialog({ id, close }) {
     <Modal
       isOpen
       onClose={close}
-      title={jobNames[data.data?.job.type] || '작업 진행'}
+      title={t(jobNames[data.data?.job.type]) || t('작업 진행')}
       size="lg"
       storageKey="job-log"
       resizable
@@ -138,10 +142,10 @@ export function JobDialog({ id, close }) {
         <>
           <span className="mr-auto" aria-live="polite">
             {data.data && (
-              <Badge state={data.data.job.state}>{stateNames[data.data.job.state]}</Badge>
+              <Badge state={data.data.job.state}>{t(stateNames[data.data.job.state])}</Badge>
             )}
           </span>
-          <Button onClick={close}>닫기</Button>
+          <Button onClick={close}>{t('닫기')}</Button>
         </>
       }
     >
@@ -149,7 +153,7 @@ export function JobDialog({ id, close }) {
         <ErrorState error={data.error} />
       ) : (
         <pre className={cn(tw.terminal, 'h-[410px] max-h-none min-h-[220px] max-tablet:h-[50vh]')}>
-          {data.data?.log || '작업을 접수했습니다. 준비 중…'}
+          {data.data?.log || t('작업을 접수했습니다. 준비 중…')}
           <span ref={bottom} />
         </pre>
       )}
