@@ -27,6 +27,8 @@ Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
 
 독립 모드의 Windows 연결은 Naru 서버가 여는 named pipe입니다. Docker 기본 context `naru`는 `naru_engine`을 쓰고, External Engine이 실행 중이 아니면 기본 `docker_engine` pipe도 같은 엔진으로 연결하여 context를 읽지 않는 Docker SDK와 도구도 그대로 동작합니다. 설정의 **Naru 서버 시작 시 엔진도 시작**(기본 켬)으로 서버가 시작될 때 엔진과 재시작 정책이 있는 컨테이너가 함께 올라옵니다. process manager를 사용하는 환경에서는 패드의 자동 시작을 설정할 수 있습니다.
 
+독립 모드의 pipe 연결은 External Engine처럼 컨테이너와 볼륨 생성 요청의 Windows 경로(`D:\work\app`)를 `/mnt/d/work/app`으로 바꿔 전달합니다. 그래서 Windows 터미널의 `docker run -v D:\...`와 상대 bind가 있는 `docker compose up`이 그대로 동작합니다. 다만 표준 입력을 넘긴 뒤 출력을 기다리는 `docker exec -i ... < file`과 `docker run -i`는 Windows named pipe에서 끝나지 않는 문제가 남아 있습니다. 당분간은 `docker exec ... sh -c "..."`나 WSL 안의 docker를 사용합니다.
+
 dockerd는 `/etc/naru/dockerd.json`의 containerd snapshotter와 `min-api-version 1.41`을 사용하여 External Engine과 같은 이미지 저장소와 API 범위를 유지합니다. 컨테이너가 공개한 포트는 WSL localhost 전달로 Windows의 `127.0.0.1`에서 접속합니다. 모든 WSL 배포판이 같은 네트워크를 공유하므로 External Engine 엔진과 Naru 엔진을 동시에 실행하지 않습니다.
 
 ## Tailscale 원격 접속
@@ -43,7 +45,7 @@ dockerd는 `/etc/naru/dockerd.json`의 containerd snapshotter와 `min-api-versio
 
 - 컨테이너: 생성, 시작, 정지, 재시작, 삭제, 로그, 명령 실행, 대화형 터미널과 리소스 사용량을 확인합니다. Moby와 containerd의 터미널은 실제 PTY를 사용합니다.
 - 이미지와 저장소: pull, tag, push, build, TAR 내보내기와 가져오기, 볼륨과 네트워크를 관리합니다. 이미지 취약점 검사는 Trivy를 사용하며 현재 실제 취약점 DB 다운로드 시험은 남아 있습니다.
-- Compose: 프로젝트 YAML을 저장하고 up, down, stop과 로그 조회를 실행합니다. Windows 상대 bind 경로와 env-file 등 복합 프로젝트 호환성은 추가 시험 대상입니다.
+- Compose 프로젝트: 컨테이너 화면에서 Compose 라벨로 컨테이너를 프로젝트별로 묶어 접고 펼칩니다. 프로젝트 단위로 시작, 정지, 재시작, 로그와 원본 compose 파일 기준의 up, down, pull, build를 실행합니다. 프로젝트 목록은 `%LOCALAPPDATA%\Naru\projects.json`에도 기록하여 down 이후에도 다시 up할 수 있습니다. compose 파일이 없는 프로젝트는 컨테이너 시작, 정지, 재시작만 제공합니다. 새 프로젝트는 `%LOCALAPPDATA%\Naru\compose\<이름>\compose.yaml`에 저장하고 화면에서 편집합니다.
 - Kubernetes: k3s 설치와 시작, 리소스 조회, 다중 YAML 적용, 삭제, Pod 로그와 포트 전달을 지원합니다. Windows API 연결은 Naru의 로컬 TCP bridge로 전달합니다.
 - 설정: 엔진과 namespace, Kubernetes 버전과 포트, proxy, 화면 갱신 간격을 설정합니다. 엔진을 정상 종료한 상태에서 변경합니다.
 - Windows CLI: 설정 화면에서 공식 Docker, Compose, Buildx, kubectl, Helm과 credential helper를 검증하여 설치합니다. 기존 Docker CLI의 기본 context를 선택한 모드에 맞춰 연결하며 `docker ps`, `docker compose`를 그대로 사용합니다. 별도 Naru 컨테이너 CLI는 제공하지 않습니다. Docker 자격 증명 설정은 보존하며 Naru가 설치한 Compose와 Buildx 검색 경로를 추가합니다. Docker가 PATH에 없는 환경에서는 `%LOCALAPPDATA%\Naru\bin\docker.exe`를 사용합니다. kubeconfig는 Naru 전용입니다.
