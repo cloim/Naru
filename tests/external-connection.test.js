@@ -13,6 +13,7 @@ test('shared Docker connection validates engine and protects runtime owner', () 
   for (const type of [
     'startRuntime',
     'stopRuntime',
+    'compactDisk',
     'installRuntime',
     'startKubernetes',
     'stopKubernetes',
@@ -21,8 +22,8 @@ test('shared Docker connection validates engine and protects runtime owner', () 
     'deleteSnapshot',
     'installExtension',
     'createForward',
-  ])
     'removeForward',
+  ])
     assert.throws(() => assertSharedJob(type, cfg));
   for (const type of [
     'createContainer',

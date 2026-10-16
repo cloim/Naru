@@ -23,6 +23,7 @@ import * as engine from './engine.js';
 import { wsl, distributions } from './runner.js';
 import { startDockerBridge, startCompatBridge, startKubernetesBridge } from './bridge.js';
 import { listForwards } from './forwarding.js';
+import { diskUsage, MIN_RECLAIM } from './disk.js';
 import { registerExtensions } from './extensions.js';
 import {
   LABEL,
@@ -58,6 +59,9 @@ async function cached(key, fn, ttl = 3000) {
 app.get('/api/session', (req, res) => res.json({ token }));
 app.get('/api/forwards', async (req, res) => res.json(await listForwards()));
 app.get('/api/status', async (req, res) => res.json(await cached('status', runtime.status)));
+app.get('/api/disk', async (req, res) =>
+  res.json({ ...(await cached('disk', diskUsage, 30000)), minReclaim: MIN_RECLAIM }),
+);
 app.get('/api/settings', async (req, res) => res.json(await settings()));
 app.put('/api/settings', async (req, res) => {
   const current = await runtime.status();

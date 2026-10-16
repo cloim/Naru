@@ -170,6 +170,7 @@ function Settings() {
                   </div>
                 </section>
               )}
+              {status?.managed !== false && status?.installed && <DiskSpace />}
               <section className="mb-8">
                 <h3>연결할 엔진</h3>
                 <SelectControl
@@ -328,6 +329,60 @@ function Settings() {
           {tab === 'cli' && <ConnectionTools />}
         </div>
       </div>
+    </section>
+  );
+}
+
+const gb = (bytes) => `${(bytes / 1024 ** 3).toFixed(1)}GB`;
+
+// 가상 디스크는 안에서 파일을 지워도 줄지 않으므로, 돌려받을 공간이 있을 때만 압축을 권한다.
+function DiskSpace() {
+  const { job, confirm, busy, status } = useActions();
+  const disk = useData('disk', '/disk', { refetchInterval: 30000 });
+  const d = disk.data;
+  const enough = d?.reclaimable >= d?.minReclaim;
+  return (
+    <section className="mb-8">
+      <h3>디스크 공간</h3>
+      {disk.isLoading ? (
+        <Skeleton />
+      ) : disk.error ? (
+        <ErrorState error={disk.error} retry={() => disk.refetch()} />
+      ) : (
+        <div className="flex flex-wrap items-center gap-3.5">
+          <p className="text-[13px]">
+            가상 디스크 {gb(d.file)}
+            {d.used !== null && (
+              <>
+                {' '}
+                중 사용 {gb(d.used)}, 돌려받을 수 있는 공간 약 {gb(d.reclaimable)}
+              </>
+            )}
+          </p>
+          <Button
+            icon={HardDrive}
+            disabled={busy || !status?.running || !enough}
+            onClick={() =>
+              confirm(
+                '디스크 압축',
+                `약 ${gb(d.reclaimable)}를 Windows에 돌려줍니다. 압축하는 동안 엔진과 컨테이너가 멈추고(약 10분), 끝나면 다시 시작합니다. PC 화면에 관리자 권한 승인 창(UAC)이 뜨면 2분 안에 승인해 주세요.`,
+                () => job('compactDisk'),
+              )
+            }
+          >
+            디스크 압축
+          </Button>
+          {!status?.running ? (
+            <small className={tw.groupText}>
+              엔진이 켜져 있어야 사용량을 재고 압축할 수 있습니다.
+            </small>
+          ) : (
+            !enough && (
+              <small className={tw.groupText}>돌려받을 공간이 {gb(d.minReclaim)} 미만입니다.</small>
+            )
+          )}
+        </div>
+      )}
     </section>
   );
 }

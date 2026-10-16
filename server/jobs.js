@@ -14,6 +14,7 @@ export const jobSchemas = {
   installRuntime: empty,
   startRuntime: empty,
   stopRuntime: empty,
+  compactDisk: empty,
   startKubernetes: empty,
   stopKubernetes: empty,
   installCLI: empty,
@@ -130,8 +131,8 @@ export const jobSchemas = {
     })
     .strict(),
   stopForward: z.object({ id: z.uuid() }).strict(),
-  registryLogin: z
   removeForward: z.object({ id: z.uuid() }).strict(),
+  registryLogin: z
     .object({
       server: z
         .string()
@@ -168,7 +169,6 @@ export async function jobList() {
     b.createdAt.localeCompare(a.createdAt),
   );
 }
-let submitting = false;
 // 끝난 작업 기록은 최근 30일, 최대 200건만 남긴다. 같은 id로 시작하는 로그, 입력 사본, 임시 파일도 함께 지운다.
 // 기록이 없는 파일은 접수 중일 수 있으므로(입력 사본을 기록보다 먼저 쓴다) 1시간이 지난 것만 지운다.
 const JOB_KEEP_DAYS = 30,
@@ -207,6 +207,7 @@ export async function pruneJobs(now = Date.now()) {
     await fs.rm(target, { force: true });
   }
 }
+let submitting = false;
 export async function reconcileJobs() {
   for (const job of await jobList()) {
     if (!['running', 'queued'].includes(job.state)) continue;
@@ -242,8 +243,8 @@ export async function reconcileJobs() {
   } catch (e) {
     if (e.code !== 'ENOENT') throw e;
   }
-}
   await pruneJobs();
+}
 export async function submit(type, input) {
   const payload = validateJob(type, input);
   assertSharedJob(type, await settings());
