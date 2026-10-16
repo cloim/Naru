@@ -13,11 +13,11 @@ export const tw = {
     'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[13px] border border-line bg-paper',
   actions: 'flex flex-wrap items-center gap-2.25',
   tabs: 'flex gap-5.5 overflow-x-auto border-b border-line px-6 max-tablet:px-4',
-  tab: 'relative flex items-center gap-2 whitespace-nowrap px-0 pt-5 pb-4.5 text-[13px] font-semibold text-[#7a857c] [&>span]:rounded-[4px] [&>span]:bg-[#f0f2ed] [&>span]:px-1.5 [&>span]:py-0.5 [&>span]:text-[11px] [&>span]:text-[#808a82]',
+  tab: 'relative flex items-center gap-2 whitespace-nowrap px-0 py-4.5 text-[13px] font-semibold text-[#7a857c] [&>span]:rounded-[4px] [&>span]:bg-[#f0f2ed] [&>span]:px-1.5 [&>span]:py-0.5 [&>span]:text-[11px] [&>span]:text-[#808a82]',
   tabSelected:
     'text-[#245d48] after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-[#35664d] [&>span]:bg-[#e9f3df] [&>span]:text-[#47763b]',
   field:
-    'my-4 flex flex-col gap-2.25 [&_input]:w-full [&_input]:rounded-[7px] [&_input]:border [&_input]:border-[#dce4d6] [&_input]:bg-[#fdfefb] [&_input]:px-3 [&_input]:py-2.75 [&_input]:text-[13px] [&_input]:text-[#294035] [&_small]:text-[11px] [&_small]:leading-[1.6] [&_textarea]:min-h-[90px] [&_textarea]:w-full [&_textarea]:resize-y [&_textarea]:rounded-[7px] [&_textarea]:border [&_textarea]:border-[#dce4d6] [&_textarea]:bg-[#fdfefb] [&_textarea]:px-3 [&_textarea]:py-2.75 [&_textarea]:text-[12px] [&_textarea]:leading-[1.65] [&_textarea]:text-[#294035] [&>span]:text-[12px] [&>span]:font-semibold [&>span]:text-[#536454]',
+    'my-4 flex flex-col gap-2.25 first:mt-0 last:mb-0 [&_input]:w-full [&_input]:rounded-[7px] [&_input]:border [&_input]:border-[#dce4d6] [&_input]:bg-[#fdfefb] [&_input]:px-3 [&_input]:py-2.75 [&_input]:text-[13px] [&_input]:text-[#294035] [&_small]:text-[11px] [&_small]:leading-[1.6] [&_textarea]:min-h-[90px] [&_textarea]:w-full [&_textarea]:resize-y [&_textarea]:rounded-[7px] [&_textarea]:border [&_textarea]:border-[#dce4d6] [&_textarea]:bg-[#fdfefb] [&_textarea]:px-3 [&_textarea]:py-2.75 [&_textarea]:text-[12px] [&_textarea]:leading-[1.65] [&_textarea]:text-[#294035] [&>span]:text-[12px] [&>span]:font-semibold [&>span]:text-[#536454]',
   formRow: 'flex gap-5.5 max-tablet:flex-col max-tablet:gap-0 [&>label]:min-w-0 [&>label]:flex-1',
   checkbox: 'flex items-center gap-2.5 py-2.5 text-[13px] [&_input]:accent-brand',
   terminal:
