@@ -1,0 +1,205 @@
+/* AG Grid가 직접 만드는 내부 요소의 테마다. 클래스를 붙일 수 없는 요소라 CSS로 지정한다.
+   AG Grid CSS가 레이어 밖에 있으므로 이 파일도 레이어 밖에 두어야 선택자 우선순위로 덮을 수 있다.
+   직접 렌더하는 헤더, 필터 팝업과 상태 표시는 JSX의 Tailwind 클래스로 꾸민다. */
+.data-grid {
+  --ag-background-color: #fff;
+  --ag-header-background-color: #fafbf8;
+  --ag-odd-row-background-color: #fff;
+  --ag-row-hover-color: #f6f9f1;
+  --ag-border-color: #e7ebe2;
+  --ag-font-family: NaruText, sans-serif;
+  --ag-font-size: 12px;
+  --ag-header-foreground-color: #8a9488;
+  --ag-foreground-color: #526056;
+  --ag-cell-horizontal-padding: 22px;
+  --ag-selected-row-background-color: #eef5e8;
+  border: 0 !important;
+  border-radius: 0 !important;
+}
+
+.data-grid .ag-root-wrapper {
+  flex: 1;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-family: inherit;
+}
+
+.data-grid .ag-header {
+  min-height: 44px !important;
+  height: 44px !important;
+  border-bottom: 1px solid #ebe8e3;
+  background: #fafbf7;
+}
+
+.data-grid .ag-header-row {
+  height: 44px !important;
+}
+
+.data-grid .ag-header-cell {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  color: #83917f;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.data-grid .ag-header-cell:hover {
+  background: #f2f0ec;
+}
+
+.data-grid .ag-header-cell-label {
+  color: #7a7269;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.data-grid .ag-header-cell[col-id] .ag-header-cell-label {
+  flex-direction: row;
+  justify-content: center;
+  text-align: center;
+}
+
+.data-grid .ag-header-cell-text {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.data-grid .ag-header-icon,
+.data-grid .ag-sort-indicator-icon {
+  color: #7a7269;
+}
+
+.data-grid .ag-header-cell:first-child,
+.data-grid .ag-cell:first-of-type {
+  padding-left: 14px;
+}
+
+.data-grid .ag-header-cell:last-child,
+.data-grid .ag-cell:last-of-type {
+  padding-right: 14px;
+}
+
+.data-grid .ag-body-viewport {
+  overflow-y: auto;
+}
+
+/* 행 높이는 DataGrid rowHeight prop이 정한다. CSS로 고정하면 실제 배치와 어긋나 행 사이에 틈이 생긴다. */
+.data-grid .ag-row {
+  border-bottom: 1px solid #efede9;
+  background: #ffffff;
+  color: #50604f;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 450;
+}
+
+.data-grid .ag-row:hover {
+  background: #f7faf2;
+}
+
+/* position을 바꾸면 AG Grid의 가상 스크롤 배치가 깨지므로 z-index와 outline만 쓴다. */
+.data-grid .ag-row:focus-within {
+  z-index: 1;
+  outline: 2px solid rgba(117, 128, 255, 0.42);
+  outline-offset: -2px;
+}
+
+.data-grid .ag-cell {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  padding: 0 20px;
+  text-align: left;
+  line-height: normal;
+}
+
+.data-grid .ag-cell-value,
+.data-grid .ag-cell-wrapper,
+.data-grid .ag-react-container {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.data-grid .ag-react-container {
+  display: block;
+  width: 100%;
+}
+
+.data-grid .ag-react-container > span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* 포커스 링 등 AG Grid 기본 장식을 지운다. */
+.data-grid .ag-cell:focus,
+.data-grid .ag-cell:focus-within,
+.data-grid .ag-cell-focus,
+.data-grid .ag-row-focus {
+  border: none !important;
+  outline: none !important;
+}
+
+.data-grid .ag-overlay-loading-wrapper,
+.data-grid .ag-overlay-no-rows-wrapper {
+  background: transparent;
+}
+
+/* 값은 텍스트 컬럼을 뺀 전부 가운데 둔다. */
+.data-grid .ag-cell[col-id='name'],
+.data-grid .ag-cell[col-id='image'],
+.data-grid .ag-cell[col-id='Image'],
+.data-grid .ag-cell[col-id='Name'],
+.data-grid .ag-cell[col-id='type'],
+.data-grid .ag-cell[col-id='error'] {
+  text-align: left;
+  justify-content: flex-start;
+}
+
+.data-grid .ag-cell[col-id]:not([col-id='item_name']) {
+  justify-content: center;
+  text-align: center;
+}
+
+.data-grid .ag-cell[col-id]:not([col-id='item_name']) .ag-cell-wrapper {
+  justify-content: center;
+}
+
+.data-grid .ag-cell[col-id]:not([col-id='item_name']) .ag-cell-value {
+  text-align: center;
+}
+
+.data-grid .ag-cell[col-id='item_name'] {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.data-grid .ag-cell[col-id='item_name'] .ag-cell-wrapper {
+  justify-content: flex-start;
+}
+
+.data-grid .ag-cell[col-id='item_name'] .ag-cell-value {
+  text-align: left;
+}
+
+.ag-tooltip-custom {
+  z-index: 30;
+}
+
+/* 가로 스크롤은 바깥 래퍼가 맡는다. 안쪽 뷰포트가 반올림 오차로 몇 픽셀 넘쳐도 터치 스와이프를 먼저 가로채지 않게 한다.
+   AG Grid 35 이하는 .ag-viewport 계열, 36은 .ag-grid-viewport가 가로 스크롤 영역이다. */
+[data-outer-scroll] .ag-grid-viewport,
+[data-outer-scroll] .ag-viewport,
+[data-outer-scroll] .ag-header-viewport,
+[data-outer-scroll] .ag-body-horizontal-scroll-viewport {
+  overflow-x: hidden !important;
+}
