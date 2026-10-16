@@ -21,7 +21,7 @@ export const tw = {
   formRow: 'flex gap-5.5 max-tablet:flex-col max-tablet:gap-0 [&>label]:min-w-0 [&>label]:flex-1',
   checkbox: 'flex items-center gap-2.5 py-2.5 text-[13px] [&_input]:accent-brand',
   terminal:
-    'm-0 max-h-[65vh] min-h-[270px] overflow-auto rounded-[8px] bg-console p-5.5 font-mono text-[12px] leading-[1.9] whitespace-pre-wrap wrap-anywhere text-[#d7e8cf]',
+    'm-0 max-h-[65vh] min-h-[270px] overflow-auto rounded-[8px] bg-console p-5.5 font-mono text-[12px] leading-[1.9] whitespace-pre-wrap wrap-anywhere text-[#d7e8cf] max-tablet:whitespace-pre max-tablet:wrap-normal',
   jsonView:
     'm-0 max-h-[65vh] overflow-auto bg-[#fafcf7] p-5.5 font-mono text-[12px] leading-[1.8] whitespace-pre-wrap wrap-anywhere',
   preserve: 'whitespace-pre-wrap wrap-anywhere',
