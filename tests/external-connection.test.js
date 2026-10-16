@@ -36,3 +36,14 @@ test('shared Docker connection validates engine and protects runtime owner', () 
     assert.doesNotThrow(() => assertSharedJob(type, cfg));
   assert.doesNotThrow(() => assertSharedJob('stopRuntime', { connection: 'managed' }));
 });
+
+test('only screen and startup settings may change while the engine runs', async () => {
+  const { engineSettingsChanged } = await import('../server/state.js');
+  const base = settingsSchema.parse({});
+  assert.equal(engineSettingsChanged(base, { ...base, pollSeconds: 10, autoStart: false }), false);
+  assert.equal(engineSettingsChanged(base, { ...base, engine: 'containerd' }), true);
+  assert.equal(
+    engineSettingsChanged(base, { ...base, proxy: { ...base.proxy, http: 'http://proxy:3128' } }),
+    true,
+  );
+});
