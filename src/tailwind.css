@@ -1,0 +1,104 @@
+@import 'tailwindcss';
+
+@font-face {
+  font-family: NaruText;
+  src: local('Pretendard'), local('Noto Sans KR'), local('맑은 고딕');
+  font-display: swap;
+}
+
+/* 루트 글자 크기가 14px이므로 간격은 rem 대신 4px 단위로 고정한다. p-3.25 = 13px처럼 1px 단위까지 표현된다. */
+@theme {
+  --spacing: 4px;
+  --font-sans: NaruText, 'Segoe UI Variable Text', sans-serif;
+  --font-mono: 'Cascadia Code', Consolas, monospace;
+  --font-display: Bahnschrift, sans-serif;
+
+  --color-body: #243a34;
+  --color-canvas: #f5f6f1;
+  --color-ink: #213c34;
+  --color-muted: #748179;
+  --color-line: #e2e7df;
+  --color-brand: #163d35;
+  --color-brand-hover: #265548;
+  --color-lime: #d4efae;
+  --color-paper: #fff;
+  --color-accent: #2f6955;
+  --color-console: #142d26;
+  --color-danger: #ba5b57;
+
+  /* 기존 화면 기준: 760px 이하 모바일, 1100px 이하 좁은 데스크톱, 1500px 이상 넓은 화면 */
+  --breakpoint-tablet: 761px;
+  --breakpoint-desktop: 1101px;
+  --breakpoint-wide: 1500px;
+
+  --animate-shimmer: shimmer 1.5s infinite;
+
+  @keyframes shimmer {
+    to {
+      background-position: -150% 0;
+    }
+  }
+}
+
+@layer base {
+  :root {
+    color: var(--color-body);
+    background: var(--color-canvas);
+    font-size: 14px;
+    /* Tailwind 기본 줄 높이 1.5 대신 기존 화면 기준인 브라우저 기본값을 유지한다. */
+    line-height: normal;
+  }
+  button,
+  a,
+  input,
+  textarea {
+    -webkit-tap-highlight-color: transparent;
+  }
+  button {
+    cursor: pointer;
+  }
+  button:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline: 3px solid #6aa887;
+    outline-offset: 3px;
+  }
+  h1 {
+    font-size: 18px;
+    font-weight: 650;
+  }
+  h2 {
+    font-size: 27px;
+    letter-spacing: -1px;
+    font-weight: 700;
+    line-height: 1.4;
+  }
+  h3 {
+    font-size: 16px;
+    font-weight: 650;
+  }
+  p {
+    line-height: 1.75;
+  }
+  code,
+  textarea {
+    font-family: var(--font-mono);
+  }
+  small {
+    color: var(--color-muted);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
