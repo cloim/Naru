@@ -6,7 +6,7 @@ export const cn = (...inputs) => twMerge(clsx(inputs));
 
 // 여러 화면이 함께 쓰는 레이아웃 묶음. 한 화면에서만 쓰는 스타일은 해당 JSX에 직접 둔다.
 export const tw = {
-  page: 'm-auto flex min-h-full max-w-[1700px] flex-col gap-6.25 px-9.5 pt-9 pb-10 wide:px-13 wide:py-11 max-desktop:px-6 max-desktop:py-7 max-tablet:gap-5 max-tablet:px-4 max-tablet:py-6',
+  page: 'm-auto flex min-h-full max-w-[1700px] flex-col gap-4 p-4',
   panel: 'min-w-0 overflow-hidden rounded-[13px] border border-line bg-paper',
   // 목록 화면의 패널은 남은 높이를 모두 쓰고, 그 안의 그리드가 영역을 채운다.
   gridPanel:

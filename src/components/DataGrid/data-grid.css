@@ -165,12 +165,35 @@
   justify-content: flex-start;
 }
 
-.data-grid .ag-cell[col-id]:not([col-id='item_name']) {
+.data-grid
+  .ag-cell[col-id]:not(
+    :is(
+      [col-id='item_name'],
+      [col-id='name'],
+      [col-id='image'],
+      [col-id='Image'],
+      [col-id='Name'],
+      [col-id='type'],
+      [col-id='error']
+    )
+  ) {
   justify-content: center;
   text-align: center;
 }
 
-.data-grid .ag-cell[col-id]:not([col-id='item_name']) .ag-cell-wrapper {
+.data-grid
+  .ag-cell[col-id]:not(
+    :is(
+      [col-id='item_name'],
+      [col-id='name'],
+      [col-id='image'],
+      [col-id='Image'],
+      [col-id='Name'],
+      [col-id='type'],
+      [col-id='error']
+    )
+  )
+  .ag-cell-wrapper {
   justify-content: center;
 }
 
