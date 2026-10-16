@@ -1,5 +1,5 @@
 import { t, useLocale } from '../i18n.js';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Modal } from './Modal/Modal.jsx';
 import { Button } from '../ui.jsx';
 import { tw, cn } from '../tw.js';
@@ -117,7 +117,7 @@ export function parsePortsInput(text) {
     });
 }
 
-export function CreateContainerModal({ isOpen, onClose, onSubmit, busy }) {
+export function CreateContainerModal({ isOpen, onClose, onSubmit, busy, initialValues }) {
   useLocale();
   const [image, setImage] = useState('');
   const [name, setName] = useState('');
@@ -126,6 +126,26 @@ export function CreateContainerModal({ isOpen, onClose, onSubmit, busy }) {
   const [mounts, setMounts] = useState('');
   const [command, setCommand] = useState('');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (initialValues) {
+      setImage(initialValues.image || '');
+      setName(initialValues.name || '');
+      setPorts(initialValues.ports || '');
+      setEnv(initialValues.env || '');
+      setMounts(initialValues.mounts || '');
+      setCommand(initialValues.command || '');
+      setError('');
+    } else if (isOpen) {
+      setImage('');
+      setName('');
+      setPorts('');
+      setEnv('');
+      setMounts('');
+      setCommand('');
+      setError('');
+    }
+  }, [initialValues, isOpen]);
 
   const applyTemplate = (tpl) => {
     setImage(tpl.image);
