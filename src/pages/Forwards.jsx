@@ -57,7 +57,7 @@ import { Modal } from '../components/Modal/Modal.jsx';
 import SelectControl from '../components/SelectControl/SelectControl.tsx';
 function Forwards() {
   const data = useData('forwards', '/forwards', { refetchInterval: 5000 }),
-    { job, form, busy, status } = useActions();
+    { job, form, confirm, busy, status } = useActions();
   const columns = useMemo(
     () => [
       { field: 'resource', headerName: '리소스', minWidth: 230, flex: 1.2 },
@@ -85,17 +85,31 @@ function Forwards() {
         width: 90,
         sortable: false,
         cellRenderer: ({ data: r }) =>
-          r.state === 'running' && (
+          r.state === 'running' ? (
             <IconButton
               icon={Square}
               label="전달 종료"
               disabled={busy}
               onClick={() => job('stopForward', { id: r.id })}
             />
+          ) : (
+            <IconButton
+              icon={Trash2}
+              danger="row"
+              label={`${r.resource} 포트 전달 기록 삭제`}
+              disabled={busy}
+              onClick={() =>
+                confirm(
+                  '포트 전달 기록 삭제',
+                  `${r.namespace}/${r.resource} (127.0.0.1:${r.localPort}) 기록을 삭제합니다.`,
+                  () => job('removeForward', { id: r.id }),
+                )
+              }
+            />
           ),
       },
     ],
-    [busy, job],
+    [busy, job, confirm],
   );
   return (
     <section className={tw.page}>

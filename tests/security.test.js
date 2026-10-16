@@ -107,6 +107,7 @@ test('shell injection, option injection, unknown fields, path traversal rejected
   assert.throws(() =>
     validateJob('deleteSnapshot', { id: '../../etc/passwd', confirmation: 'DELETE' }),
   );
+  assert.throws(() => validateJob('removeForward', { id: '../../etc/passwd' }));
   assert.throws(() => validateJob('unknown', {}));
 });
 test('destructive snapshot operations require exact explicit confirmation', () => {
