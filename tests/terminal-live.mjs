@@ -116,7 +116,7 @@ try {
       await page.screenshot({ path: 'evidence/terminal-live-desktop.png', fullPage: true });
       await page.setViewportSize({ width: 390, height: 844 });
       assert.equal(
-        await page.locator('main h2').evaluate((el) => el.scrollWidth <= el.clientWidth),
+        await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
         true,
       );
       await page.waitForFunction(() => {
