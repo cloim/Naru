@@ -8,6 +8,7 @@ import React, {
   lazy,
   Suspense,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
@@ -50,6 +51,36 @@ export const DataGrid = lazy(() =>
 export const Actions = createContext(null);
 
 export const useActions = () => useContext(Actions);
+
+// 상단바 오른쪽 액션 영역과 제목을 페이지가 채운다. 제목과 액션은 상단바에만 두고 본문에 반복하지 않는다.
+export const TopBar = createContext({ slot: null, setTitle: () => {} });
+
+export function PageActions({ children }) {
+  const { slot } = useContext(TopBar);
+  return slot ? createPortal(children, slot) : null;
+}
+
+export function usePageTitle(title) {
+  const { setTitle } = useContext(TopBar);
+  useEffect(() => {
+    setTitle(title || null);
+    return () => setTitle(null);
+  }, [title, setTitle]);
+}
+
+export function PageAction({ primary, className, ...props }) {
+  return (
+    <IconButton
+      className={cn(
+        'h-9.5 w-9.5 border border-line bg-white enabled:hover:border-[#bdcdbb] enabled:hover:bg-[#f2f6ed]',
+        primary &&
+          'border-brand bg-brand text-[#f2ffe4] enabled:hover:border-brand-hover enabled:hover:bg-brand-hover enabled:hover:text-[#f2ffe4]',
+        className,
+      )}
+      {...props}
+    />
+  );
+}
 
 export const useData = (key, url, options = {}) =>
   useQuery({ queryKey: [key], queryFn: () => api(url), ...options });
@@ -108,15 +139,14 @@ export function Button({ icon: Icon, children, primary, compact, className, ...p
   );
 }
 
-// danger="row"는 목록 행 안의 삭제 버튼으로, 마우스를 올리면 배경 없이 더 진한 빨강으로 바뀐다.
+// 삭제 버튼: 표 안(danger="row")은 배경과 마우스 효과 없이 빨간 아이콘만, 카드 안(danger)은 마우스를 올리면 연한 빨간 배경을 보인다.
 export function IconButton({ icon: Icon, label, danger, className, ...props }) {
   return (
     <button
       className={cn(
         'inline-flex min-h-8.5 min-w-8.5 flex-none items-center justify-center rounded-[6px] bg-transparent p-2 text-[#738177] enabled:hover:bg-[#edf2e7] enabled:hover:text-brand max-tablet:min-h-9.5 max-tablet:min-w-9.5',
-        danger && 'text-danger',
-        danger === 'row' &&
-          'hover:bg-transparent hover:text-[#8b2424] enabled:hover:bg-transparent enabled:hover:text-[#8b2424]',
+        danger && 'text-danger enabled:hover:bg-[#faeeeb] enabled:hover:text-danger',
+        danger === 'row' && 'enabled:hover:bg-transparent',
         className,
       )}
       title={label}
@@ -207,12 +237,11 @@ export function RuntimeEmpty() {
   return (
     <div className="flex min-h-[calc(100dvh-86px)] flex-col items-center justify-center px-7.5 py-15 text-center max-tablet:min-h-[calc(100dvh-68px)]">
       <div className="mb-7 flex h-23.5 w-23.5 -rotate-5 items-center justify-center rounded-[26px] bg-[#e8eedf]">
-        <img className="h-16 w-16 rotate-5" src="/naru.svg" alt="" />
+        <img className="h-16 w-16 rotate-5" src="/brand/naru-mark.png" alt="" />
       </div>
-      <h2 className="text-[34px] max-tablet:text-[28px]">작업에 집중할 시간</h2>
-      <p className="mt-3.75 mb-7 max-w-[460px] text-muted">
-        컨테이너부터 Kubernetes까지, 로컬 개발 환경을 한곳에서 관리해요.
-      </p>
+      <h2 className="mb-7 text-[34px] max-tablet:text-[28px]">
+        {status?.installed ? 'Naru 엔진이 꺼져 있습니다' : '독립 런타임이 설치되지 않았습니다'}
+      </h2>
       <Button
         primary
         disabled={busy || !status}
@@ -255,19 +284,22 @@ export function ResourceGrid({ query, columns, filter = '', onRowClicked }) {
     [query.data, filter],
   );
   return (
-    <div className="h-[clamp(340px,calc(100dvh-330px),850px)] min-h-[340px] w-full max-tablet:h-[calc(100dvh-360px)]">
-      <Suspense fallback={<Skeleton />}>
-        <DataGrid
-          rowData={rows}
-          columnDefs={columns}
-          getRowId={getRowId}
-          isLoading={query.isLoading}
-          errorMessage={query.error?.message || ''}
-          emptyMessage={filter ? '검색 결과가 없습니다.' : '아직 항목이 없습니다.'}
-          onRowClicked={onRowClicked}
-          rowHeight={62}
-        />
-      </Suspense>
+    // 부모 패널의 남은 높이를 채운다. AG Grid가 높이를 계산할 수 있도록 안쪽은 절대 위치로 둔다.
+    <div className="relative min-h-[340px] w-full flex-1">
+      <div className="absolute inset-0 flex">
+        <Suspense fallback={<Skeleton />}>
+          <DataGrid
+            rowData={rows}
+            columnDefs={columns}
+            getRowId={getRowId}
+            isLoading={query.isLoading}
+            errorMessage={query.error?.message || ''}
+            emptyMessage={filter ? '검색 결과가 없습니다.' : '아직 항목이 없습니다.'}
+            onRowClicked={onRowClicked}
+            rowHeight={62}
+          />
+        </Suspense>
+      </div>
     </div>
   );
 }

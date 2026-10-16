@@ -7,12 +7,11 @@ export const cn = (...inputs) => twMerge(clsx(inputs));
 // 여러 화면이 함께 쓰는 레이아웃 묶음. 한 화면에서만 쓰는 스타일은 해당 JSX에 직접 둔다.
 export const tw = {
   page: 'm-auto flex min-h-full max-w-[1700px] flex-col gap-6.25 px-9.5 pt-9 pb-10 wide:px-13 wide:py-11 max-desktop:px-6 max-desktop:py-7 max-tablet:gap-5 max-tablet:px-4 max-tablet:py-6',
-  pageIntro:
-    'flex flex-none items-center justify-between gap-5 max-desktop:items-start max-tablet:flex-col max-tablet:gap-4.5 [&>div:first-child]:max-w-full [&>div:first-child]:min-w-0 [&_h2]:wrap-anywhere wide:[&_h2]:text-[30px] max-desktop:[&_h2]:text-[24px] max-tablet:[&_h2]:text-[25px] [&_p]:mt-2 [&_p]:text-[13px] [&_p]:text-muted max-tablet:[&_p]:text-[12px]',
   panel: 'min-w-0 overflow-hidden rounded-[13px] border border-line bg-paper',
+  // 목록 화면의 패널은 남은 높이를 모두 쓰고, 그 안의 그리드가 영역을 채운다.
+  gridPanel:
+    'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[13px] border border-line bg-paper',
   actions: 'flex flex-wrap items-center gap-2.25',
-  introActions:
-    'flex flex-wrap items-center gap-2.25 max-desktop:justify-end max-tablet:justify-start',
   tabs: 'flex gap-5.5 overflow-x-auto border-b border-line px-6 max-tablet:px-4',
   tab: 'relative flex items-center gap-2 whitespace-nowrap px-0 pt-5 pb-4.5 text-[13px] font-semibold text-[#7a857c] [&>span]:rounded-[4px] [&>span]:bg-[#f0f2ed] [&>span]:px-1.5 [&>span]:py-0.5 [&>span]:text-[11px] [&>span]:text-[#808a82]',
   tabSelected:

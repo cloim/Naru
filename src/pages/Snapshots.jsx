@@ -50,6 +50,8 @@ import {
   ErrorState,
   Empty,
   bytes,
+  PageActions,
+  PageAction,
 } from '../ui.jsx';
 import { cn, tw } from '../tw.js';
 import { api, downloadConfig } from '../api.js';
@@ -60,12 +62,9 @@ function Snapshots() {
     data = useData('snapshots', '/snapshots');
   return (
     <section className={tw.page}>
-      <div className={tw.pageIntro}>
-        <div>
-          <h2>안심하고 실험하세요</h2>
-          <p>엔진을 정상 종료한 뒤 WSL 데이터 전체를 저장합니다.</p>
-        </div>
-        <Button
+      <PageActions>
+        <PageAction
+          label="스냅샷 생성"
           icon={Camera}
           primary
           disabled={busy || !status?.installed}
@@ -77,10 +76,8 @@ function Snapshots() {
               '현재 실행 중이면 백업 후 엔진을 다시 시작합니다. 데이터 크기에 따라 시간이 걸릴 수 있습니다.',
             )
           }
-        >
-          스냅샷 생성
-        </Button>
-      </div>
+        />
+      </PageActions>
       {data.isLoading ? (
         <Skeleton />
       ) : data.error ? (

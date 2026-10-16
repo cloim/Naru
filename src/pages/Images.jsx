@@ -40,6 +40,8 @@ import {
   Container,
   ShipWheel,
   Tag,
+  Upload,
+  Hammer,
 } from 'lucide-react';
 import {
   useActions,
@@ -52,6 +54,8 @@ import {
   useResource,
   ResourceGrid,
   Toolbar,
+  PageActions,
+  PageAction,
 } from '../ui.jsx';
 import { cn, tw } from '../tw.js';
 import { api, downloadConfig } from '../api.js';
@@ -68,7 +72,6 @@ function Images() {
         colId: 'image',
         minWidth: 270,
         flex: 1.6,
-        filterable: true,
         valueGetter: ({ data: r }) => imageName(r),
         cellRenderer: ({ data: r }) => (
           <div className={tw.nameCell}>
@@ -194,78 +197,69 @@ function Images() {
   if (!status?.ready) return status ? <RuntimeEmpty /> : <Skeleton />;
   return (
     <section className={tw.page}>
-      <div className={tw.pageIntro}>
-        <div>
-          <h2>이미지 라이브러리</h2>
-          <p>필요한 이미지를 가져오거나 로컬 소스에서 빌드하세요.</p>
-        </div>
-        <div className={tw.introActions}>
-          <Button
-            icon={Download}
-            disabled={busy}
-            onClick={() =>
-              form(
-                '이미지 불러오기',
-                [
-                  {
-                    key: 'file',
-                    label: 'Windows TAR 파일',
-                    required: true,
-                    placeholder: 'D:\\MySetting\\Downloads\\image.tar',
-                  },
-                ],
-                (v) => job('importImage', v),
-              )
-            }
-          >
-            불러오기
-          </Button>
-          <Button
-            icon={FileCode}
-            disabled={busy}
-            onClick={() =>
-              form(
-                '이미지 빌드',
-                [
-                  {
-                    key: 'context',
-                    label: 'Windows 소스 폴더',
-                    required: true,
-                    placeholder: 'D:\\PROJECTS\\my-app',
-                  },
-                  { key: 'tag', label: '이미지 태그', required: true, placeholder: 'my-app:dev' },
-                  { key: 'dockerfile', label: 'Dockerfile', value: 'Dockerfile' },
-                ],
-                (v) => job('buildImage', v),
-              )
-            }
-          >
-            빌드
-          </Button>
-          <Button
-            icon={Download}
-            primary
-            disabled={busy}
-            onClick={() =>
-              form(
-                '이미지 가져오기',
-                [
-                  {
-                    key: 'image',
-                    label: '이미지 주소',
-                    required: true,
-                    placeholder: 'nginx:alpine',
-                  },
-                ],
-                (v) => job('pullImage', v),
-              )
-            }
-          >
-            이미지 가져오기
-          </Button>
-        </div>
-      </div>
-      <div className={tw.panel}>
+      <PageActions>
+        <PageAction
+          label="이미지 불러오기"
+          icon={Upload}
+          disabled={busy}
+          onClick={() =>
+            form(
+              '이미지 불러오기',
+              [
+                {
+                  key: 'file',
+                  label: 'Windows TAR 파일',
+                  required: true,
+                  placeholder: 'D:\\MySetting\\Downloads\\image.tar',
+                },
+              ],
+              (v) => job('importImage', v),
+            )
+          }
+        />
+        <PageAction
+          label="이미지 빌드"
+          icon={Hammer}
+          disabled={busy}
+          onClick={() =>
+            form(
+              '이미지 빌드',
+              [
+                {
+                  key: 'context',
+                  label: 'Windows 소스 폴더',
+                  required: true,
+                  placeholder: 'D:\\PROJECTS\\my-app',
+                },
+                { key: 'tag', label: '이미지 태그', required: true, placeholder: 'my-app:dev' },
+                { key: 'dockerfile', label: 'Dockerfile', value: 'Dockerfile' },
+              ],
+              (v) => job('buildImage', v),
+            )
+          }
+        />
+        <PageAction
+          label="이미지 가져오기"
+          icon={Download}
+          primary
+          disabled={busy}
+          onClick={() =>
+            form(
+              '이미지 가져오기',
+              [
+                {
+                  key: 'image',
+                  label: '이미지 주소',
+                  required: true,
+                  placeholder: 'nginx:alpine',
+                },
+              ],
+              (v) => job('pullImage', v),
+            )
+          }
+        />
+      </PageActions>
+      <div className={tw.gridPanel}>
         <Toolbar search={search} onSearch={setSearch} />
         <ResourceGrid query={data} columns={cols} filter={search} />
       </div>

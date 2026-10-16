@@ -1,8 +1,19 @@
 import React, { useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate, useParams, Link } from 'react-router-dom';
-import { Puzzle, Plus, Trash2, ChevronRight } from 'lucide-react';
-import { Button, IconButton, Empty, ErrorState, Skeleton, useData, useActions } from '../ui.jsx';
+import { useNavigate, useParams } from 'react-router-dom';
+import { Puzzle, Plus, Trash2, ChevronRight, ArrowLeft } from 'lucide-react';
+import {
+  Button,
+  IconButton,
+  Empty,
+  ErrorState,
+  Skeleton,
+  useData,
+  useActions,
+  PageActions,
+  PageAction,
+  usePageTitle,
+} from '../ui.jsx';
 import { cn, tw } from '../tw.js';
 import { api } from '../api.js';
 
@@ -19,6 +30,7 @@ export default function Extensions() {
     staleTime: Infinity,
     refetchOnWindowFocus: false,
   });
+  usePageTitle(id ? session.data?.title || '확장' : null);
   useEffect(() => {
     if (!session.data) return;
     const listener = (event) => {
@@ -51,14 +63,14 @@ export default function Extensions() {
   if (id)
     return (
       <section className={cn(tw.page, 'h-full')}>
-        <div className={tw.pageIntro}>
-          <div>
-            <h2>{session.data?.title || '확장'}</h2>
-            <p>
-              <Link to="/extensions">설치된 확장으로 돌아가기</Link>
-            </p>
-          </div>
-        </div>
+        <PageActions>
+          <PageAction
+            icon={ArrowLeft}
+            label="설치된 확장으로 돌아가기"
+            onClick={() => navigate('/extensions')}
+          />
+        </PageActions>
+
         {session.isLoading ? (
           <Skeleton />
         ) : session.error ? (
@@ -77,12 +89,9 @@ export default function Extensions() {
     );
   return (
     <section className={tw.page}>
-      <div className={tw.pageIntro}>
-        <div>
-          <h2>개발 도구를 한곳에</h2>
-          <p>OCI 이미지로 제공되는 확장을 설치해 사용하세요.</p>
-        </div>
-        <Button
+      <PageActions>
+        <PageAction
+          label="확장 설치"
           icon={Plus}
           primary
           disabled={busy || !status?.ready}
@@ -107,10 +116,8 @@ export default function Extensions() {
               '확장은 Docker 엔진에 접근하고, 패키지가 선언한 Windows 실행파일 및 VM 서비스를 실행할 수 있습니다.',
             )
           }
-        >
-          확장 설치
-        </Button>
-      </div>
+        />
+      </PageActions>
       {data.isLoading ? (
         <Skeleton />
       ) : data.error ? (

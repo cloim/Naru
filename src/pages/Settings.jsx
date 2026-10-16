@@ -41,7 +41,15 @@ import {
   ShipWheel,
   Tag,
 } from 'lucide-react';
-import { useActions, useData, Button, Skeleton, ErrorState } from '../ui.jsx';
+import {
+  useActions,
+  useData,
+  Button,
+  Skeleton,
+  ErrorState,
+  PageActions,
+  PageAction,
+} from '../ui.jsx';
 import { cn, tw } from '../tw.js';
 import { api, downloadConfig } from '../api.js';
 import { Modal } from '../components/Modal/Modal.jsx';
@@ -60,18 +68,9 @@ function Settings() {
   const locked = !!status?.running && status?.managed !== false;
   return (
     <section className={cn(tw.page, 'max-w-[1150px]')}>
-      <div className={tw.pageIntro}>
-        <div>
-          <h2>내 환경에 맞게</h2>
-          <p>
-            {status?.managed === false
-              ? 'External Engine의 기존 Docker 엔진에 연결되어 있습니다.'
-              : locked
-                ? '설정을 변경하려면 엔진을 정상 종료해 주세요.'
-                : '변경한 설정은 다음 엔진 시작에 적용됩니다.'}
-          </p>
-        </div>
-        <Button
+      <PageActions>
+        <PageAction
+          label="설정 저장"
           primary
           icon={Check}
           disabled={locked || saving}
@@ -87,10 +86,8 @@ function Settings() {
               setSaving(false);
             }
           }}
-        >
-          설정 저장
-        </Button>
-      </div>
+        />
+      </PageActions>
       <section className={cn(tw.panel, tw.group)}>
         <h3>연결할 엔진</h3>
         <SelectControl
@@ -102,10 +99,13 @@ function Settings() {
           <option value="external-engine">External Engine의 Docker 엔진 공유</option>
           <option value="managed">Naru 독립 엔진</option>
         </SelectControl>
-        <p className={tw.groupText}>
-          공유 모드는 같은 컨테이너와 데이터를 표시합니다. 엔진 실행과 종료는 External Engine에서
-          관리합니다.
-        </p>
+        {(locked || value.connection === 'external-engine') && (
+          <p className={cn(tw.groupText, 'mt-3')}>
+            {locked
+              ? '설정을 변경하려면 엔진을 정상 종료해 주세요.'
+              : '공유 모드에서는 엔진 설정을 External Engine에서 관리합니다.'}
+          </p>
+        )}
       </section>
       <fieldset
         disabled={locked || saving || value.connection === 'external-engine'}
@@ -115,9 +115,9 @@ function Settings() {
           <h3>컨테이너 엔진</h3>
           <div className="mb-5.5 flex gap-3.5 max-desktop:flex-col">
             {[
-              ['moby', 'Docker (Moby)', 'Docker API와 Compose를 사용하는 개발 환경'],
-              ['containerd', 'containerd', 'nerdctl과 Kubernetes 중심의 개발 환경'],
-            ].map(([key, title, description]) => (
+              ['moby', 'Docker (Moby)'],
+              ['containerd', 'containerd'],
+            ].map(([key, title]) => (
               <label
                 className={cn(
                   'flex flex-1 items-center gap-3 rounded-[9px] border border-line p-5 [&_input]:accent-brand',
@@ -131,10 +131,7 @@ function Settings() {
                   checked={value.engine === key}
                   onChange={() => setValue({ ...value, engine: key })}
                 />
-                <div>
-                  <strong>{title}</strong>
-                  <p className="mt-1.5 text-[11px] text-muted">{description}</p>
-                </div>
+                <strong>{title}</strong>
               </label>
             ))}
           </div>
@@ -236,25 +233,9 @@ function Settings() {
               onChange={(e) => setValue({ ...value, pollSeconds: Number(e.target.value) })}
             />
           </label>
-          <p className={tw.groupText}>
-            컨테이너와 리소스 목록에 적용합니다. 작업 진행 상태는 더 자주 확인해요.
-          </p>
         </section>
       </fieldset>
       <ConnectionTools />
-      <div className={cn(tw.panel, tw.group)}>
-        <h3>독립 실행 환경</h3>
-        <p className={tw.groupText}>
-          WSL 배포판: <code>naru</code>
-        </p>
-        <p className={tw.groupText}>
-          데이터: <code>{status?.dataPath}</code>
-        </p>
-        <p className={tw.groupText}>
-          Docker와 containerd의 이미지 및 볼륨은 각각 보존됩니다. WSL 메모리와 CPU 제한은 Windows의
-          공유 WSL 설정을 따릅니다.
-        </p>
-      </div>
     </section>
   );
 }
@@ -315,9 +296,6 @@ function ConnectionTools() {
           로그아웃
         </Button>
       </div>
-      <p className={cn(tw.groupText, 'mt-3.5')}>
-        Docker CLI는 선택한 엔진에 연결됩니다. 터미널에서 docker ps와 docker compose를 사용해요.
-      </p>
     </section>
   );
 }

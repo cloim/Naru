@@ -10,6 +10,8 @@ import {
   RuntimeEmpty,
   ResourceGrid,
   Toolbar,
+  PageActions,
+  PageAction,
 } from '../ui.jsx';
 import { cn, tw } from '../tw.js';
 import { downloadConfig } from '../api.js';
@@ -83,7 +85,6 @@ function Kubernetes() {
         colId: 'name',
         minWidth: 230,
         flex: 1.3,
-        filterable: true,
         valueGetter: ({ data: r }) => r.metadata.name,
       },
       {
@@ -91,7 +92,6 @@ function Kubernetes() {
         colId: 'namespace',
         minWidth: 160,
         flex: 0.8,
-        filterable: true,
         valueGetter: ({ data: r }) => r.metadata.namespace || '클러스터',
       },
       {
@@ -153,58 +153,53 @@ function Kubernetes() {
   if (!status?.ready) return status ? <RuntimeEmpty /> : <Skeleton />;
   return (
     <section className={tw.page}>
-      <div className={tw.pageIntro}>
-        <div>
-          <h2>로컬 클러스터</h2>
-          <p>
-            {status.kubernetes.version} | API 포트 {status.kubernetes.port}
-          </p>
-        </div>
-        <div className={tw.introActions}>
-          <Button icon={Play} disabled={busy} onClick={() => job('startKubernetes')}>
-            시작
-          </Button>
-          <Button
-            icon={Square}
-            disabled={busy}
-            onClick={() =>
-              confirm('Kubernetes 종료', '컨테이너 엔진은 계속 실행됩니다.', () =>
-                job('stopKubernetes'),
-              )
-            }
-          >
-            종료
-          </Button>
-          <Button icon={Download} onClick={() => downloadConfig().catch(notify)}>
-            kubeconfig
-          </Button>
-          <Button
-            primary
-            icon={Plus}
-            disabled={busy}
-            onClick={() =>
-              form(
-                '리소스 적용',
-                [
-                  {
-                    key: 'yaml',
-                    label: 'Kubernetes YAML',
-                    type: 'textarea',
-                    rows: 14,
-                    required: true,
-                    placeholder:
-                      'apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: example\ndata:\n  key: value',
-                  },
-                ],
-                (v) => job('kubeApply', v),
-              )
-            }
-          >
-            YAML 적용
-          </Button>
-        </div>
-      </div>
-      <div className={tw.panel}>
+      <PageActions>
+        <PageAction
+          label="Kubernetes 시작"
+          icon={Play}
+          disabled={busy}
+          onClick={() => job('startKubernetes')}
+        />
+        <PageAction
+          label="Kubernetes 종료"
+          icon={Square}
+          disabled={busy}
+          onClick={() =>
+            confirm('Kubernetes 종료', '컨테이너 엔진은 계속 실행됩니다.', () =>
+              job('stopKubernetes'),
+            )
+          }
+        />
+        <PageAction
+          label="kubeconfig 내려받기"
+          icon={Download}
+          onClick={() => downloadConfig().catch(notify)}
+        />
+        <PageAction
+          label="YAML 적용"
+          primary
+          icon={Plus}
+          disabled={busy}
+          onClick={() =>
+            form(
+              '리소스 적용',
+              [
+                {
+                  key: 'yaml',
+                  label: 'Kubernetes YAML',
+                  type: 'textarea',
+                  rows: 14,
+                  required: true,
+                  placeholder:
+                    'apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: example\ndata:\n  key: value',
+                },
+              ],
+              (v) => job('kubeApply', v),
+            )
+          }
+        />
+      </PageActions>
+      <div className={tw.gridPanel}>
         <div className={cn(tw.actions, 'px-5.5 pt-5')}>
           <SelectControl
             aria-label="리소스 종류"
