@@ -169,6 +169,44 @@ export async function jobList() {
   );
 }
 let submitting = false;
+// 끝난 작업 기록은 최근 30일, 최대 200건만 남긴다. 같은 id로 시작하는 로그, 입력 사본, 임시 파일도 함께 지운다.
+// 기록이 없는 파일은 접수 중일 수 있으므로(입력 사본을 기록보다 먼저 쓴다) 1시간이 지난 것만 지운다.
+const JOB_KEEP_DAYS = 30,
+  JOB_KEEP_COUNT = 200,
+  ORPHAN_GRACE_MS = 3600000;
+export async function pruneJobs(now = Date.now()) {
+  const dir = path.join(DATA, 'jobs'),
+    jobs = await jobList(),
+    cutoff = now - JOB_KEEP_DAYS * 86400000;
+  const kept = new Set(
+    jobs
+      .filter(
+        (job, index) =>
+          ['queued', 'running'].includes(job.state) ||
+          (index < JOB_KEEP_COUNT && Date.parse(job.createdAt) >= cutoff),
+      )
+      .map((job) => job.id),
+  );
+  const recorded = new Map(jobs.map((job) => [job.id, job]));
+  for (const file of await fs.readdir(dir)) {
+    const id = file.slice(0, 36),
+      target = path.join(dir, file),
+      job = recorded.get(id);
+    const finished = job && !['queued', 'running'].includes(job.state);
+    // 남길 작업이라도 끝난 작업의 입력 사본은 지운다. 임시 파일은 쓰는 중일 수 있어 유예한다.
+    if (
+      kept.has(id) &&
+      !(finished && file.endsWith('.input.json.private')) &&
+      !file.endsWith('.tmp')
+    )
+      continue;
+    if (!job || file.endsWith('.tmp')) {
+      const stat = await fs.stat(target).catch(() => null);
+      if (!stat || now - stat.mtimeMs < ORPHAN_GRACE_MS) continue;
+    }
+    await fs.rm(target, { force: true });
+  }
+}
 export async function reconcileJobs() {
   for (const job of await jobList()) {
     if (!['running', 'queued'].includes(job.state)) continue;
@@ -205,6 +243,7 @@ export async function reconcileJobs() {
     if (e.code !== 'ENOENT') throw e;
   }
 }
+  await pruneJobs();
 export async function submit(type, input) {
   const payload = validateJob(type, input);
   assertSharedJob(type, await settings());
