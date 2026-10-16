@@ -22,6 +22,7 @@ test('shared Docker connection validates engine and protects runtime owner', () 
     'installExtension',
     'createForward',
   ])
+    'removeForward',
     assert.throws(() => assertSharedJob(type, cfg));
   for (const type of [
     'createContainer',

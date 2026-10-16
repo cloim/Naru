@@ -113,6 +113,7 @@ export const jobNames = {
   createForward: '포트 전달 시작',
   stopForward: '포트 전달 종료',
   registryLogin: '레지스트리 로그인',
+  removeForward: '포트 전달 기록 삭제',
   registryLogout: '레지스트리 로그아웃',
   installExtension: '확장 설치',
   uninstallExtension: '확장 제거',

@@ -8,7 +8,7 @@ import { wsl, command } from './runner.js';
 import * as runtime from './runtime.js';
 import * as engine from './engine.js';
 import { validateJob } from './jobs.js';
-import { createForward, stopForward } from './forwarding.js';
+import { createForward, stopForward, removeForward } from './forwarding.js';
 import { ensureWindowsTool } from './tools.js';
 import { installExtension, uninstallExtension } from './extensions.js';
 import { ensureCredentialHelper } from './registry.js';
@@ -50,6 +50,9 @@ try {
       await stopForward(p.id, log);
       break;
     case 'registryLogin':
+    case 'removeForward':
+      await removeForward(p.id, log);
+      break;
       if (!external) await ensureCredentialHelper(log);
       await engine.cli(['login', p.server, '--username', p.username, '--password-stdin'], {
         input: p.password,

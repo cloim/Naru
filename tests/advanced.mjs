@@ -99,6 +99,8 @@ try {
   const f = (await api('/forwards')).find((x) => x.localPort === 49284 && x.state === 'running');
   assert.ok(f);
   await job('stopForward', { id: f.id });
+  await job('removeForward', { id: f.id });
+  assert.ok(!(await api('/forwards')).some((x) => x.id === f.id));
   await job('kubeDelete', { kind: 'services', name: 'naru-web-verification' });
   await job('kubeDelete', { kind: 'deployments', name: 'naru-web-verification' });
   await job('stopRuntime');

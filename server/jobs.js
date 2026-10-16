@@ -131,6 +131,7 @@ export const jobSchemas = {
     .strict(),
   stopForward: z.object({ id: z.uuid() }).strict(),
   registryLogin: z
+  removeForward: z.object({ id: z.uuid() }).strict(),
     .object({
       server: z
         .string()

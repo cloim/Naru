@@ -96,3 +96,15 @@ export async function stopForward(id, log) {
   await atomicJSON(file, { ...meta, state: 'stopped' });
   log('포트 전달을 종료했습니다.\n');
 }
+// 종료된 포트 전달 기록을 지운다. 엔진이 꺼져 있어도 기록은 지울 수 있다.
+export async function removeForward(id, log) {
+  const file = path.join(DATA, 'forwards', `${id}.json`);
+  const meta = await readJSON(file);
+  const active = (await distributions(true)).includes(DISTRO);
+  if (active && (await isForwardAlive(meta)))
+    throw new Error('실행 중인 포트 전달은 먼저 종료해 주세요.');
+  if (active)
+    await wsl(['rm', '-f', `/var/log/naru/forward-${id}.log`, `/run/naru/forwards/${id}.pid`]);
+  await fs.rm(file);
+  log('포트 전달 기록을 삭제했습니다.\n');
+}
