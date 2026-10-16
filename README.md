@@ -25,9 +25,9 @@ Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
 
 설정의 **연결할 엔진**에서 Naru 독립 엔진 또는 External Engine 공유를 선택합니다. 기존 데이터를 옮길 때는 먼저 백업하고 [이관 회고](docs/reviews/261016-external-data-migration.md)의 절차와 검증 항목을 참고합니다.
 
-공유 모드에서는 External Engine이 엔진 실행과 종료, Kubernetes와 확장을 담당합니다. Naru는 컨테이너, 이미지, 볼륨, 네트워크, Compose, 로그, exec와 터미널을 관리합니다. 런타임 종료, 스냅샷 복원과 WSL 변경 작업은 차단합니다. 공유 Compose 정의는 독립 모드의 정의와 별도 저장하여 기존 프로젝트에 잘못 적용하지 않도록 합니다.
+독립 모드의 Windows 연결은 Naru 서버가 여는 named pipe입니다. Docker 기본 context `naru`는 `naru_engine`을 쓰고, External Engine이 실행 중이 아니면 기본 `docker_engine` pipe도 같은 엔진으로 연결하여 context를 읽지 않는 Docker SDK와 도구도 그대로 동작합니다. 설정의 **Naru 서버 시작 시 엔진도 시작**(기본 켬)으로 서버가 시작될 때 엔진과 재시작 정책이 있는 컨테이너가 함께 올라옵니다. process manager를 사용하는 환경에서는 패드의 자동 시작을 설정할 수 있습니다.
 
-기존 Naru 배포판과 데이터는 보존하고 종료해 두었습니다. 이번 연결에는 데이터 이전이나 External Engine 삭제가 포함되지 않습니다. 이후 독립 이관은 배포판과 데이터 백업, 실행 환경의 관리 전환, External Engine 종료 및 재부팅 후 동작 검증을 거쳐 수행합니다. 실행 중인 프로세스와 연결 상태까지 그대로 유지되는 전환을 보장하지 않습니다.
+dockerd는 `/etc/naru/dockerd.json`의 containerd snapshotter와 `min-api-version 1.41`을 사용하여 External Engine과 같은 이미지 저장소와 API 범위를 유지합니다. 컨테이너가 공개한 포트는 WSL localhost 전달로 Windows의 `127.0.0.1`에서 접속합니다. 모든 WSL 배포판이 같은 네트워크를 공유하므로 External Engine 엔진과 Naru 엔진을 동시에 실행하지 않습니다.
 
 ## Tailscale 원격 접속
 
