@@ -65,6 +65,7 @@ import {
   ShipWheel,
   Tag,
   Puzzle,
+  TriangleAlert,
 } from 'lucide-react';
 
 import { Modal } from './components/Modal/Modal.jsx';
@@ -90,8 +91,11 @@ function Shell() {
   const queryClient = useQueryClient(),
     navigate = useNavigate(),
     location = useLocation();
+  // 서버 재시작이나 wsl.exe 지연으로 한 번 실패한 조회는 다시 시도해 상단바 경고가 깜빡이지 않게 한다.
   const status = useData('status', '/status', {
       refetchInterval: (q) => (q.state.data?.pollSeconds || 5) * 1000,
+      retry: 2,
+      retryDelay: 1500,
     }),
     jobs = useData('jobs', '/jobs', {
       refetchInterval: (q) =>
@@ -329,34 +333,12 @@ function Shell() {
               <div className="flex items-center gap-2 max-tablet:gap-1.5">
                 <div ref={setActionSlot} className="flex items-center gap-2 max-tablet:gap-1.5" />
                 {status.error ? (
-                  <button className="text-accent underline" onClick={() => notify(status.error)}>
-                    상태 확인
-                  </button>
-                ) : status.data && status.data.managed !== false ? (
-                  status.data.installed ? (
-                    <PageAction
-                      icon={status.data.running ? Square : Play}
-                      label={status.data.running ? '엔진 종료' : '엔진 시작'}
-                      disabled={context.busy}
-                      onClick={() =>
-                        status.data.running
-                          ? confirm(
-                              '엔진 종료',
-                              'Naru의 컨테이너와 Kubernetes를 정상 종료합니다.',
-                              () => job('stopRuntime'),
-                            )
-                          : job('startRuntime')
-                      }
-                    />
-                  ) : (
-                    <PageAction
-                      primary
-                      icon={Download}
-                      label="런타임 설치"
-                      disabled={context.busy}
-                      onClick={() => job('installRuntime')}
-                    />
-                  )
+                  <PageAction
+                    icon={TriangleAlert}
+                    label="엔진 상태 조회 실패 원인 보기"
+                    className="text-danger"
+                    onClick={() => notify(status.error)}
+                  />
                 ) : null}
               </div>
             </header>
