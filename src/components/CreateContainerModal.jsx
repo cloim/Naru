@@ -1,7 +1,8 @@
 import { t, useLocale } from '../i18n.js';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Terminal, Bookmark, ClipboardPaste, Plus, Trash2, Check, Sparkles, ChevronDown } from 'lucide-react';
 import { Modal } from './Modal/Modal.jsx';
-import { Button } from '../ui.jsx';
+import { Button, CopyButton } from '../ui.jsx';
 import { tw, cn } from '../tw.js';
 
 export const CONTAINER_TEMPLATES = [
@@ -61,6 +62,27 @@ export const CONTAINER_TEMPLATES = [
   },
 ];
 
+export const DEFAULT_ENV_PRESETS = [
+  { name: 'Node.js (Dev)', env: 'NODE_ENV=development\nPORT=3000' },
+  {
+    name: 'PostgreSQL',
+    env: 'POSTGRES_USER=postgres\nPOSTGRES_PASSWORD=postgres\nPOSTGRES_DB=mydb',
+  },
+  { name: 'Redis', env: 'REDIS_PASSWORD=secret\nALLOW_EMPTY_PASSWORD=yes' },
+  { name: 'Python (Django)', env: 'PYTHONUNBUFFERED=1\nDEBUG=True' },
+  { name: 'Spring Boot', env: 'SPRING_PROFILES_ACTIVE=dev\nSERVER_PORT=8080' },
+];
+
+const PRESETS_STORAGE_KEY = 'naru.envPresets';
+
+function readCustomPresets() {
+  try {
+    return JSON.parse(localStorage.getItem(PRESETS_STORAGE_KEY) || '[]');
+  } catch {
+    return [];
+  }
+}
+
 export function parseMountsInput(text) {
   const trimmed = (text || '').trim();
   if (!trimmed || trimmed === '[]') return [];
@@ -117,6 +139,106 @@ export function parsePortsInput(text) {
     });
 }
 
+export function parseDockerRunCommand(str) {
+  const trimmed = (str || '').trim();
+  if (!trimmed) return null;
+  const tokens = [];
+  const regex = /[^\s"']+|"([^"]*)"|'([^']*)'/g;
+  let match;
+  while ((match = regex.exec(trimmed)) !== null) {
+    tokens.push(match[1] || match[2] || match[0]);
+  }
+  if (!tokens.length) return null;
+  let i = 0;
+  if (tokens[i] === 'docker') i++;
+  if (tokens[i] === 'container') i++;
+  if (tokens[i] === 'run') i++;
+
+  let name = '';
+  const portList = [];
+  const envList = [];
+  const mountList = [];
+  let image = '';
+  const cmdTokens = [];
+
+  while (i < tokens.length) {
+    const t = tokens[i];
+    if (t === '--name' && i + 1 < tokens.length) {
+      name = tokens[++i];
+    } else if (t.startsWith('--name=')) {
+      name = t.slice(7);
+    } else if ((t === '-p' || t === '--publish') && i + 1 < tokens.length) {
+      portList.push(tokens[++i]);
+    } else if (t.startsWith('-p=')) {
+      portList.push(t.slice(3));
+    } else if (t.startsWith('--publish=')) {
+      portList.push(t.slice(10));
+    } else if ((t === '-e' || t === '--env') && i + 1 < tokens.length) {
+      envList.push(tokens[++i]);
+    } else if (t.startsWith('-e=')) {
+      envList.push(t.slice(3));
+    } else if (t.startsWith('--env=')) {
+      envList.push(t.slice(6));
+    } else if ((t === '-v' || t === '--volume') && i + 1 < tokens.length) {
+      mountList.push(tokens[++i]);
+    } else if (t.startsWith('-v=')) {
+      mountList.push(t.slice(3));
+    } else if (t.startsWith('--volume=')) {
+      mountList.push(t.slice(9));
+    } else if (t.startsWith('-')) {
+      if (['--restart', '-w', '--workdir', '-u', '--user', '--network', '--entrypoint'].includes(t)) {
+        i++;
+      }
+    } else {
+      image = t;
+      i++;
+      while (i < tokens.length) {
+        cmdTokens.push(tokens[i++]);
+      }
+      break;
+    }
+    i++;
+  }
+
+  return {
+    image,
+    name,
+    ports: portList.join(', '),
+    env: envList.join('\n'),
+    mounts: mountList.join('\n'),
+    command: cmdTokens.join(' '),
+  };
+}
+
+export function generateDockerRunCommand({ image, name, ports, env, mounts, command }) {
+  const parts = ['docker run -d'];
+  if (name?.trim()) parts.push(`--name ${name.trim()}`);
+  if (ports?.trim()) {
+    ports
+      .split(',')
+      .map((p) => p.trim())
+      .filter(Boolean)
+      .forEach((p) => parts.push(`-p ${p}`));
+  }
+  if (env?.trim()) {
+    env
+      .split('\n')
+      .map((e) => e.trim())
+      .filter(Boolean)
+      .forEach((e) => parts.push(`-e "${e}"`));
+  }
+  if (mounts?.trim()) {
+    mounts
+      .split('\n')
+      .map((m) => m.trim())
+      .filter(Boolean)
+      .forEach((m) => parts.push(`-v "${m}"`));
+  }
+  parts.push(image?.trim() || '<image>');
+  if (command?.trim()) parts.push(command.trim());
+  return parts.join(' ');
+}
+
 export function CreateContainerModal({ isOpen, onClose, onSubmit, busy, initialValues }) {
   useLocale();
   const [image, setImage] = useState('');
@@ -126,6 +248,13 @@ export function CreateContainerModal({ isOpen, onClose, onSubmit, busy, initialV
   const [mounts, setMounts] = useState('');
   const [command, setCommand] = useState('');
   const [error, setError] = useState('');
+
+  const [showCliInput, setShowCliInput] = useState(false);
+  const [cliInput, setCliInput] = useState('');
+  const [showEnvPresets, setShowEnvPresets] = useState(false);
+  const [customPresets, setCustomPresets] = useState(readCustomPresets);
+  const [newPresetName, setNewPresetName] = useState('');
+  const [savingPreset, setSavingPreset] = useState(false);
 
   useEffect(() => {
     if (initialValues) {
@@ -144,6 +273,9 @@ export function CreateContainerModal({ isOpen, onClose, onSubmit, busy, initialV
       setMounts('');
       setCommand('');
       setError('');
+      setShowCliInput(false);
+      setCliInput('');
+      setShowEnvPresets(false);
     }
   }, [initialValues, isOpen]);
 
@@ -156,6 +288,51 @@ export function CreateContainerModal({ isOpen, onClose, onSubmit, busy, initialV
     setCommand(tpl.command);
     setError('');
   };
+
+  const applyCliCommand = () => {
+    const parsed = parseDockerRunCommand(cliInput);
+    if (!parsed || !parsed.image) {
+      setError(t('올바른 docker run 명령어를 입력해 주세요.'));
+      return;
+    }
+    if (parsed.image) setImage(parsed.image);
+    if (parsed.name) setName(parsed.name);
+    if (parsed.ports) setPorts(parsed.ports);
+    if (parsed.env) setEnv(parsed.env);
+    if (parsed.mounts) setMounts(parsed.mounts);
+    if (parsed.command) setCommand(parsed.command);
+    setShowCliInput(false);
+    setCliInput('');
+    setError('');
+  };
+
+  const handleApplyPreset = (presetEnv) => {
+    setEnv((prev) => (prev ? `${prev}\n${presetEnv}` : presetEnv));
+    setShowEnvPresets(false);
+  };
+
+  const handleSaveCustomPreset = () => {
+    if (!newPresetName.trim() || !env.trim()) return;
+    const updated = [...customPresets, { name: newPresetName.trim(), env: env.trim() }];
+    setCustomPresets(updated);
+    try {
+      localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(updated));
+    } catch {}
+    setNewPresetName('');
+    setSavingPreset(false);
+  };
+
+  const handleDeleteCustomPreset = (nameToDelete) => {
+    const updated = customPresets.filter((p) => p.name !== nameToDelete);
+    setCustomPresets(updated);
+    try {
+      localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(updated));
+    } catch {}
+  };
+
+  const generatedCliCommand = useMemo(() => {
+    return generateDockerRunCommand({ image, name, ports, env, mounts, command });
+  }, [image, name, ports, env, mounts, command]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -208,10 +385,41 @@ export function CreateContainerModal({ isOpen, onClose, onSubmit, busy, initialV
       }
     >
       <form id="create-container-form" onSubmit={handleSubmit} className="flex flex-col gap-3.5">
-        <div>
-          <span className="mb-1.5 block text-[12px] font-semibold text-[#536454]">
-            {t('빠른 시작 템플릿')}
-          </span>
+        {/* CLI 명령어 가져오기 토글 및 템플릿 바 */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[12px] font-semibold text-[#536454]">
+              {t('빠른 시작 템플릿')}
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowCliInput(!showCliInput)}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand hover:underline"
+            >
+              <Terminal size={13} />
+              {showCliInput ? t('CLI 입력 닫기') : t('Docker Run CLI 붙여넣기')}
+            </button>
+          </div>
+
+          {showCliInput && (
+            <div className="flex flex-col gap-2 rounded-[8px] border border-[#d2ddd0] bg-[#f8faf6] p-3">
+              <span className="text-[11px] text-[#536454]">
+                {t('터미널의 docker run 명령어를 붙여넣으면 양식에 맞추어 자동 파싱합니다.')}
+              </span>
+              <div className="flex gap-2">
+                <input
+                  value={cliInput}
+                  onChange={(e) => setCliInput(e.target.value)}
+                  placeholder="docker run -d --name my-app -p 8080:80 nginx:alpine"
+                  className="h-8.5 flex-1 rounded-[6px] border border-[#dce2d9] bg-white px-2.5 font-mono text-[12px] text-ink outline-0"
+                />
+                <Button primary compact type="button" onClick={applyCliCommand}>
+                  {t('명령어 적용')}
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-wrap items-center gap-1.5">
             {CONTAINER_TEMPLATES.map((tpl) => (
               <button
@@ -258,16 +466,89 @@ export function CreateContainerModal({ isOpen, onClose, onSubmit, busy, initialV
           <small>{t('호스트 포트:컨테이너 포트. Windows의 127.0.0.1에 공개합니다.')}</small>
         </label>
 
-        <label className={tw.field}>
-          <span>{t('환경 변수')}</span>
-          <textarea
-            rows={3}
-            placeholder={'APP_ENV=development\nLOG_LEVEL=info'}
-            value={env}
-            onChange={(e) => setEnv(e.target.value)}
-          />
-          <small>{t('줄마다 KEY=VALUE 형식으로 입력합니다.')}</small>
-        </label>
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[12px] font-semibold text-[#536454]">{t('환경 변수')}</span>
+            <button
+              type="button"
+              onClick={() => setShowEnvPresets(!showEnvPresets)}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand hover:underline"
+            >
+              <Bookmark size={12} />
+              {t('프리셋 허브')}
+            </button>
+          </div>
+
+          {showEnvPresets && (
+            <div className="flex flex-col gap-2 rounded-[8px] border border-[#d2ddd0] bg-[#f8faf6] p-3 text-[12px]">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-[#536454]">{t('추천 환경 변수 프리셋')}</span>
+                <button
+                  type="button"
+                  onClick={() => setSavingPreset(!savingPreset)}
+                  className="text-[11px] font-semibold text-brand hover:underline"
+                >
+                  {savingPreset ? t('취소') : t('현재 입력값 프리셋으로 저장')}
+                </button>
+              </div>
+
+              {savingPreset && (
+                <div className="flex gap-2 py-1">
+                  <input
+                    value={newPresetName}
+                    onChange={(e) => setNewPresetName(e.target.value)}
+                    placeholder={t('프리셋 이름 (예: My App Dev)')}
+                    className="h-8 flex-1 rounded-[6px] border border-[#dce2d9] bg-white px-2 text-[11px]"
+                  />
+                  <Button compact primary type="button" onClick={handleSaveCustomPreset}>
+                    {t('저장')}
+                  </Button>
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-1.5">
+                {DEFAULT_ENV_PRESETS.map((p) => (
+                  <button
+                    key={p.name}
+                    type="button"
+                    onClick={() => handleApplyPreset(p.env)}
+                    className="rounded-[5px] border border-[#dce2d9] bg-white px-2 py-1 font-mono text-[11px] text-[#425d48] hover:border-[#bdcdbb] hover:bg-[#edf5e8]"
+                  >
+                    + {p.name}
+                  </button>
+                ))}
+                {customPresets.map((p) => (
+                  <div
+                    key={p.name}
+                    className="inline-flex items-center gap-1 rounded-[5px] border border-[#bfe2ca] bg-[#eefaf2] px-2 py-1 font-mono text-[11px] text-[#1e6b37]"
+                  >
+                    <button type="button" onClick={() => handleApplyPreset(p.env)}>
+                      + {p.name}
+                    </button>
+                    <button
+                      type="button"
+                      className="text-[#8c978e] hover:text-danger"
+                      onClick={() => handleDeleteCustomPreset(p.name)}
+                      title={t('프리셋 삭제')}
+                    >
+                      <Trash2 size={11} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <label className={cn(tw.field, 'my-0')}>
+            <textarea
+              rows={3}
+              placeholder={'APP_ENV=development\nLOG_LEVEL=info'}
+              value={env}
+              onChange={(e) => setEnv(e.target.value)}
+            />
+            <small>{t('줄마다 KEY=VALUE 형식으로 입력합니다.')}</small>
+          </label>
+        </div>
 
         <label className={tw.field}>
           <span>{t('볼륨과 마운트')}</span>
@@ -292,6 +573,20 @@ export function CreateContainerModal({ isOpen, onClose, onSubmit, busy, initialV
           />
           <small>{t('일반 명령 문자열 또는 JSON 배열을 입력할 수 있습니다.')}</small>
         </label>
+
+        {/* 실시간 Docker CLI 명령어 프리뷰 */}
+        <div className="rounded-[8px] border border-[#dce4d6] bg-[#fbfcf9] p-3 text-[12px]">
+          <div className="mb-1.5 flex items-center justify-between">
+            <span className="flex items-center gap-1.5 font-semibold text-[#536454]">
+              <Terminal size={14} className="text-brand" />
+              {t('Docker CLI 명령어')}
+            </span>
+            <CopyButton text={generatedCliCommand} label={t('명령어 복사')} />
+          </div>
+          <pre className="max-h-[80px] overflow-auto font-mono text-[11px] leading-relaxed text-[#2c3d31] whitespace-pre-wrap select-all">
+            {generatedCliCommand}
+          </pre>
+        </div>
 
         {error && (
           <p role="alert" className="text-[12px] whitespace-pre-wrap text-[#ad413a]">

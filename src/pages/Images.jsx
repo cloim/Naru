@@ -46,9 +46,11 @@ import {
 } from 'lucide-react';
 import {
   useActions,
+  useData,
   Button,
   IconButton,
   Skeleton,
+  ErrorState,
   bytes,
   imageName,
   RuntimeEmpty,
@@ -62,11 +64,130 @@ import { cn, tw } from '../tw.js';
 import { api, downloadConfig } from '../api.js';
 import { Modal } from '../components/Modal/Modal.jsx';
 import SelectControl from '../components/SelectControl/SelectControl.tsx';
+function ImageLayerModal({ image, onClose }) {
+  useLocale();
+  const history = useData(
+    ['image-history', image.id],
+    `/images/${encodeURIComponent(image.id)}/history`,
+    { enabled: !!image.id },
+  );
+
+  const layers = useMemo(() => {
+    const list = history.data || [];
+    return list.map((l) => {
+      let cmd = l.CreatedBy || '';
+      cmd = cmd.replace(/^\/bin\/sh -c #(nop)\s+/, '');
+      cmd = cmd.replace(/^\/bin\/sh -c\s+/, 'RUN ');
+      cmd = cmd.replace(/\s+# buildkit$/, '');
+      const sizeNum = typeof l.Size === 'number' ? l.Size : 0;
+      return {
+        ...l,
+        cmd,
+        sizeNum,
+      };
+    });
+  }, [history.data]);
+
+  const totalCalculated = useMemo(
+    () => layers.reduce((acc, l) => acc + (l.sizeNum || 0), 0),
+    [layers],
+  );
+
+  const maxSize = useMemo(
+    () => Math.max(1, ...layers.map((l) => l.sizeNum || 0)),
+    [layers],
+  );
+
+  return (
+    <Modal
+      isOpen
+      onClose={onClose}
+      title={t('{0} 레이어 용량 분석', [image.name])}
+      size="xl"
+      footer={<Button onClick={onClose}>{t('닫기')}</Button>}
+    >
+      {history.isLoading ? (
+        <Skeleton />
+      ) : history.error ? (
+        <ErrorState error={history.error} retry={() => history.refetch()} />
+      ) : (
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-[#dce4d6] bg-[#fbfcf9] p-4 text-[12px]">
+            <div>
+              <span className="font-semibold text-[#536454]">{t('총 레이어 수')}: </span>
+              <strong className="text-ink">{layers.length}개</strong>
+            </div>
+            <div>
+              <span className="font-semibold text-[#536454]">{t('이미지 크기')}: </span>
+              <strong className="text-ink">{bytes(image.size || totalCalculated)}</strong>
+            </div>
+            <div>
+              <span className="font-semibold text-[#536454]">{t('최대 단일 레이어')}: </span>
+              <strong className="text-ink">{bytes(maxSize)}</strong>
+            </div>
+          </div>
+
+          <div className="max-h-[500px] overflow-y-auto rounded-[8px] border border-line">
+            <div className="flex flex-col divide-y divide-[#edf1ea]">
+              {layers.map((l, idx) => {
+                const ratio = Math.round(((l.sizeNum || 0) / maxSize) * 100);
+                const isHeavy = l.sizeNum > 50 * 1024 * 1024;
+                return (
+                  <div key={idx} className="flex flex-col gap-1.5 p-3 hover:bg-[#fcfdfa]">
+                    <div className="flex items-center justify-between gap-2 text-[12px]">
+                      <div className="flex items-center gap-2 font-mono">
+                        <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-[#edf3ec] text-[10px] font-semibold text-[#4d6650]">
+                          {layers.length - idx}
+                        </span>
+                        <span
+                          className={cn(
+                            'text-[11px] font-semibold',
+                            isHeavy ? 'text-[#b24639]' : 'text-ink',
+                          )}
+                        >
+                          {bytes(l.sizeNum)}
+                        </span>
+                        {l.sizeNum > 0 && totalCalculated > 0 && (
+                          <span className="text-[10px] text-muted">
+                            ({((l.sizeNum / totalCalculated) * 100).toFixed(1)}%)
+                          </span>
+                        )}
+                      </div>
+                      <span className="font-mono text-[10px] text-[#9aa297]">
+                        {l.Id ? l.Id.slice(0, 12) : '<missing>'}
+                      </span>
+                    </div>
+
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#edf1ea]">
+                      <div
+                        className={cn(
+                          'h-full rounded-full transition-all',
+                          isHeavy ? 'bg-[#b24639]' : 'bg-brand',
+                        )}
+                        style={{ width: `${Math.max(ratio, l.sizeNum > 0 ? 2 : 0)}%` }}
+                      />
+                    </div>
+
+                    <pre className="mt-1 font-mono text-[11px] leading-relaxed text-[#405244] whitespace-pre-wrap wrap-anywhere">
+                      {l.cmd || '(빈 명령)'}
+                    </pre>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 function Images() {
   const locale = useLocale();
   const { status, job, form, confirm, busy } = useActions(),
     data = useResource('images');
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(''),
+    [layerInspectImage, setLayerInspectImage] = useState(null);
   const sortedData = useMemo(() => {
     if (!data.data) return data.data;
     return [...data.data].sort((a, b) =>
@@ -108,10 +229,22 @@ function Images() {
       {
         headerName: '',
         colId: 'actions',
-        width: 250,
+        width: 290,
         sortable: false,
         cellRenderer: ({ data: r }) => (
           <div className={tw.rowActions}>
+            <IconButton
+              label={t('레이어 용량 분석')}
+              icon={Layers}
+              disabled={busy}
+              onClick={() =>
+                setLayerInspectImage({
+                  id: r.Id,
+                  name: imageName(r),
+                  size: r.Size,
+                })
+              }
+            />
             <IconButton
               label={t('실행')}
               icon={Play}
@@ -274,6 +407,12 @@ function Images() {
         <Toolbar search={search} onSearch={setSearch} />
         <ResourceGrid query={{ ...data, data: sortedData }} columns={cols} filter={search} />
       </div>
+      {layerInspectImage && (
+        <ImageLayerModal
+          image={layerInspectImage}
+          onClose={() => setLayerInspectImage(null)}
+        />
+      )}
     </section>
   );
 }

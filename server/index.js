@@ -5,10 +5,12 @@ import express from 'express';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
+import { spawn } from 'node:child_process';
 import { z } from 'zod';
 import {
   ROOT,
   DATA,
+  DISTRO,
   settings,
   saveSettings,
   settingsSchema,
@@ -246,6 +248,206 @@ app.delete('/api/containers/:id/files', async (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ message: e.message });
+  }
+});
+app.get('/api/volumes/:id/files', async (req, res) => {
+  const id = identifier.parse(req.params.id);
+  const vol = await engine.inspect('volumes', id);
+  const mountpoint = vol?.Mountpoint;
+  if (!mountpoint) throw new Error('볼륨 마운트 경로를 찾을 수 없습니다.');
+  const rawPath = String(req.query.path || '/');
+  const targetRel = path.posix.normalize(rawPath.startsWith('/') ? rawPath.slice(1) : rawPath);
+  const targetDir = path.posix.join(mountpoint, targetRel);
+  if (!targetDir.startsWith(mountpoint)) throw new Error('잘못된 접근 경로입니다.');
+  try {
+    const output = await wsl(
+      [
+        'sh',
+        '-c',
+        `ls -la --time-style=long-iso "${targetDir}" 2>/dev/null || ls -la "${targetDir}"`,
+      ],
+      { timeout: 15000 },
+    );
+    const lines = output.split(/\r?\n/).filter(Boolean);
+    const entries = [];
+    for (const line of lines) {
+      if (line.startsWith('total')) continue;
+      const parts = line.trim().split(/\s+/);
+      if (parts.length < 8) continue;
+      const mode = parts[0];
+      const isDir = mode.startsWith('d');
+      const name = parts.slice(mode.length > 0 && parts[5]?.includes('-') ? 7 : 8).join(' ');
+      if (!name || name === '.' || name === '..') continue;
+      const size = Number(parts[4]) || 0;
+      entries.push({
+        name,
+        path: path.posix.join('/' + targetRel, name),
+        isDir,
+        size,
+        mode,
+      });
+    }
+    entries.sort((a, b) => b.isDir - a.isDir || a.name.localeCompare(b.name));
+    res.json({ path: '/' + targetRel, entries });
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
+});
+app.get('/api/volumes/:id/files/content', async (req, res) => {
+  const id = identifier.parse(req.params.id);
+  const vol = await engine.inspect('volumes', id);
+  const mountpoint = vol?.Mountpoint;
+  if (!mountpoint) throw new Error('볼륨 마운트 경로를 찾을 수 없습니다.');
+  const rawPath = String(req.query.path || '');
+  const targetRel = path.posix.normalize(rawPath.startsWith('/') ? rawPath.slice(1) : rawPath);
+  const targetPath = path.posix.join(mountpoint, targetRel);
+  if (!targetPath.startsWith(mountpoint)) throw new Error('잘못된 접근 경로입니다.');
+  try {
+    const text = await wsl(['cat', targetPath], { timeout: 15000 });
+    res.json({ path: '/' + targetRel, text });
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
+});
+app.put('/api/volumes/:id/files/content', async (req, res) => {
+  const id = identifier.parse(req.params.id);
+  const vol = await engine.inspect('volumes', id);
+  const mountpoint = vol?.Mountpoint;
+  if (!mountpoint) throw new Error('볼륨 마운트 경로를 찾을 수 없습니다.');
+  const p = z
+    .object({
+      path: z.string().min(1).max(4096),
+      text: z.string().max(10 * 1024 * 1024),
+    })
+    .strict()
+    .parse(req.body);
+  const targetRel = path.posix.normalize(p.path.startsWith('/') ? p.path.slice(1) : p.path);
+  const targetPath = path.posix.join(mountpoint, targetRel);
+  if (!targetPath.startsWith(mountpoint)) throw new Error('잘못된 접근 경로입니다.');
+  try {
+    await wsl(['sh', '-c', `cat > "${targetPath}"`], { input: p.text, timeout: 15000 });
+    res.json({ ok: true, path: '/' + targetRel });
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
+});
+app.delete('/api/volumes/:id/files', async (req, res) => {
+  const id = identifier.parse(req.params.id);
+  const vol = await engine.inspect('volumes', id);
+  const mountpoint = vol?.Mountpoint;
+  if (!mountpoint) throw new Error('볼륨 마운트 경로를 찾을 수 없습니다.');
+  const rawPath = String(req.query.path || '');
+  const targetRel = path.posix.normalize(rawPath.startsWith('/') ? rawPath.slice(1) : rawPath);
+  if (!targetRel || targetRel === '.' || targetRel === '/')
+    throw new Error('루트 디렉터리는 삭제할 수 없습니다.');
+  const targetPath = path.posix.join(mountpoint, targetRel);
+  if (!targetPath.startsWith(mountpoint)) throw new Error('잘못된 접근 경로입니다.');
+  try {
+    await wsl(['rm', '-rf', targetPath], { timeout: 15000 });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
+});
+app.get('/api/volumes/:id/export', async (req, res) => {
+  const id = identifier.parse(req.params.id);
+  const vol = await engine.inspect('volumes', id);
+  const mountpoint = vol?.Mountpoint;
+  if (!mountpoint) throw new Error('볼륨 마운트 경로를 찾을 수 없습니다.');
+  res.setHeader('Content-Type', 'application/gzip');
+  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(id)}.tar.gz"`);
+  const child = spawn(
+    'wsl.exe',
+    [
+      '--distribution',
+      DISTRO,
+      '--user',
+      'root',
+      '--exec',
+      'tar',
+      '-czf',
+      '-',
+      '-C',
+      mountpoint,
+      '.',
+    ],
+    { windowsHide: true },
+  );
+  child.stdout.pipe(res);
+  child.on('error', (err) => {
+    if (!res.headersSent) res.status(500).send(err.message);
+  });
+});
+app.post(
+  '/api/volumes/:id/import',
+  express.raw({ type: '*/*', limit: '500mb' }),
+  async (req, res) => {
+    const id = identifier.parse(req.params.id);
+    const vol = await engine.inspect('volumes', id);
+    const mountpoint = vol?.Mountpoint;
+    if (!mountpoint) throw new Error('볼륨 마운트 경로를 찾을 수 없습니다.');
+    const child = spawn(
+      'wsl.exe',
+      ['--distribution', DISTRO, '--user', 'root', '--exec', 'tar', '-xzf', '-', '-C', mountpoint],
+      { windowsHide: true },
+    );
+    child.stdin.end(req.body);
+    child.on('close', (code) => {
+      if (code === 0) res.json({ ok: true });
+      else res.status(500).json({ message: `복원 실패 (exit code ${code})` });
+    });
+    child.on('error', (err) => res.status(500).json({ message: err.message }));
+  },
+);
+app.get('/api/images/:id/history', async (req, res) => {
+  const id = identifier.parse(req.params.id);
+  const cfg = await settings();
+  try {
+    if (cfg.engine === 'moby') {
+      const list = await engine.dockerRequest('GET', `/images/${encodeURIComponent(id)}/history`);
+      return res.json(list);
+    }
+    const lines = await engine.cli(['history', '--no-trunc', '--format', '{{json .}}', id]);
+    const parsed = lines
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((l) => {
+        try {
+          return JSON.parse(l);
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+    res.json(parsed);
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
+});
+app.post('/api/networks/ping', async (req, res) => {
+  const p = z
+    .object({
+      source: identifier,
+      target: z.string().min(1).max(512),
+      port: z.number().int().min(1).max(65535).optional(),
+    })
+    .strict()
+    .parse(req.body);
+  try {
+    const cmd = p.port
+      ? `nc -zv -w 2 "${p.target}" ${p.port} 2>&1 || timeout 2 bash -c "</dev/tcp/${p.target}/${p.port}" 2>&1`
+      : `ping -c 2 -W 2 "${p.target}" 2>&1 || getent hosts "${p.target}" 2>&1`;
+    const output = await engine.cli(['exec', p.source, 'sh', '-c', cmd], {
+      timeout: 10000,
+      fullResult: true,
+    });
+    res.json({
+      ok: output.code === 0,
+      output: output.stdout || output.stderr,
+      code: output.code,
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, output: e.message });
   }
 });
 let completedJobs = '';
