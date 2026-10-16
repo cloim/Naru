@@ -331,9 +331,12 @@ export function Toolbar({ search, onSearch, children, wrap }) {
         />
         {search && <IconButton label="검색 지우기" icon={X} onClick={() => onSearch('')} />}
       </div>
-      <div className={cn(tw.actions, wrap && 'max-tablet:w-full max-tablet:justify-between')}>
-        {children}
-      </div>
+      {/* 빈 동작 영역을 그리면 줄바꿈 간격만큼 아래 여백이 위보다 커진다. */}
+      {React.Children.toArray(children).length > 0 && (
+        <div className={cn(tw.actions, wrap && 'max-tablet:w-full max-tablet:justify-between')}>
+          {children}
+        </div>
+      )}
     </div>
   );
 }

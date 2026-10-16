@@ -184,9 +184,9 @@ function Settings() {
                   <option value="managed">Naru 독립 엔진</option>
                 </SelectControl>
               </section>
-              <fieldset disabled={managedLocked} className={fieldset}>
+              <fieldset disabled={managedLocked} className={cn(fieldset, 'mb-8')}>
                 <h3>컨테이너 엔진</h3>
-                <div className="mb-5.5 flex gap-3.5 max-desktop:flex-col">
+                <div className="mb-4 flex gap-3.5 max-desktop:flex-col">
                   {[
                     ['moby', 'Docker (Moby)'],
                     ['containerd', 'containerd'],
