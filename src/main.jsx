@@ -305,11 +305,9 @@ function Shell() {
           >
             <Link
               to="/"
-              className="mx-3.5 mb-11 flex flex-none items-center gap-2.5 rounded-[10px] hover:bg-[#ffffff0b] max-desktop:ml-3 max-tablet:mb-6"
+              className="mx-auto mb-11 flex w-fit max-w-full flex-none items-center rounded-[10px] hover:bg-[#ffffff0b] max-tablet:mb-6"
             >
-              <span className="flex w-full items-center justify-center rounded-[10px] bg-[#e8eedf] px-3 py-2.5">
-                <img className="h-auto w-full" src="/brand/naru-wordmark.png?v=20261017" alt="Naru" />
-              </span>
+              <img className="h-auto w-[100px] max-w-full" src="/brand/naru-wordmark.png?v=20261017c" alt="Naru" />
             </Link>
             <nav aria-label={t('주요 메뉴')} className="flex flex-col gap-1.25">
               {nav.map(([to, label, Icon]) => (
