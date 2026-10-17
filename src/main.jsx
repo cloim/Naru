@@ -307,11 +307,9 @@ function Shell() {
               to="/"
               className="mx-3.5 mb-11 flex flex-none items-center gap-2.5 rounded-[10px] hover:bg-[#ffffff0b] max-desktop:ml-3 max-tablet:mb-6"
             >
-              {/* 마크의 짙은 초록이 사이드바 배경에 묻히지 않도록 밝은 타일 위에 둔다. */}
-              <span className="flex h-9.5 w-9.5 flex-none items-center justify-center rounded-[10px] bg-[#e8eedf]">
-                <img className="h-8.5 w-8.5" src="/brand/naru-mark.png" alt="" />
+              <span className="flex w-full items-center justify-center rounded-[10px] bg-[#e8eedf] px-3 py-2.5">
+                <img className="h-auto w-full" src="/brand/naru-wordmark.png?v=20261017" alt="Naru" />
               </span>
-              <img className="h-6.5 w-auto" src="/brand/naru-wordmark-light.png" alt="Naru" />
             </Link>
             <nav aria-label={t('주요 메뉴')} className="flex flex-col gap-1.25">
               {nav.map(([to, label, Icon]) => (

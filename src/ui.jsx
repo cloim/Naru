@@ -284,7 +284,7 @@ export function RuntimeEmpty() {
   return (
     <div className="flex min-h-[calc(100dvh-86px)] flex-col items-center justify-center px-7.5 py-15 text-center max-tablet:min-h-[calc(100dvh-68px)]">
       <div className="mb-7 flex h-23.5 w-23.5 -rotate-5 items-center justify-center rounded-[26px] bg-[#e8eedf]">
-        <img className="h-16 w-16 rotate-5" src="/brand/naru-mark.png" alt="" />
+        <img className="h-16 w-16 rotate-5" src="/brand/naru-mark.png?v=20261017" alt="" />
       </div>
       <h2 className="mb-7 text-[34px] max-tablet:text-[28px]">
         {status?.installed
