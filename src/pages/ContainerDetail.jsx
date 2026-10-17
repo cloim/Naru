@@ -54,7 +54,8 @@ function ContainerDetail() {
     [execBusy, setExecBusy] = useState(false),
     [logSearch, setLogSearch] = useState(''),
     [autoScroll, setAutoScroll] = useState(true);
-  const logEndRef = useRef(null);
+  const logEndRef = useRef(null),
+    logPreRef = useRef(null);
   const detail = useData('inspect:' + id, `/containers/${id}/inspect`);
   const logs = useData('logs:' + id, `/containers/${id}/logs`, {
     enabled: tab === 'logs',
@@ -80,7 +81,11 @@ function ContainerDetail() {
 
   useEffect(() => {
     if (autoScroll && tab === 'logs') {
-      logEndRef.current?.scrollIntoView({ block: 'nearest' });
+      if (logPreRef.current) {
+        logPreRef.current.scrollTop = logPreRef.current.scrollHeight;
+      } else {
+        logEndRef.current?.scrollIntoView({ block: 'nearest' });
+      }
     }
   }, [logs.data?.text, autoScroll, tab]);
 
@@ -112,7 +117,7 @@ function ContainerDetail() {
     }
   };
   return (
-    <section className={tw.page}>
+    <section className={cn(tw.page, tab === 'logs' && 'h-full')}>
       <PageActions>
         <PageAction
           label={t('재시작')}
@@ -129,7 +134,7 @@ function ContainerDetail() {
           }
         />
       </PageActions>
-      <div className={cn(tw.panel, 'flex-1')}>
+      <div className={cn(tw.panel, 'flex-1', tab === 'logs' && 'flex min-h-0 flex-col')}>
         <div className={tw.tabs}>
           {[
             ['logs', t('로그')],
@@ -155,8 +160,8 @@ function ContainerDetail() {
           ) : logs.error ? (
             <ErrorState error={logs.error} retry={() => logs.refetch()} />
           ) : (
-            <div className="flex flex-col">
-              <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-line bg-[#fbfcf9] px-4 py-2.5">
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="flex flex-none flex-wrap items-center justify-between gap-2.5 border-b border-line bg-[#fbfcf9] px-4 py-2.5 max-tablet:px-3 max-tablet:py-2">
                 <div className="flex h-8.5 w-full max-w-[280px] items-center gap-2 rounded-[6px] border border-[#e3e8df] bg-white px-2.5 text-[#8c978e]">
                   <Search size={15} />
                   <input
@@ -202,9 +207,10 @@ function ContainerDetail() {
                 </div>
               </div>
               <pre
+                ref={logPreRef}
                 className={cn(
                   tw.terminal,
-                  'max-h-[600px] min-h-[400px] overflow-auto rounded-none',
+                  'min-h-0 flex-1 max-h-none overflow-auto rounded-none',
                 )}
                 aria-label={t('컨테이너 로그')}
               >
