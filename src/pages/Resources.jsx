@@ -1,10 +1,5 @@
 import { t, useLocale } from '../i18n.js';
-import React, {
-  createContext,
-  useContext,
-  useMemo,
-  useState,
-} from 'react';
+import React, { createContext, useContext, useMemo, useState } from 'react';
 import {
   Boxes,
   ChevronRight,
@@ -265,7 +260,9 @@ function Resources({ kind }) {
                 confirm(
                   t(volume ? '볼륨 삭제' : '네트워크 삭제'),
                   t(
-                    volume ? '{0}에 저장된 데이터도 함께 삭제됩니다.' : '{0} 네트워크를 삭제합니다.',
+                    volume
+                      ? '{0}에 저장된 데이터도 함께 삭제됩니다.'
+                      : '{0} 네트워크를 삭제합니다.',
                     [r.Name],
                   ),
                   () =>
@@ -346,187 +343,189 @@ function Resources({ kind }) {
         )}
       </div>
 
-      <Modal
-        isOpen={!!inspect}
-        onClose={() => {
-          setInspect(null);
-          setPingResult(null);
-        }}
-        title={t('{0} 구성 및 진단', [inspect?.Name || label])}
-        size={volume ? 'lg' : 'xl'}
-        resizable
-        storageKey="resource-inspect"
-        footer={<Button onClick={() => setInspect(null)}>{t('닫기')}</Button>}
-      >
-        {!volume ? (
-          <div className="flex flex-col gap-4">
-            <div className="flex border-b border-[#e3e8df]">
-              <button
-                type="button"
-                onClick={() => setModalTab('topology')}
-                className={cn(
-                  'flex items-center gap-2 border-b-2 px-4 py-2 text-[13px] font-semibold transition-colors',
-                  modalTab === 'topology'
-                    ? 'border-brand text-brand'
-                    : 'border-transparent text-[#7a857c] hover:text-ink',
-                )}
-              >
-                <NetworkIcon size={15} />
-                {t('연결 토폴로지 및 통신 점검')}
-              </button>
-              <button
-                type="button"
-                onClick={() => setModalTab('inspect')}
-                className={cn(
-                  'flex items-center gap-2 border-b-2 px-4 py-2 text-[13px] font-semibold transition-colors',
-                  modalTab === 'inspect'
-                    ? 'border-brand text-brand'
-                    : 'border-transparent text-[#7a857c] hover:text-ink',
-                )}
-              >
-                {t('구성 (JSON)')}
-              </button>
-            </div>
-
-            {modalTab === 'topology' ? (
-              <div className="flex flex-col gap-4">
-                <dl className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-1.5 text-[12px] [&_dd]:font-mono [&_dd]:break-all [&_dt]:font-semibold [&_dt]:text-[#536454]">
-                  <dt>{t('네트워크 드라이버')}</dt>
-                  <dd>{inspect.Driver || '-'}</dd>
-                  <dt>{t('서브넷 및 게이트웨이')}</dt>
-                  <dd>
-                    {inspect.IPAM?.Config?.[0]?.Subnet
-                      ? `${inspect.IPAM.Config[0].Subnet} (GW: ${inspect.IPAM.Config[0].Gateway || '-'})`
-                      : t('없음')}
-                  </dd>
-                </dl>
-
-                <div>
-                  <h4 className="mb-2 text-[12px] font-semibold text-[#536454]">
-                    {t('연결된 컨테이너 ({0}대)', [
-                      Object.keys(inspect.Containers || {}).length,
-                    ])}
-                  </h4>
-                  {Object.keys(inspect.Containers || {}).length === 0 ? (
-                    <div className="rounded-[7px] border border-dashed border-[#dce4d6] p-4 text-center text-[12px] text-muted">
-                      {t('이 네트워크에 연결된 컨테이너가 없습니다.')}
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      {Object.entries(inspect.Containers || {}).map(([cid, info]) => (
-                        <div
-                          key={cid}
-                          className="flex items-center justify-between rounded-[7px] border border-[#dce4d6] bg-[#fbfcf9] p-3 text-[12px]"
-                        >
-                          <div className="min-w-0 flex-1">
-                            <strong className="block truncate text-ink">{info.Name}</strong>
-                            <div className="mt-0.5 flex flex-wrap gap-2 font-mono text-[11px] text-[#718073]">
-                              <span>IP: {info.IPv4Address || '-'}</span>
-                              <span className="text-[#9aa297]">MAC: {info.MacAddress || '-'}</span>
-                            </div>
-                          </div>
-                          <Button
-                            compact
-                            className="ml-2 text-[11px]"
-                            onClick={() => {
-                              setPingSource(cid);
-                            }}
-                          >
-                            {t('출발지 선택')}
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
+      {inspect && (
+        <Modal
+          isOpen={!!inspect}
+          onClose={() => {
+            setInspect(null);
+            setPingResult(null);
+          }}
+          title={t('{0} 구성 및 진단', [inspect?.Name || label])}
+          size={volume ? 'lg' : 'xl'}
+          resizable
+          storageKey="resource-inspect"
+          footer={<Button onClick={() => setInspect(null)}>{t('닫기')}</Button>}
+        >
+          {!volume ? (
+            <div className="flex flex-col gap-4">
+              <div className="flex border-b border-[#e3e8df]">
+                <button
+                  type="button"
+                  onClick={() => setModalTab('topology')}
+                  className={cn(
+                    'flex items-center gap-2 border-b-2 px-4 py-2 text-[13px] font-semibold transition-colors',
+                    modalTab === 'topology'
+                      ? 'border-brand text-brand'
+                      : 'border-transparent text-[#7a857c] hover:text-ink',
                   )}
-                </div>
+                >
+                  <NetworkIcon size={15} />
+                  {t('연결 토폴로지 및 통신 점검')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModalTab('inspect')}
+                  className={cn(
+                    'flex items-center gap-2 border-b-2 px-4 py-2 text-[13px] font-semibold transition-colors',
+                    modalTab === 'inspect'
+                      ? 'border-brand text-brand'
+                      : 'border-transparent text-[#7a857c] hover:text-ink',
+                  )}
+                >
+                  {t('구성 (JSON)')}
+                </button>
+              </div>
 
-                <div className="rounded-[8px] border border-[#dce4d6] bg-[#fdfefb] p-4">
-                  <h4 className="mb-3 flex items-center gap-1.5 text-[13px] font-semibold text-ink">
-                    <Activity size={15} className="text-brand" />
-                    {t('통신 핑(Ping) 및 포트 점검')}
-                  </h4>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                    <label className="flex flex-col gap-1 text-[11px] font-semibold text-[#536454]">
-                      <span>{t('출발지 컨테이너')}</span>
-                      <select
-                        value={pingSource}
-                        onChange={(e) => setPingSource(e.target.value)}
-                        className="h-8.5 rounded-[6px] border border-[#dce2d9] bg-white px-2 font-mono text-[12px] text-ink"
-                      >
-                        <option value="">{t('컨테이너 선택…')}</option>
-                        {(containers.data || [])
-                          .filter((c) => c.State === 'running')
-                          .map((c) => (
-                            <option key={c.Id} value={c.Id}>
-                              {containerName(c)}
-                            </option>
-                          ))}
-                      </select>
-                    </label>
+              {modalTab === 'topology' ? (
+                <div className="flex flex-col gap-4">
+                  <dl className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-1.5 text-[12px] [&_dd]:font-mono [&_dd]:break-all [&_dt]:font-semibold [&_dt]:text-[#536454]">
+                    <dt>{t('네트워크 드라이버')}</dt>
+                    <dd>{inspect.Driver || '-'}</dd>
+                    <dt>{t('서브넷 및 게이트웨이')}</dt>
+                    <dd>
+                      {inspect.IPAM?.Config?.[0]?.Subnet
+                        ? `${inspect.IPAM.Config[0].Subnet} (GW: ${inspect.IPAM.Config[0].Gateway || '-'})`
+                        : t('없음')}
+                    </dd>
+                  </dl>
 
-                    <label className="flex flex-col gap-1 text-[11px] font-semibold text-[#536454]">
-                      <span>{t('목적지 (호스트/컨테이너 IP/이름)')}</span>
-                      <input
-                        value={pingTarget}
-                        onChange={(e) => setPingTarget(e.target.value)}
-                        placeholder="예: database or 172.17.0.2"
-                        className="h-8.5 rounded-[6px] border border-[#dce2d9] bg-white px-2 font-mono text-[12px] text-ink"
-                      />
-                    </label>
-
-                    <label className="flex flex-col gap-1 text-[11px] font-semibold text-[#536454]">
-                      <span>{t('포트 (선택 사항)')}</span>
-                      <div className="flex gap-2">
-                        <input
-                          value={pingPort}
-                          onChange={(e) => setPingPort(e.target.value)}
-                          placeholder="예: 80, 5432"
-                          type="number"
-                          className="h-8.5 flex-1 rounded-[6px] border border-[#dce2d9] bg-white px-2 font-mono text-[12px] text-ink"
-                        />
-                        <Button
-                          primary
-                          compact
-                          icon={Send}
-                          disabled={pingBusy || !pingSource || !pingTarget}
-                          onClick={runPing}
-                        >
-                          {pingBusy ? t('진단 중…') : t('진단')}
-                        </Button>
+                  <div>
+                    <h4 className="mb-2 text-[12px] font-semibold text-[#536454]">
+                      {t('연결된 컨테이너 ({0}대)', [Object.keys(inspect.Containers || {}).length])}
+                    </h4>
+                    {Object.keys(inspect.Containers || {}).length === 0 ? (
+                      <div className="rounded-[7px] border border-dashed border-[#dce4d6] p-4 text-center text-[12px] text-muted">
+                        {t('이 네트워크에 연결된 컨테이너가 없습니다.')}
                       </div>
-                    </label>
+                    ) : (
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        {Object.entries(inspect.Containers || {}).map(([cid, info]) => (
+                          <div
+                            key={cid}
+                            className="flex items-center justify-between rounded-[7px] border border-[#dce4d6] bg-[#fbfcf9] p-3 text-[12px]"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <strong className="block truncate text-ink">{info.Name}</strong>
+                              <div className="mt-0.5 flex flex-wrap gap-2 font-mono text-[11px] text-[#718073]">
+                                <span>IP: {info.IPv4Address || '-'}</span>
+                                <span className="text-[#9aa297]">
+                                  MAC: {info.MacAddress || '-'}
+                                </span>
+                              </div>
+                            </div>
+                            <Button
+                              compact
+                              className="ml-2 text-[11px]"
+                              onClick={() => {
+                                setPingSource(cid);
+                              }}
+                            >
+                              {t('출발지 선택')}
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
-                  {pingResult && (
-                    <div className="mt-3.5">
-                      <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold">
-                        {pingResult.ok ? (
-                          <span className="flex items-center gap-1 text-[#2d6f36]">
-                            <CheckCircle2 size={13} />
-                            {t('통신 정상')}
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-1 text-danger">
-                            <XCircle size={13} />
-                            {t('통신 실패')}
-                          </span>
-                        )}
-                      </div>
-                      <pre className={cn(tw.terminal, 'max-h-[160px] min-h-[70px] text-[11px]')}>
-                        {pingResult.output || t('결과가 없습니다.')}
-                      </pre>
+                  <div className="rounded-[8px] border border-[#dce4d6] bg-[#fdfefb] p-4">
+                    <h4 className="mb-3 flex items-center gap-1.5 text-[13px] font-semibold text-ink">
+                      <Activity size={15} className="text-brand" />
+                      {t('통신 핑(Ping) 및 포트 점검')}
+                    </h4>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <label className="flex flex-col gap-1 text-[11px] font-semibold text-[#536454]">
+                        <span>{t('출발지 컨테이너')}</span>
+                        <select
+                          value={pingSource}
+                          onChange={(e) => setPingSource(e.target.value)}
+                          className="h-8.5 rounded-[6px] border border-[#dce2d9] bg-white px-2 font-mono text-[12px] text-ink"
+                        >
+                          <option value="">{t('컨테이너 선택…')}</option>
+                          {(containers.data || [])
+                            .filter((c) => c.State === 'running')
+                            .map((c) => (
+                              <option key={c.Id} value={c.Id}>
+                                {containerName(c)}
+                              </option>
+                            ))}
+                        </select>
+                      </label>
+
+                      <label className="flex flex-col gap-1 text-[11px] font-semibold text-[#536454]">
+                        <span>{t('목적지 (호스트/컨테이너 IP/이름)')}</span>
+                        <input
+                          value={pingTarget}
+                          onChange={(e) => setPingTarget(e.target.value)}
+                          placeholder="예: database or 172.17.0.2"
+                          className="h-8.5 rounded-[6px] border border-[#dce2d9] bg-white px-2 font-mono text-[12px] text-ink"
+                        />
+                      </label>
+
+                      <label className="flex flex-col gap-1 text-[11px] font-semibold text-[#536454]">
+                        <span>{t('포트 (선택 사항)')}</span>
+                        <div className="flex gap-2">
+                          <input
+                            value={pingPort}
+                            onChange={(e) => setPingPort(e.target.value)}
+                            placeholder="예: 80, 5432"
+                            type="number"
+                            className="h-8.5 flex-1 rounded-[6px] border border-[#dce2d9] bg-white px-2 font-mono text-[12px] text-ink"
+                          />
+                          <Button
+                            primary
+                            compact
+                            icon={Send}
+                            disabled={pingBusy || !pingSource || !pingTarget}
+                            onClick={runPing}
+                          >
+                            {pingBusy ? t('진단 중…') : t('진단')}
+                          </Button>
+                        </div>
+                      </label>
                     </div>
-                  )}
+
+                    {pingResult && (
+                      <div className="mt-3.5">
+                        <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold">
+                          {pingResult.ok ? (
+                            <span className="flex items-center gap-1 text-[#2d6f36]">
+                              <CheckCircle2 size={13} />
+                              {t('통신 정상')}
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1 text-danger">
+                              <XCircle size={13} />
+                              {t('통신 실패')}
+                            </span>
+                          )}
+                        </div>
+                        <pre className={cn(tw.terminal, 'max-h-[160px] min-h-[70px] text-[11px]')}>
+                          {pingResult.output || t('결과가 없습니다.')}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <pre className={tw.jsonView}>{JSON.stringify(inspect, null, 2)}</pre>
-            )}
-          </div>
-        ) : (
-          <pre className={tw.jsonView}>{JSON.stringify(inspect, null, 2)}</pre>
-        )}
-      </Modal>
+              ) : (
+                <pre className={tw.jsonView}>{JSON.stringify(inspect, null, 2)}</pre>
+              )}
+            </div>
+          ) : (
+            <pre className={tw.jsonView}>{JSON.stringify(inspect, null, 2)}</pre>
+          )}
+        </Modal>
+      )}
 
       {exploreVolume && (
         <Modal
