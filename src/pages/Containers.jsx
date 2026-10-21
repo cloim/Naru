@@ -19,9 +19,10 @@ import {
   Hammer,
   Save,
   ArrowUpRight,
+  Globe,
   Search,
   X,
-  Sparkles,
+  BrushCleaning,
   Copy,
 } from 'lucide-react';
 import {
@@ -43,6 +44,7 @@ import {
 } from '../ui.jsx';
 import { cn, tw } from '../tw.js';
 import { api } from '../api.js';
+import { publicPortMappings } from '../container-ports.js';
 import { Modal } from '../components/Modal/Modal.jsx';
 import { CreateContainerModal } from '../components/CreateContainerModal.jsx';
 
@@ -105,7 +107,7 @@ function ProjectRow({ data: g }) {
         </small>
       </div>
       <Badge state={g.running > 0 ? 'running' : 'exited'}>
-        {g.total ? t('실행 {0}/{1}', [g.running, g.total]) : t('컨테이너 없음')}
+        {`${g.running}/${g.total}`}
       </Badge>
       {named && (
         <div className={cn(tw.rowActions, 'ml-auto')} onClick={(e) => e.stopPropagation()}>
@@ -422,7 +424,7 @@ function ProjectManage({ group, onClose, onLogs, containers = [] }) {
                     const subDomain = cleanName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
                     const serviceName = c.Labels?.['com.docker.compose.service'] || cleanName;
                     const networks = Object.keys(c.NetworkSettings?.Networks || {});
-                    const ports = (c.Ports || []).filter((p) => p.PublicPort);
+                    const ports = publicPortMappings(c.Ports);
                     return (
                       <div
                         key={c.Id}
@@ -476,16 +478,11 @@ function ProjectManage({ group, onClose, onLogs, containers = [] }) {
                                       :{p.PublicPort}
                                       <ArrowUpRight size={11} />
                                     </a>
-                                    <a
-                                      href={vhostUrl}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="inline-flex items-center gap-0.5 rounded-[4px] border border-[#bfe2ca] bg-[#eefaf2] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[#1e6b37] hover:underline"
-                                      title={vhostUrl}
-                                    >
-                                      .localhost
-                                      <ArrowUpRight size={10} />
-                                    </a>
+                                    <IconButton
+                                      icon={Globe}
+                                      label={t('{0} 가상 도메인으로 열기', [vhostUrl])}
+                                      onClick={() => window.open(vhostUrl, '_blank', 'noopener,noreferrer')}
+                                    />
                                   </div>
                                 );
                               })}
@@ -716,8 +713,8 @@ function Containers() {
       {
         headerName: t('컨테이너'),
         colId: 'name',
-        minWidth: 230,
-        flex: 1.3,
+        width: 250,
+        minWidth: 200,
         valueGetter: ({ data: r }) => containerName(r),
         cellRenderer: ({ data: r }) => (
           <div className={cn(tw.nameCell, 'pl-7 max-tablet:pl-4')}>
@@ -738,20 +735,22 @@ function Containers() {
       {
         field: 'State',
         headerName: t('상태'),
-        width: 125,
+        width: 85,
+        minWidth: 85,
+        maxWidth: 95,
         cellRenderer: ({ value }) => <Badge state={value} />,
       },
-      { field: 'Image', headerName: t('이미지'), minWidth: 190, flex: 1.2, filterable: true },
+      { field: 'Image', headerName: t('이미지'), width: 230, minWidth: 180, filterable: true },
       {
         headerName: t('포트'),
-        minWidth: 170,
-        flex: 0.9,
+        minWidth: 220,
+        flex: 1,
         valueGetter: ({ data: r }) =>
-          r.Ports?.filter((p) => p.PublicPort)
+          publicPortMappings(r.Ports)
             .map((p) => `${p.PublicPort} → ${p.PrivatePort}`)
             .join(', ') || '-',
         cellRenderer: ({ data: r }) => {
-          const publicPorts = r.Ports?.filter((p) => p.PublicPort) || [];
+          const publicPorts = publicPortMappings(r.Ports);
           if (!publicPorts.length) return <span className="text-[#8c978e]">-</span>;
           return (
             <div
@@ -768,23 +767,27 @@ function Containers() {
                       href={url}
                       target="_blank"
                       rel="noreferrer"
+                      data-no-row-click="true"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        window.__naru_no_row_click = Date.now();
+                      }}
                       className="inline-flex items-center gap-0.5 font-mono text-[#2c6e49] underline decoration-[#2c6e49]/30 hover:decoration-[#2c6e49]"
                       title={t('{0} 브라우저에서 열기', [url])}
                     >
                       <span>{`${p.PublicPort} → ${p.PrivatePort}`}</span>
                       <ArrowUpRight size={13} className="flex-none opacity-70" />
                     </a>
-                    <a
-                      href={virtualUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-0.5 rounded bg-[#edf5e7] px-1 py-0.5 font-mono text-[10px] text-[#3b6d47] hover:bg-[#e2edd9]"
-                      title={t('{0} 가상 도메인으로 열기', [virtualUrl])}
-                    >
-                      <span>.localhost</span>
-                      <ArrowUpRight size={10} className="flex-none opacity-70" />
-                    </a>
-                    <CopyButton text={url} label={t('{0} 주소 복사', [url])} />
+                    <IconButton
+                      icon={Globe}
+                      label={t('{0} 가상 도메인으로 열기', [virtualUrl])}
+                      data-no-row-click="true"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        window.__naru_no_row_click = Date.now();
+                        window.open(virtualUrl, '_blank', 'noopener,noreferrer');
+                      }}
+                    />
                   </div>
                 );
               })}
@@ -795,7 +798,8 @@ function Containers() {
       {
         headerName: '',
         colId: 'actions',
-        width: 188,
+        width: 175,
+        minWidth: 175,
         sortable: false,
         cellRenderer: ({ data: r }) => (
           <div className={tw.rowActions} onClick={(e) => e.stopPropagation()}>
@@ -884,6 +888,20 @@ function Containers() {
     <section className={tw.page}>
       <PageActions>
         <PageAction
+          label={t('미사용 리소스 정리')}
+          icon={BrushCleaning}
+          disabled={busy}
+          onClick={() =>
+            confirm(
+              t('미사용 리소스 정리'),
+              t(
+                '중지된 컨테이너, 태그 없는 이미지와 미사용 네트워크를 일괄 삭제하여 가상 디스크 용량을 확보합니다. 볼륨 데이터는 유지됩니다.',
+              ),
+              () => job('pruneResources', { all: true, volumes: false }),
+            )
+          }
+        />
+        <PageAction
           label={t('새 Compose 프로젝트')}
           icon={FolderPlus}
           disabled={busy}
@@ -913,20 +931,6 @@ function Containers() {
           }
         />
         <PageAction
-          label={t('미사용 리소스 정리')}
-          icon={Sparkles}
-          disabled={busy}
-          onClick={() =>
-            confirm(
-              t('미사용 리소스 정리'),
-              t(
-                '중지된 컨테이너, 태그 없는 이미지와 미사용 네트워크를 일괄 삭제하여 가상 디스크 용량을 확보합니다. 볼륨 데이터는 유지됩니다.',
-              ),
-              () => job('pruneResources', { all: true, volumes: false }),
-            )
-          }
-        />
-        <PageAction
           label={t('컨테이너 실행')}
           icon={Plus}
           primary
@@ -935,26 +939,53 @@ function Containers() {
         />
       </PageActions>
       <div className={tw.gridPanel}>
-        <div className={tw.tabs}>
-          {[
-            ['all', t('전체')],
-            ['running', t('실행 중')],
-            ['stopped', t('종료됨')],
-          ].map(([key, label]) => (
-            <button
-              key={key}
-              aria-pressed={tab === key}
-              className={cn(tw.tab, tab === key && tw.tabSelected)}
-              onClick={() => setTab(key)}
-            >
-              {label}
-              <span>{visible.filter((r) => inTab(r, key)).length}</span>
-            </button>
-          ))}
+        <div className="flex items-center justify-between border-b border-line px-5 max-tablet:px-3">
+          <div className="flex gap-5.5 overflow-x-auto">
+            {[
+              ['all', t('전체')],
+              ['running', t('실행 중')],
+              ['stopped', t('종료됨')],
+            ].map(([key, label]) => (
+              <button
+                key={key}
+                aria-pressed={tab === key}
+                className={cn(tw.tab, tab === key && tw.tabSelected)}
+                onClick={() => setTab(key)}
+              >
+                {label}
+                <span>{visible.filter((r) => inTab(r, key)).length}</span>
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-3 py-2">
+            <div className="flex h-8.5 w-56 items-center gap-2 rounded-[6px] border border-[#e3e8df] bg-[#fcfdfb] px-2.5 text-[#8c978e] max-tablet:w-40">
+              <Search size={15} />
+              <input
+                className="h-full min-w-0 flex-1 bg-transparent text-[12px] text-ink outline-0 placeholder:text-[#9aa29b]"
+                aria-label={t('목록 검색')}
+                placeholder={t('이름, 이미지, ID 검색')}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              {search && (
+                <IconButton label={t('검색 지우기')} icon={X} onClick={() => setSearch('')} />
+              )}
+            </div>
+            {systemToggle && !selectedIds.size && (
+              <label className={cn(tw.checkbox, 'whitespace-nowrap py-0 text-[12px] max-tablet:hidden')}>
+                <input
+                  type="checkbox"
+                  checked={showSystem}
+                  onChange={(e) => setShowSystem(e.target.checked)}
+                />{' '}
+                {t('시스템')}
+              </label>
+            )}
+          </div>
         </div>
-        <Toolbar search={search} onSearch={setSearch} wrap>
-          {selectedIds.size > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5 rounded-[6px] border border-[#d6e5cd] bg-[#f0f6ec] px-2.5 py-1 text-[12px] text-[#345c2f]">
+        {selectedIds.size > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#d6e5cd] bg-[#f0f6ec] px-5 py-2 text-[12px] text-[#345c2f]">
+            <div className="flex flex-wrap items-center gap-1.5">
               <strong className="font-semibold">{t('{0}대 선택', [selectedIds.size])}</strong>
               <Button
                 compact
@@ -1008,26 +1039,52 @@ function Containers() {
                 {t('선택 해제')}
               </Button>
             </div>
-          )}
-          {systemToggle && (
-            <label className={cn(tw.checkbox, 'whitespace-nowrap')}>
-              <input
-                type="checkbox"
-                checked={showSystem}
-                onChange={(e) => setShowSystem(e.target.checked)}
-              />{' '}
-              {t('시스템 컨테이너 표시')}{' '}
-            </label>
-          )}
-        </Toolbar>
+            {systemToggle && (
+              <label className={cn(tw.checkbox, 'whitespace-nowrap py-0 text-[12px]')}>
+                <input
+                  type="checkbox"
+                  checked={showSystem}
+                  onChange={(e) => setShowSystem(e.target.checked)}
+                />{' '}
+                {t('시스템 컨테이너 표시')}
+              </label>
+            )}
+          </div>
+        )}
         <ProjectContext.Provider value={projectContext}>
           <ResourceGrid
             query={{ ...data, data: rows }}
             columns={cols}
             collapsedGroups={collapsed}
             fullWidthCellRenderer={ProjectRow}
-            onRowClicked={({ data: r, event }) => {
-              if (r.__group !== undefined || event.target.closest('button')) return;
+            onRowClicked={(params) => {
+              const r = params.data;
+              if (!r || r.__group !== undefined) return;
+
+              // 최근 400ms 이내에 버튼, 복사 버튼, 링크를 클릭한 경우 차단
+              if (Date.now() - (window.__naru_no_row_click || 0) < 400) return;
+
+              // 포트 열, 액션 열, 선택 체크박스 열 클릭은 상세 이동 차단
+              const colId = params.column?.getColId?.();
+              if (colId === 'ports' || colId === 'actions' || colId === 'selection') return;
+
+              // 클릭 경로 중 인터랙티브 요소가 있으면 차단
+              const nativeEvt = params.event;
+              if (nativeEvt) {
+                const path = nativeEvt.composedPath?.() || [];
+                const isInteractive = path.some(
+                  (el) =>
+                    el instanceof HTMLElement &&
+                    (el.tagName === 'BUTTON' ||
+                      el.tagName === 'A' ||
+                      el.tagName === 'INPUT' ||
+                      el.hasAttribute('data-no-row-click') ||
+                      el.closest?.('button, a, input, [data-no-row-click]')),
+                );
+                if (isInteractive) return;
+                if (nativeEvt.target?.closest?.('button, a, input, [data-no-row-click]')) return;
+              }
+
               navigate('/containers/' + r.Id);
             }}
           />
