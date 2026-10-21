@@ -1,4 +1,3 @@
-import { EXTERNAL_HOST, assertSharedJob } from './external.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
@@ -32,8 +31,6 @@ try {
   job = { ...job, state: 'running', pid: process.pid, startedAt: new Date().toISOString() };
   await atomicJSON(file, job);
   const cfg = await settings();
-  const external = cfg.connection === 'external-engine';
-  assertSharedJob(job.type, cfg);
   switch (job.type) {
     case 'installRuntime':
       await runtime.install(log);
@@ -54,7 +51,7 @@ try {
       await removeForward(p.id, log);
       break;
     case 'registryLogin':
-      if (!external) await ensureCredentialHelper(log);
+      await ensureCredentialHelper(log);
       await engine.cli(['login', p.server, '--username', p.username, '--password-stdin'], {
         input: p.password,
         timeout: 60000,
@@ -72,7 +69,7 @@ try {
         if (e.code !== 'ENOENT') throw e;
       }
       await fs.mkdir(path.dirname(p.file), { recursive: true });
-      const file = external ? p.file : await wsl(['wslpath', '-a', p.file]);
+      const file = await wsl(['wslpath', '-a', p.file]);
       await engine.cli(['save', '-o', file, p.image], { timeout: 15 * 60 * 1000, log });
       log(`이미지 저장 완료: ${p.file}\n`);
       break;
@@ -188,8 +185,8 @@ try {
         ...new Set([...(userConfig.cliPluginsExtraDirs || []), path.join(bin, 'cli-plugins')]),
       ];
       await atomicJSON(path.join(userConfigDir, 'config.json'), userConfig);
-      const contextName = external ? 'external-engine' : 'naru';
-      const dockerHost = external ? EXTERNAL_HOST : 'npipe:////./pipe/naru_engine';
+      const contextName = 'naru';
+      const dockerHost = 'npipe:////./pipe/naru_engine';
       const contexts = engine.lines(
         await command(docker, [
           '--config',
@@ -276,6 +273,21 @@ try {
       log('미사용 리소스 정리(Prune) 완료.\n');
       break;
     }
+    case 'pruneImages': {
+      await engine.cli(['image', 'prune', '-a', '-f'], { timeout: 15 * 60 * 1000, log });
+      log('미사용 이미지 정리 완료.\n');
+      break;
+    }
+    case 'pruneVolumes': {
+      await engine.cli(['volume', 'prune', '-f'], { timeout: 15 * 60 * 1000, log });
+      log('미사용 볼륨 정리 완료.\n');
+      break;
+    }
+    case 'pruneNetworks': {
+      await engine.cli(['network', 'prune', '-f'], { timeout: 15 * 60 * 1000, log });
+      log('미사용 네트워크 정리 완료.\n');
+      break;
+    }
     case 'createContainer': {
       const args = ['run', '-d', '--restart', p.restart];
       if (p.name) args.push('--name', p.name);
@@ -288,9 +300,7 @@ try {
         const source = m.source.startsWith('/')
           ? m.source
           : /^[a-zA-Z]:[\\/]/.test(m.source)
-            ? external
-              ? m.source
-              : await wsl(['wslpath', '-a', m.source])
+            ? await wsl(['wslpath', '-a', m.source])
             : m.source;
         args.push(
           '--mount',
@@ -305,7 +315,7 @@ try {
       const context = path.resolve(p.context);
       const stat = await fs.stat(context);
       if (!stat.isDirectory()) throw new Error('빌드 context는 폴더여야 합니다.');
-      const target = external ? context : await wsl(['wslpath', '-a', context]);
+      const target = await wsl(['wslpath', '-a', context]);
       await engine.cli(['build', '-f', `${target}/${p.dockerfile}`, '-t', p.tag, target], {
         timeout: 30 * 60 * 1000,
         log,

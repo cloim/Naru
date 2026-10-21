@@ -1,4 +1,4 @@
-import { requireManaged } from './external.js';
+import { requireManaged } from './runtime.js';
 import http, { createServer as createHttpServer } from 'node:http';
 import { registerTerminal } from './terminal.js';
 import express from 'express';
@@ -140,6 +140,13 @@ for (const kind of ['containers', 'images', 'volumes', 'networks']) {
     res.json(await engine.inspect(kind, identifier.parse(req.params.id))),
   );
 }
+app.get('/api/:kind/prune-preview', async (req, res) => {
+  const kind = req.params.kind;
+  if (!['images', 'volumes', 'networks'].includes(kind)) {
+    return res.status(400).json({ error: '지원하지 않는 리소스 종류입니다.' });
+  }
+  res.json(await engine.getPrunePreview(kind));
+});
 app.get('/api/containers/:id/logs', async (req, res) =>
   res.json({ text: await engine.logs(identifier.parse(req.params.id)) }),
 );

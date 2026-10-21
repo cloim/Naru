@@ -46,6 +46,8 @@ import {
 } from 'lucide-react';
 import { api } from './api.js';
 import { cn, tw } from './tw.js';
+import { Tooltip } from './components/Tooltip.jsx';
+export { Tooltip };
 export const DataGrid = lazy(() =>
   import('./components/DataGrid/DataGrid.jsx').then((m) => ({ default: m.DataGrid })),
 );
@@ -124,6 +126,9 @@ export const jobNames = {
   importImage: '이미지 불러오기',
   scanImage: '이미지 분석',
   pruneResources: '미사용 리소스 정리',
+  pruneImages: '미사용 이미지 정리',
+  pruneVolumes: '미사용 볼륨 정리',
+  pruneNetworks: '미사용 네트워크 정리',
 };
 
 export const stateNames = { queued: '접수', running: '진행 중', succeeded: '완료', failed: '실패' };
@@ -147,7 +152,7 @@ export function Button({ icon: Icon, children, primary, compact, className, ...p
 
 // 삭제 버튼: 표 안(danger="row")은 배경과 마우스 효과 없이 빨간 아이콘만, 카드 안(danger)은 마우스를 올리면 연한 빨간 배경을 보인다.
 export function IconButton({ icon: Icon, label, danger, className, ...props }) {
-  return (
+  const button = (
     <button
       className={cn(
         'inline-flex min-h-8.5 min-w-8.5 flex-none items-center justify-center rounded-[6px] bg-transparent p-2 text-[#738177] enabled:hover:bg-[#edf2e7] enabled:hover:text-brand max-tablet:min-h-9.5 max-tablet:min-w-9.5',
@@ -155,13 +160,13 @@ export function IconButton({ icon: Icon, label, danger, className, ...props }) {
         danger === 'row' && 'enabled:hover:bg-transparent',
         className,
       )}
-      title={label}
       aria-label={label}
       {...props}
     >
       <Icon size={16} aria-hidden="true" />
     </button>
   );
+  return label ? <Tooltip content={label}>{button}</Tooltip> : button;
 }
 
 export function CopyButton({ text, label, className }) {
@@ -170,6 +175,8 @@ export function CopyButton({ text, label, className }) {
   const copy = useCallback(
     (e) => {
       e.stopPropagation();
+      e.nativeEvent?.stopImmediatePropagation?.();
+      window.__naru_no_row_click = Date.now();
       if (!text) return;
       if (navigator.clipboard?.writeText) {
         navigator.clipboard.writeText(String(text));
@@ -181,19 +188,21 @@ export function CopyButton({ text, label, className }) {
   );
   const title = label || (copied ? t('복사 완료') : t('클립보드에 복사'));
   return (
-    <button
-      type="button"
-      className={cn(
-        'inline-flex h-6 w-6 flex-none items-center justify-center rounded-[4px] text-[#8c978e] transition-colors hover:bg-[#edf2e7] hover:text-brand',
-        copied && 'text-[#407543]',
-        className,
-      )}
-      title={title}
-      aria-label={title}
-      onClick={copy}
-    >
-      {copied ? <Check size={13} aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />}
-    </button>
+    <Tooltip content={title}>
+      <button
+        type="button"
+        data-no-row-click="true"
+        className={cn(
+          'inline-flex h-6 w-6 flex-none items-center justify-center rounded-[4px] text-[#8c978e] transition-colors hover:bg-[#edf2e7] hover:text-brand',
+          copied && 'text-[#407543]',
+          className,
+        )}
+        aria-label={title}
+        onClick={copy}
+      >
+        {copied ? <Check size={13} aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />}
+      </button>
+    </Tooltip>
   );
 }
 
@@ -202,12 +211,11 @@ export function Badge({ state, children }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.75 rounded-[5px] bg-[#f0f2ee] px-2 py-1.25 text-[11px] leading-none font-semibold whitespace-nowrap text-[#7a837c] [&>span]:h-1.25 [&>span]:w-1.25 [&>span]:rounded-full [&>span]:bg-current',
+        'inline-flex items-center rounded-[5px] bg-[#f0f2ee] px-2 py-1.25 text-[11px] leading-none font-semibold whitespace-nowrap text-[#7a837c]',
         ['running', 'succeeded', 'ready'].includes(state) && 'bg-[#eef5e9] text-[#407543]',
         state === 'failed' && 'bg-[#faeeeb] text-[#b24639]',
       )}
     >
-      <span />
       {children ||
         { running: t('실행 중'), exited: t('종료'), created: t('생성됨'), paused: t('일시 정지') }[
           state
@@ -220,9 +228,13 @@ export function Badge({ state, children }) {
 export function Skeleton() {
   useLocale();
   return (
-    <div className="flex flex-col gap-4.5 p-7.5" aria-label={t('불러오는 중')}>
+    <div
+      className="skeleton-enter flex w-full min-w-0 flex-col gap-4.5 p-7.5"
+      role="status"
+      aria-label={t('불러오는 중')}
+    >
       {[1, 2, 3, 4].map((i) => (
-        <div className={tw.skeleton} key={i} />
+        <div className={tw.skeleton} key={i} aria-hidden="true" />
       ))}
     </div>
   );
@@ -274,13 +286,6 @@ export const imageName = (r) =>
 export function RuntimeEmpty() {
   useLocale();
   const { status, job, busy } = useActions();
-  if (status?.managed === false)
-    return (
-      <Empty title={t('External Engine 엔진 연결을 확인해 주세요')}>
-        {' '}
-        {t('External Engine에서 Docker 엔진을 시작하면 Naru가 자동으로 연결합니다.')}{' '}
-      </Empty>
-    );
   return (
     <div className="flex min-h-[calc(100dvh-86px)] flex-col items-center justify-center px-7.5 py-15 text-center max-tablet:min-h-[calc(100dvh-68px)]">
       <div className="mb-7 flex h-23.5 w-23.5 -rotate-5 items-center justify-center rounded-[26px] bg-brand">
