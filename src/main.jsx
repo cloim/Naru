@@ -246,9 +246,9 @@ function Shell() {
   const nav = [
     ['/', t('컨테이너'), Container],
     ['/images', t('이미지'), Layers],
-    ['/kubernetes', 'Kubernetes', ShipWheel],
     ['/volumes', t('볼륨'), HardDrive],
     ['/networks', t('네트워크'), Network],
+    ['/kubernetes', 'Kubernetes', ShipWheel],
     ['/snapshots', t('스냅샷'), Camera],
     ['/extensions', t('확장'), Puzzle],
   ];
