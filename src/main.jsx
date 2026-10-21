@@ -7,7 +7,6 @@ const ContainerDetail = lazy(() => import('./pages/ContainerDetail.jsx'));
 const Images = lazy(() => import('./pages/Images.jsx'));
 const Resources = lazy(() => import('./pages/Resources.jsx'));
 const Kubernetes = lazy(() => import('./pages/Kubernetes.jsx'));
-const Forwards = lazy(() => import('./pages/Forwards.jsx'));
 const Snapshots = lazy(() => import('./pages/Snapshots.jsx'));
 const Settings = lazy(() => import('./pages/Settings.jsx'));
 const Diagnostics = lazy(() => import('./pages/Diagnostics.jsx'));
@@ -71,7 +70,6 @@ import {
 } from 'lucide-react';
 
 import { Modal } from './components/Modal/Modal.jsx';
-import { CommandPalette } from './components/CommandPalette/CommandPalette.jsx';
 import SelectControl from './components/SelectControl/SelectControl.tsx';
 import { api, downloadConfig } from './api.js';
 import { cn, tw } from './tw.js';
@@ -115,28 +113,8 @@ function Shell() {
     [alert, setAlert] = useState(null),
     [jobId, setJobId] = useState(null),
     [drawer, setDrawer] = useState(false),
-    [submitting, setSubmitting] = useState(false),
-    [paletteOpen, setPaletteOpen] = useState(false);
+    [submitting, setSubmitting] = useState(false);
 
-  const containers = useData('containers', '/containers', {
-    enabled: !!status.data?.ready,
-    refetchInterval: (status.data?.pollSeconds || 5) * 1000,
-  });
-  const runningCount = useMemo(
-    () => (containers.data || []).filter((c) => c.State === 'running').length,
-    [containers.data],
-  );
-
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setPaletteOpen((prev) => !prev);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
   const [mobile, setMobile] = useState(() => window.matchMedia('(max-width: 760px)').matches);
   const sidebarRef = useRef(null),
     menuRef = useRef(null);
@@ -269,7 +247,6 @@ function Shell() {
     ['/', t('컨테이너'), Container],
     ['/images', t('이미지'), Layers],
     ['/kubernetes', 'Kubernetes', ShipWheel],
-    ['/ports', t('포트 전달'), ArrowUpRight],
     ['/volumes', t('볼륨'), HardDrive],
     ['/networks', t('네트워크'), Network],
     ['/snapshots', t('스냅샷'), Camera],
@@ -354,30 +331,8 @@ function Shell() {
                 ) : (
                   <h1 className="min-w-0 truncate">{pageTitle || title}</h1>
                 )}
-                {status.data?.ready && (
-                  <Link
-                    to="/"
-                    className="ml-2 inline-flex flex-none items-center gap-1.5 rounded-[6px] bg-[#edf5e7] px-2.5 py-1 text-[11px] font-semibold text-[#3b6d47] transition-colors hover:bg-[#e2edd9]"
-                    title={t('실행 중인 컨테이너 목록으로 이동')}
-                  >
-                    <span className="h-1.75 w-1.75 rounded-full bg-[#407543]" />
-                    {t('실행 중 {0}', [runningCount])}
-                  </Link>
-                )}
               </div>
               <div className="flex items-center gap-2 max-tablet:gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setPaletteOpen(true)}
-                  className="inline-flex items-center gap-2 rounded-[7px] border border-[#e3e8df] bg-white px-2.5 py-1 text-[12px] text-[#7a857c] transition-colors hover:border-[#bdcdbb] hover:text-ink max-tablet:hidden"
-                  title={t('빠른 이동 (Ctrl+K)')}
-                >
-                  <Search size={14} />
-                  <span>{t('빠른 이동')}</span>
-                  <kbd className="rounded bg-[#f0f2ee] px-1 py-0.5 text-[10px] font-mono text-[#7a837c]">
-                    Ctrl+K
-                  </kbd>
-                </button>
                 <div ref={setActionSlot} className="flex items-center gap-2 max-tablet:gap-1.5" />
                 {status.error ? (
                   <PageAction
@@ -404,26 +359,15 @@ function Shell() {
             )}
             <main className="min-h-0 flex-1 overflow-auto [scrollbar-gutter:stable]">
               <Suspense fallback={<Skeleton />}>
-                {status.data?.managed === false &&
-                ['/kubernetes', '/ports', '/snapshots', '/extensions'].some((route) =>
-                  location.pathname.startsWith(route),
-                ) ? (
-                  <Empty title={t('External Engine에서 관리하는 기능입니다')}>
-                    {' '}
-                    {t(
-                      'Naru는 같은 Docker 엔진의 컨테이너, 이미지, 볼륨, 네트워크와 Compose를 관리합니다. 실행 환경과 Kubernetes는 External Engine에서 관리해 주세요.',
-                    )}{' '}
-                  </Empty>
-                ) : (
-                  <Routes>
-                    <Route path="/" element={<Containers />} />
+                <Routes>
+                  <Route path="/" element={<Containers />} />
                     <Route path="/containers/:id" element={<ContainerDetail />} />
                     <Route path="/images" element={<Images />} />
                     <Route path="/volumes" element={<Resources kind="volumes" />} />
                     <Route path="/networks" element={<Resources kind="networks" />} />
                     <Route path="/compose" element={<Navigate to="/" replace />} />
                     <Route path="/kubernetes" element={<Kubernetes />} />
-                    <Route path="/ports" element={<Forwards />} />
+                    <Route path="/ports" element={<Navigate to="/kubernetes?tab=forwards" replace />} />
                     <Route path="/extensions" element={<Extensions />} />
                     <Route path="/extensions/:id" element={<Extensions />} />
                     <Route path="/snapshots" element={<Snapshots />} />
@@ -440,7 +384,6 @@ function Shell() {
                       }
                     />
                   </Routes>
-                )}
               </Suspense>
             </main>
           </div>
@@ -469,19 +412,6 @@ function Shell() {
             }}
           />
         )}
-        <CommandPalette
-          isOpen={paletteOpen}
-          onClose={() => setPaletteOpen(false)}
-          onPrune={() => {
-            confirm(
-              t('미사용 리소스 정리'),
-              t(
-                '중지된 컨테이너, 태그 없는 이미지와 미사용 네트워크를 일괄 삭제하여 가상 디스크 용량을 확보합니다. 볼륨 데이터는 유지됩니다.',
-              ),
-              () => job('pruneResources', { all: true, volumes: false }),
-            );
-          }}
-        />
       </TopBar.Provider>
     </Actions.Provider>
   );
