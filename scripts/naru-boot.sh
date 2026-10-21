@@ -21,7 +21,7 @@ ulimit -n 65536
 mount --make-rshared / 2>/dev/null || true
 if [ "$engine" = 'moby' ]; then
   ln -sf /run/naru/docker.sock /var/run/docker.sock
-  # Same image store and API floor as External Engine, so migrated data and older clients keep working.
+  # Fixed min-api-version and containerd-snapshotter so migrated data and older clients keep working.
   if [ ! -f /etc/naru/dockerd.json ]; then
     printf '{\n  "min-api-version": "1.41",\n  "features": { "containerd-snapshotter": true }\n}\n' > /etc/naru/dockerd.json
   fi

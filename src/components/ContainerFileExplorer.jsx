@@ -174,7 +174,7 @@ export function ResourceFileExplorer({ containerId, targetType: propTargetType, 
   };
 
   return (
-    <div className="flex flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       {/* 탐색기 상단 툴바 */}
       <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-line bg-[#fbfcf9] px-4 py-2.5">
         <div className="flex min-w-0 flex-1 items-center gap-1.5 font-mono text-[12px]">
@@ -260,7 +260,7 @@ export function ResourceFileExplorer({ containerId, targetType: propTargetType, 
       </div>
 
       {/* 파일 목록 */}
-      <div className="max-h-[550px] min-h-[380px] overflow-y-auto p-2">
+      <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {files.isLoading ? (
           <Skeleton />
         ) : files.error ? (

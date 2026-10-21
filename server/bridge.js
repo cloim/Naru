@@ -1,5 +1,4 @@
 import { settings } from './state.js';
-import { EXTERNAL_PIPE } from './external.js';
 import net from 'node:net';
 import http from 'node:http';
 import { naruSocket } from './engine.js';
@@ -9,10 +8,11 @@ import { DISTRO } from './state.js';
 import { requireReady } from './runtime.js';
 
 const NARU_PIPE = '\\\\.\\pipe\\naru_engine';
+const DOCKER_PIPE = '\\\\.\\pipe\\docker_engine';
 const BODY_LIMIT = 16 * 1024 * 1024;
 
-// Managed mode speaks HTTP to the engine so Windows host paths can be translated, as external
-// Desktop's docker-proxy did. Everything else, including hijacked attach/exec streams, passes through.
+// Speaks HTTP to the engine so Windows host paths can be translated.
+// Everything else, including hijacked attach/exec streams, passes through.
 const engineAgent = new http.Agent({ keepAlive: true, maxSockets: 64, maxFreeSockets: 4 });
 engineAgent.createConnection = () => naruSocket();
 const engineProxy = http.createServer({ requestTimeout: 0, keepAliveTimeout: 60000 }, proxyRequest);
@@ -79,15 +79,10 @@ function proxyUpgrade(req, socket, head) {
   socket.on('close', () => upstream.destroy());
   upstream.on('close', () => socket.destroy());
 }
-// compat serves the default Docker pipe that External Engine left free; it never proxies to itself.
+// Serves the Docker pipe to the engine.
 export function startDockerBridge(pipe = NARU_PIPE, { compat = false } = {}) {
   // Clients half-close after sending stdin (docker exec -i); the reply must still flow back.
   const server = net.createServer({ allowHalfOpen: true }, async (socket) => {
-    const shared = (await settings()).connection === 'external-engine';
-    if (compat && shared) {
-      socket.destroy();
-      return;
-    }
     try {
       await requireReady();
     } catch {
@@ -95,15 +90,6 @@ export function startDockerBridge(pipe = NARU_PIPE, { compat = false } = {}) {
       return;
     }
     if (socket.destroyed) return;
-    if (shared) {
-      const upstream = net.connect(EXTERNAL_PIPE);
-      upstream.on('error', () => socket.destroy());
-      socket.on('error', () => upstream.destroy());
-      socket.on('close', () => upstream.destroy());
-      upstream.on('close', () => socket.destroy());
-      socket.pipe(upstream).pipe(socket);
-      return;
-    }
     engineProxy.emit('connection', socket);
   });
   server.on('error', (e) => console.error(`Docker named pipe bridge (${pipe}): ${e.message}`));
@@ -111,13 +97,13 @@ export function startDockerBridge(pipe = NARU_PIPE, { compat = false } = {}) {
   return server;
 }
 
-// External Engine owns docker_engine while it runs; claim it only in managed mode and retry while busy.
+// Serves the default Windows docker_engine pipe when available.
 export function startCompatBridge() {
   let server;
   const attempt = async () => {
-    if (server?.listening || (await settings()).connection !== 'managed') return;
+    if (server?.listening) return;
     server?.close();
-    server = startDockerBridge(EXTERNAL_PIPE, { compat: true });
+    server = startDockerBridge(DOCKER_PIPE, { compat: true });
   };
   attempt();
   setInterval(attempt, 30000).unref();
@@ -126,10 +112,6 @@ export function startCompatBridge() {
 export function startKubernetesBridge(port) {
   const sockets = new Set();
   const server = net.createServer(async (socket) => {
-    if ((await settings()).connection === 'external-engine') {
-      socket.destroy();
-      return;
-    }
     sockets.add(socket);
     socket.on('close', () => sockets.delete(socket));
     try {

@@ -2,7 +2,6 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import { DATA, atomicJSON, readJSON, settings } from './state.js';
-import { EXTERNAL_HOST } from './external.js';
 import { command } from './runner.js';
 import { ensureWindowsTool } from './tools.js';
 
@@ -18,11 +17,10 @@ export const projectName = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,127}$/);
 const split = (value) => (value ? value.split(',').filter(Boolean) : []);
 
 async function scope() {
-  const shared = (await settings()).connection === 'external-engine';
   return {
-    registry: path.join(DATA, shared ? 'projects-shared.json' : 'projects.json'),
-    managedDir: path.join(DATA, shared ? 'compose-shared' : 'compose'),
-    host: shared ? EXTERNAL_HOST : 'npipe:////./pipe/naru_engine',
+    registry: path.join(DATA, 'projects.json'),
+    managedDir: path.join(DATA, 'compose'),
+    host: 'npipe:////./pipe/naru_engine',
   };
 }
 const exists = (file) =>

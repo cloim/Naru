@@ -9,7 +9,7 @@ const errors = [];
 page.on('pageerror', (error) => errors.push(error.message));
 let writes = 0;
 const settings = {
-  connection: 'external-engine',
+  connection: 'managed',
   engine: 'docker',
   pollSeconds: 60,
   proxy: { http: '', https: '', noProxy: '' },
@@ -26,7 +26,7 @@ await page.route('**/api/**', async (route) => {
       installed: true,
       managed: true,
       pollSeconds: 60,
-      connection: 'external-engine',
+      connection: 'managed',
       kubernetes: { enabled: true },
     },
     '/api/settings': settings,

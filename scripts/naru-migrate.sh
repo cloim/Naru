@@ -1,5 +1,5 @@
 #!/bin/sh
-# Copies a stopped Docker data-root (e.g. External Engine /var/lib/docker bound at $1) into Naru.
+# Copies a stopped Docker data-root (e.g. /var/lib/docker bound at $1) into Naru.
 # Run inside the naru distribution as root while both engines are stopped.
 set -eu
 src="${1:-/mnt/wsl/naru-migrate/source}"
