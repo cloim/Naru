@@ -1,11 +1,23 @@
 import { t, useLocale, formatDate } from '../i18n.js';
 import React, { useMemo, useState } from 'react';
-import { Play, Square, Trash2, Download, Plus, Terminal, RefreshCw } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import {
+  Play,
+  Square,
+  Trash2,
+  Download,
+  Plus,
+  Terminal,
+  RefreshCw,
+  ArrowUpRight,
+} from 'lucide-react';
 import {
   useActions,
   useData,
   Button,
   IconButton,
+  CopyButton,
+  Badge,
   Skeleton,
   ErrorState,
   Empty,
@@ -65,6 +77,19 @@ export function kubernetesState(kind, r) {
 function Kubernetes() {
   const locale = useLocale();
   const { status, job, form, confirm, view, notify, busy } = useActions();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = searchParams.get('tab') === 'forwards' ? 'forwards' : 'resources';
+  const setTab = (nextTab) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (nextTab === 'resources') next.delete('tab');
+        else next.set('tab', nextTab);
+        return next;
+      },
+      { replace: true },
+    );
+  };
   const [kind, setKind] = useState('pods'),
     [search, setSearch] = useState(''),
     [namespace, setNamespace] = useState(''),
@@ -78,6 +103,10 @@ function Kubernetes() {
   const data = useData('kube:' + kind, '/kubernetes?kind=' + kind, {
     enabled: managed && running,
     refetchInterval: 10000,
+  });
+  const forwards = useData('forwards', '/forwards', {
+    enabled: managed && running,
+    refetchInterval: 5000,
   });
   const logs = useData(
     'pod-logs:' + logPod?.metadata.namespace + ':' + logPod?.metadata.name,
@@ -168,14 +197,90 @@ function Kubernetes() {
     ],
     [locale, kind, busy, confirm, job],
   );
+
+  const forwardColumns = useMemo(
+    () => [
+      { field: 'resource', headerName: t('리소스'), minWidth: 230, flex: 1.2 },
+      {
+        field: 'namespace',
+        headerName: t('네임스페이스'),
+        minWidth: 160,
+        flex: 0.7,
+        filterable: true,
+      },
+      {
+        headerName: t('로컬 주소'),
+        minWidth: 220,
+        flex: 1,
+        valueGetter: ({ data: r }) => `127.0.0.1:${r.localPort} → ${r.remotePort}`,
+        cellRenderer: ({ data: r }) => {
+          const url = `http://127.0.0.1:${r.localPort}`;
+          return (
+            <div
+              className="flex items-center gap-1.5 py-1 text-[12px]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {r.state === 'running' ? (
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 font-mono text-[#2c6e49] underline decoration-[#2c6e49]/30 hover:decoration-[#2c6e49]"
+                  title={t('{0} 브라우저에서 열기', [url])}
+                >
+                  <span>{`127.0.0.1:${r.localPort} → ${r.remotePort}`}</span>
+                  <ArrowUpRight size={13} className="flex-none opacity-70" />
+                </a>
+              ) : (
+                <span className="font-mono text-[#8c978e]">{`127.0.0.1:${r.localPort} → ${r.remotePort}`}</span>
+              )}
+              <CopyButton text={url} label={t('{0} 주소 복사', [url])} />
+            </div>
+          );
+        },
+      },
+      {
+        field: 'state',
+        headerName: t('상태'),
+        width: 130,
+        cellRenderer: ({ value }) => <Badge state={value} />,
+      },
+      {
+        headerName: '',
+        width: 90,
+        sortable: false,
+        cellRenderer: ({ data: r }) =>
+          r.state === 'running' ? (
+            <IconButton
+              icon={Square}
+              label={t('전달 종료')}
+              disabled={busy}
+              onClick={() => job('stopForward', { id: r.id })}
+            />
+          ) : (
+            <IconButton
+              icon={Trash2}
+              danger="row"
+              label={t('{0} 포트 전달 기록 삭제', [r.resource])}
+              disabled={busy}
+              onClick={() =>
+                confirm(
+                  t('포트 전달 기록 삭제'),
+                  t('{0}/{1} (127.0.0.1:{2}) 기록을 삭제합니다.', [
+                    r.namespace,
+                    r.resource,
+                    r.localPort,
+                  ]),
+                  () => job('removeForward', { id: r.id }),
+                )
+              }
+            />
+          ),
+      },
+    ],
+    [locale, busy, job, confirm],
+  );
   if (!status?.ready) return status ? <RuntimeEmpty /> : <Skeleton />;
-  if (!status.managed)
-    return (
-      <Empty title={t('Kubernetes는 Rancher Desktop에서 관리합니다')}>
-        {' '}
-        {t('공유 모드에서는 Rancher Desktop 화면에서 Kubernetes를 사용해 주세요.')}{' '}
-      </Empty>
-    );
   return (
     <section className={tw.page}>
       {running && (
@@ -195,29 +300,73 @@ function Kubernetes() {
             icon={Download}
             onClick={() => downloadConfig().catch(notify)}
           />
-          <PageAction
-            label={t('YAML 적용')}
-            primary
-            icon={Plus}
-            disabled={busy}
-            onClick={() =>
-              form(
-                t('리소스 적용'),
-                [
-                  {
-                    key: 'yaml',
-                    label: 'Kubernetes YAML',
-                    type: 'textarea',
-                    rows: 14,
-                    required: true,
-                    placeholder:
-                      'apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: example\ndata:\n  key: value',
-                  },
-                ],
-                (v) => job('kubeApply', v),
-              )
-            }
-          />
+          {tab === 'resources' ? (
+            <PageAction
+              label={t('YAML 적용')}
+              primary
+              icon={Plus}
+              disabled={busy}
+              onClick={() =>
+                form(
+                  t('리소스 적용'),
+                  [
+                    {
+                      key: 'yaml',
+                      label: 'Kubernetes YAML',
+                      type: 'textarea',
+                      rows: 14,
+                      required: true,
+                      placeholder:
+                        'apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: example\ndata:\n  key: value',
+                    },
+                  ],
+                  (v) => job('kubeApply', v),
+                )
+              }
+            />
+          ) : (
+            <PageAction
+              label={t('포트 연결')}
+              primary
+              icon={Plus}
+              disabled={busy}
+              onClick={() =>
+                form(
+                  t('포트 전달'),
+                  [
+                    {
+                      key: 'resource',
+                      label: t('대상 리소스'),
+                      required: true,
+                      placeholder: 'svc/my-web',
+                      hint: t('svc/이름, pod/이름, deployment/이름'),
+                    },
+                    { key: 'namespace', label: t('네임스페이스'), value: 'default' },
+                    {
+                      key: 'localPort',
+                      label: t('Windows 로컬 포트'),
+                      type: 'number',
+                      required: true,
+                      value: '8080',
+                    },
+                    {
+                      key: 'remotePort',
+                      label: t('대상 포트'),
+                      type: 'number',
+                      required: true,
+                      value: '80',
+                    },
+                  ],
+                  (v) =>
+                    job('createForward', {
+                      ...v,
+                      localPort: Number(v.localPort),
+                      remotePort: Number(v.remotePort),
+                    }),
+                )
+              }
+            />
+          )}
         </PageActions>
       )}
       {state.isLoading ? (
@@ -243,55 +392,85 @@ function Kubernetes() {
         </div>
       ) : (
         <div className={tw.gridPanel}>
-          <div className={cn(tw.actions, 'px-5.5 pt-5')}>
-            <SelectControl
-              aria-label={t('리소스 종류')}
-              value={kind}
-              onChange={(e) => {
-                setKind(e.target.value);
-                setNamespace('');
-              }}
+          <div className={tw.tabs}>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'resources'}
+              className={cn(tw.tab, tab === 'resources' && tw.tabSelected)}
+              onClick={() => setTab('resources')}
             >
-              {[
-                ['pods', t('파드')],
-                ['deployments', t('디플로이먼트')],
-                ['services', t('서비스')],
-                ['nodes', t('노드')],
-                ['namespaces', t('네임스페이스')],
-                ['configmaps', 'ConfigMap'],
-                ['persistentvolumeclaims', t('볼륨 클레임')],
-                ['events', t('이벤트')],
-              ].map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
-              ))}
-            </SelectControl>
-            {namespaces.length > 0 && (
-              <SelectControl
-                aria-label={t('네임스페이스 필터')}
-                value={namespace}
-                onChange={(e) => setNamespace(e.target.value)}
-              >
-                <option value="">{t('모든 네임스페이스')}</option>
-                {namespaces.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </SelectControl>
-            )}
+              {t('리소스')}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'forwards'}
+              className={cn(tw.tab, tab === 'forwards' && tw.tabSelected)}
+              onClick={() => setTab('forwards')}
+            >
+              {t('포트 전달')}
+              {forwards.data?.length > 0 && <span>{forwards.data.length}</span>}
+            </button>
           </div>
-          <Toolbar search={search} onSearch={setSearch} />
-          <ResourceGrid
-            query={{ ...data, data: rows }}
-            columns={cols}
-            filter={search}
-            onRowClicked={({ data: r, event }) => {
-              if (event.target.closest('button')) return;
-              view(t('{0} 구성', [r.metadata.name]), r);
-            }}
-          />
+          {tab === 'resources' ? (
+            <>
+              <div className={cn(tw.actions, 'px-5.5 pt-5')}>
+                <SelectControl
+                  aria-label={t('리소스 종류')}
+                  value={kind}
+                  onChange={(e) => {
+                    setKind(e.target.value);
+                    setNamespace('');
+                  }}
+                >
+                  {[
+                    ['pods', t('파드')],
+                    ['deployments', t('디플로이먼트')],
+                    ['services', t('서비스')],
+                    ['nodes', t('노드')],
+                    ['namespaces', t('네임스페이스')],
+                    ['configmaps', 'ConfigMap'],
+                    ['persistentvolumeclaims', t('볼륨 클레임')],
+                    ['events', t('이벤트')],
+                  ].map(([key, label]) => (
+                    <option key={key} value={key}>
+                      {label}
+                    </option>
+                  ))}
+                </SelectControl>
+                {namespaces.length > 0 && (
+                  <SelectControl
+                    aria-label={t('네임스페이스 필터')}
+                    value={namespace}
+                    onChange={(e) => setNamespace(e.target.value)}
+                  >
+                    <option value="">{t('모든 네임스페이스')}</option>
+                    {namespaces.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </SelectControl>
+                )}
+              </div>
+              <Toolbar search={search} onSearch={setSearch} />
+              <ResourceGrid
+                query={{ ...data, data: rows }}
+                columns={cols}
+                filter={search}
+                onRowClicked={({ data: r, event }) => {
+                  if (event.target.closest('button')) return;
+                  view(t('{0} 구성', [r.metadata.name]), r);
+                }}
+              />
+            </>
+          ) : (
+            <>
+              <Toolbar search={search} onSearch={setSearch} />
+              <ResourceGrid query={forwards} columns={forwardColumns} filter={search} />
+            </>
+          )}
         </div>
       )}
       <Modal
