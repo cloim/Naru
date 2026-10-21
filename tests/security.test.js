@@ -109,6 +109,10 @@ test('shell injection, option injection, unknown fields, path traversal rejected
   );
   assert.throws(() => validateJob('removeForward', { id: '../../etc/passwd' }));
   assert.throws(() => validateJob('unknown', {}));
+  assert.deepEqual(validateJob('pruneImages', {}), {});
+  assert.deepEqual(validateJob('pruneVolumes', {}), {});
+  assert.deepEqual(validateJob('pruneNetworks', {}), {});
+  assert.throws(() => validateJob('pruneImages', { extra: 1 }));
 });
 test('destructive snapshot operations require exact explicit confirmation', () => {
   const id = '4c002b3b-1f13-4e2b-bff9-944d4adbdc3c';

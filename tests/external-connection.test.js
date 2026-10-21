@@ -1,42 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { settingsSchema } from '../server/state.js';
-import { assertSharedJob } from '../server/external.js';
-test('shared Docker connection validates engine and protects runtime owner', () => {
+
+test('settingsSchema validates defaults and types', () => {
   assert.equal(settingsSchema.parse({}).connection, 'managed');
   assert.equal(settingsSchema.parse({}).autoStart, true);
-  const cfg = settingsSchema.parse({ connection: 'rancher-desktop' });
-  assert.equal(cfg.engine, 'moby');
-  assert.throws(() =>
-    settingsSchema.parse({ connection: 'rancher-desktop', engine: 'containerd' }),
-  );
-  for (const type of [
-    'startRuntime',
-    'stopRuntime',
-    'compactDisk',
-    'installRuntime',
-    'startKubernetes',
-    'stopKubernetes',
-    'snapshot',
-    'restoreSnapshot',
-    'deleteSnapshot',
-    'installExtension',
-    'createForward',
-    'removeForward',
-  ])
-    assert.throws(() => assertSharedJob(type, cfg));
-  for (const type of [
-    'createContainer',
-    'containerAction',
-    'createVolume',
-    'buildImage',
-    'compose',
-    'exportImage',
-    'registryLogin',
-    'installCLI',
-  ])
-    assert.doesNotThrow(() => assertSharedJob(type, cfg));
-  assert.doesNotThrow(() => assertSharedJob('stopRuntime', { connection: 'managed' }));
+  assert.equal(settingsSchema.parse({}).engine, 'moby');
 });
 
 test('only screen and startup settings may change while the engine runs', async () => {

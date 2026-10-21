@@ -51,6 +51,10 @@ export function assertSharedJob(type, cfg) {
       'project',
       'registryLogin',
       'registryLogout',
+      'pruneResources',
+      'pruneImages',
+      'pruneVolumes',
+      'pruneNetworks',
     ]).has(type)
   )
     throw Error(

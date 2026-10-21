@@ -26,9 +26,6 @@ export default {
   상세: 'Details',
   '엔진 상태 조회 실패 원인 보기': 'View engine status error',
   '진행 보기': 'View progress',
-  'Rancher Desktop에서 관리하는 기능입니다': 'Managed by Rancher Desktop',
-  'Naru는 같은 Docker 엔진의 컨테이너, 이미지, 볼륨, 네트워크와 Compose를 관리합니다. 실행 환경과 Kubernetes는 Rancher Desktop에서 관리해 주세요.':
-    'Naru manages containers, images, volumes, networks and Compose on the same Docker engine. Manage the runtime and Kubernetes in Rancher Desktop.',
   '페이지를 찾을 수 없습니다': 'Page not found',
   '컨테이너로 이동': 'Go to containers',
   확인: 'OK',
@@ -78,9 +75,6 @@ export default {
   '불러오는 중': 'Loading',
   '연결을 확인해 주세요': 'Please check the connection',
   '다시 시도': 'Retry',
-  'Rancher Desktop 엔진 연결을 확인해 주세요': 'Check the Rancher Desktop engine connection',
-  'Rancher Desktop에서 Docker 엔진을 시작하면 Naru가 자동으로 연결합니다.':
-    'Naru connects automatically when you start the Docker engine in Rancher Desktop.',
   'Naru 엔진이 꺼져 있습니다': 'Naru engine is stopped',
   '독립 런타임이 설치되지 않았습니다': 'Standalone runtime is not installed',
   'Naru 엔진 시작': 'Start Naru engine',
@@ -242,9 +236,6 @@ export default {
   '정보 없음': 'Unavailable',
   'Kubernetes 리소스 삭제': 'Delete Kubernetes resource',
   '{0}{1} 리소스를 삭제합니다.': 'Delete resource {0}{1}.',
-  'Kubernetes는 Rancher Desktop에서 관리합니다': 'Kubernetes is managed by Rancher Desktop',
-  '공유 모드에서는 Rancher Desktop 화면에서 Kubernetes를 사용해 주세요.':
-    'Use Kubernetes in Rancher Desktop when using shared mode.',
   '컨테이너 엔진은 계속 실행됩니다.': 'The container engine keeps running.',
   'kubeconfig 내려받기': 'Download kubeconfig',
   'YAML 적용': 'Apply YAML',
@@ -276,18 +267,12 @@ export default {
   '설정을 저장했습니다.': 'Settings saved.',
   '엔진, Kubernetes와 프록시 설정은 엔진을 정상 종료한 뒤 바꿀 수 있습니다. 서버 시작 시 엔진 자동 시작과 화면 설정은 바로 저장됩니다.':
     'Stop the engine before changing engine, Kubernetes or proxy settings. Engine auto-start and display settings can be saved immediately.',
-  '공유 모드에서는 엔진 설정을 Rancher Desktop에서 관리합니다.':
-    'Engine settings are managed in Rancher Desktop in shared mode.',
   '설정 분류': 'Settings categories',
   '엔진 실행': 'Engine runtime',
   '설치 안 됨': 'Not installed',
   꺼짐: 'Off',
   'Naru의 컨테이너와 Kubernetes를 정상 종료합니다.':
     'Gracefully stop Naru containers and Kubernetes.',
-  '연결할 엔진': 'Engine to connect to',
-  '엔진 연결': 'Engine connection',
-  'Rancher Desktop의 Docker 엔진 공유': 'Share Rancher Desktop Docker engine',
-  'Naru 독립 엔진': 'Naru standalone engine',
   '컨테이너 엔진': 'Container engine',
   'containerd 네임스페이스': 'containerd namespace',
   'Naru 서버 시작 시 엔진도 시작': 'Start engine when Naru server starts',
@@ -370,6 +355,30 @@ export default {
   '미사용 리소스 정리': 'Prune unused resources',
   '중지된 컨테이너, 태그 없는 이미지와 미사용 네트워크를 일괄 삭제하여 가상 디스크 용량을 확보합니다. 볼륨 데이터는 유지됩니다.':
     'Remove stopped containers, untagged images, and unused networks to reclaim virtual disk space. Volume data is preserved.',
+  '미사용 이미지 정리': 'Prune unused images',
+  '컨테이너에 연결되지 않은 모든 이미지를 일괄 삭제합니다. 중지된 컨테이너가 참조하는 이미지는 유지됩니다.':
+    'Remove all images not referenced by any containers. Images used by stopped containers are preserved.',
+  '미사용 볼륨 정리': 'Prune unused volumes',
+  '컨테이너에 마운트되지 않은 모든 로컬 볼륨을 삭제합니다. 중지된 컨테이너에 연결된 볼륨은 유지됩니다.':
+    'Remove all local volumes not mounted by any containers. Volumes attached to stopped containers are preserved.',
+  '미사용 네트워크 정리': 'Prune unused networks',
+  '컨테이너가 연결되지 않은 모든 네트워크를 삭제합니다. 기본 네트워크와 컨테이너가 연결된 네트워크는 유지됩니다.':
+    'Remove all networks not used by any containers. Default networks and networks connected to containers are preserved.',
+  '미사용 이미지 정리 대상 확인': 'Confirm unused images to prune',
+  '미사용 볼륨 정리 대상 확인': 'Confirm unused volumes to prune',
+  '미사용 네트워크 정리 대상 확인': 'Confirm unused networks to prune',
+  '미사용 정리 대상 확인': 'Confirm unused resources to prune',
+  '{0}개 정리 실행': 'Prune {0} items',
+  '정리할 미사용 {0}이(가) 없습니다': 'No unused {0} to prune',
+  '모든 {0}이(가) 현재 실행 중이거나 중지된 컨테이너에 연결되어 있어 안전하게 유지됩니다.':
+    'All {0} are currently attached to running or stopped containers.',
+  '연결된 컨테이너가 없는 미사용 항목만 정리됩니다':
+    'Only items with no attached containers will be pruned',
+  '중지된 컨테이너라도 연결되어 있는 리소스는 보존되며, 아래 목록의 {0}개 항목만 영구 삭제됩니다.':
+    'Resources attached to stopped containers are preserved. Only the {0} items listed below will be permanently deleted.',
+  '총 {0}개 미사용 항목': 'Total {0} unused items',
+  '확보 예상 용량': 'Estimated reclaimed space',
+  리소스: 'Resources',
   '빠른 이동': 'Quick jump',
   '빠른 이동 (Ctrl+K)': 'Quick jump (Ctrl+K)',
   '빠른 이동, 컨테이너 검색, 작업 실행…': 'Jump to page, search containers, run actions…',

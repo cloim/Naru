@@ -43,6 +43,7 @@ import {
   Tag,
   Upload,
   Hammer,
+  BrushCleaning,
 } from 'lucide-react';
 import {
   useActions,
@@ -63,6 +64,7 @@ import {
 import { cn, tw } from '../tw.js';
 import { api, downloadConfig } from '../api.js';
 import { Modal } from '../components/Modal/Modal.jsx';
+import { PruneConfirmModal } from '../components/PruneConfirmModal.jsx';
 import SelectControl from '../components/SelectControl/SelectControl.tsx';
 function ImageLayerModal({ image, onClose }) {
   useLocale();
@@ -187,7 +189,8 @@ function Images() {
   const { status, job, form, confirm, busy } = useActions(),
     data = useResource('images');
   const [search, setSearch] = useState(''),
-    [layerInspectImage, setLayerInspectImage] = useState(null);
+    [layerInspectImage, setLayerInspectImage] = useState(null),
+    [pruneModalOpen, setPruneModalOpen] = useState(false);
   const sortedData = useMemo(() => {
     if (!data.data) return data.data;
     return [...data.data].sort((a, b) =>
@@ -343,23 +346,10 @@ function Images() {
     <section className={tw.page}>
       <PageActions>
         <PageAction
-          label={t('이미지 불러오기')}
-          icon={Upload}
+          label={t('미사용 이미지 정리')}
+          icon={BrushCleaning}
           disabled={busy}
-          onClick={() =>
-            form(
-              t('이미지 불러오기'),
-              [
-                {
-                  key: 'file',
-                  label: t('Windows TAR 파일'),
-                  required: true,
-                  placeholder: 'D:\\MySetting\\Downloads\\image.tar',
-                },
-              ],
-              (v) => job('importImage', v),
-            )
-          }
+          onClick={() => setPruneModalOpen(true)}
         />
         <PageAction
           label={t('이미지 빌드')}
@@ -379,6 +369,25 @@ function Images() {
                 { key: 'dockerfile', label: 'Dockerfile', value: 'Dockerfile' },
               ],
               (v) => job('buildImage', v),
+            )
+          }
+        />
+        <PageAction
+          label={t('이미지 불러오기')}
+          icon={Upload}
+          disabled={busy}
+          onClick={() =>
+            form(
+              t('이미지 불러오기'),
+              [
+                {
+                  key: 'file',
+                  label: t('Windows TAR 파일'),
+                  required: true,
+                  placeholder: 'D:\\MySetting\\Downloads\\image.tar',
+                },
+              ],
+              (v) => job('importImage', v),
             )
           }
         />
@@ -413,6 +422,16 @@ function Images() {
           onClose={() => setLayerInspectImage(null)}
         />
       )}
+      <PruneConfirmModal
+        isOpen={pruneModalOpen}
+        onClose={() => setPruneModalOpen(false)}
+        kind="images"
+        busy={busy}
+        onConfirm={async () => {
+          setPruneModalOpen(false);
+          await job('pruneImages');
+        }}
+      />
     </section>
   );
 }

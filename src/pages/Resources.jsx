@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   XCircle,
   Network as NetworkIcon,
+  BrushCleaning,
 } from 'lucide-react';
 import {
   useActions,
@@ -30,6 +31,7 @@ import {
 import { cn, tw } from '../tw.js';
 import { api } from '../api.js';
 import { Modal } from '../components/Modal/Modal.jsx';
+import { PruneConfirmModal } from '../components/PruneConfirmModal.jsx';
 import { ResourceFileExplorer } from '../components/ContainerFileExplorer.jsx';
 
 const PROJECT_LABEL = 'com.docker.compose.project';
@@ -81,7 +83,8 @@ function Resources({ kind }) {
     data = useResource(kind);
   const [search, setSearch] = useState(''),
     [inspect, setInspect] = useState(null),
-    [collapsed, setCollapsed] = useState(readCollapsed);
+    [collapsed, setCollapsed] = useState(readCollapsed),
+    [pruneModalOpen, setPruneModalOpen] = useState(false);
 
   const containers = useResource('containers');
   const [exploreVolume, setExploreVolume] = useState(null),
@@ -285,6 +288,12 @@ function Resources({ kind }) {
   return (
     <section className={tw.page}>
       <PageActions>
+        <PageAction
+          label={t(volume ? '미사용 볼륨 정리' : '미사용 네트워크 정리')}
+          icon={BrushCleaning}
+          disabled={busy}
+          onClick={() => setPruneModalOpen(true)}
+        />
         <PageAction
           label={t(volume ? '볼륨 생성' : '네트워크 생성')}
           primary
@@ -538,6 +547,17 @@ function Resources({ kind }) {
           <ResourceFileExplorer targetType="volumes" targetId={exploreVolume} />
         </Modal>
       )}
+
+      <PruneConfirmModal
+        isOpen={pruneModalOpen}
+        onClose={() => setPruneModalOpen(false)}
+        kind={kind}
+        busy={busy}
+        onConfirm={async () => {
+          setPruneModalOpen(false);
+          await job(volume ? 'pruneVolumes' : 'pruneNetworks');
+        }}
+      />
     </section>
   );
 }

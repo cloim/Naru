@@ -1,4 +1,3 @@
-import { assertSharedJob } from './external.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
@@ -161,6 +160,9 @@ export const jobSchemas = {
       volumes: z.boolean().default(false),
     })
     .default({}),
+  pruneImages: empty,
+  pruneVolumes: empty,
+  pruneNetworks: empty,
 };
 export function validateJob(type, payload) {
   const schema = jobSchemas[type];
@@ -253,7 +255,6 @@ export async function reconcileJobs() {
 }
 export async function submit(type, input) {
   const payload = validateJob(type, input);
-  assertSharedJob(type, await settings());
   if (submitting) throw new Error('다른 작업을 접수 중입니다.');
   submitting = true;
   try {

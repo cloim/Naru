@@ -2,7 +2,6 @@ import net from 'node:net';
 import path from 'node:path';
 import { DATA } from './state.js';
 import { command } from './runner.js';
-import { RANCHER_PIPE, RANCHER_HOST } from './external.js';
 import http from 'node:http';
 import { spawn } from 'node:child_process';
 import { Duplex } from 'node:stream';
@@ -15,9 +14,9 @@ let sharedAgent;
 export function enableDockerPool() {
   sharedAgent = createAgent(true);
 }
-function createAgent(keepAlive, external = false) {
+function createAgent(keepAlive) {
   const agent = new http.Agent({ keepAlive, maxSockets: 6, maxFreeSockets: 2, timeout: 10000 });
-  agent.createConnection = () => (external ? net.connect(RANCHER_PIPE) : naruSocket());
+  agent.createConnection = () => naruSocket();
   return agent;
 }
 // A socket-like stream to the engine's Unix socket inside the naru distribution.
@@ -67,9 +66,8 @@ export function naruSocket() {
   return socket;
 }
 export async function dockerRequest(method, route, body, { timeout = 30000, stream = false } = {}) {
-  const external = (await settings()).connection === 'rancher-desktop';
   return new Promise((resolve, reject) => {
-    const agent = external ? createAgent(false, true) : sharedAgent || createAgent(false);
+    const agent = sharedAgent || createAgent(false);
     const payload = body === undefined ? undefined : JSON.stringify(body);
     const req = http.request(
       {
@@ -123,11 +121,6 @@ export async function dockerRequest(method, route, body, { timeout = 30000, stre
 export async function cli(args, options = {}) {
   await requireReady();
   const cfg = await settings();
-  if (cfg.connection === 'rancher-desktop')
-    return command(path.join(DATA, 'bin', 'docker.exe'), ['--host', RANCHER_HOST, ...args], {
-      ...options,
-      env: { ...options.env, DOCKER_CONTEXT: '' },
-    });
   const namespace = options.namespace ?? cfg.namespace;
   if (!/^[a-zA-Z0-9_.-]{1,64}$/.test(namespace))
     throw new Error('containerd 네임스페이스 형식이 잘못되었습니다.');
@@ -233,7 +226,7 @@ export async function inspect(kind, id) {
 export async function containerAction(id, action, log) {
   const cfg = await settings();
   await requireReady();
-  if (cfg.engine === 'moby' && cfg.connection !== 'rancher-desktop') {
+  if (cfg.engine === 'moby') {
     const result = await dockerRequest(
       action === 'remove' ? 'DELETE' : 'POST',
       `/containers/${encodeURIComponent(id)}${action === 'remove' ? '' : `/${action}`}?t=10`,
@@ -263,4 +256,131 @@ export function decodeDockerStream(buffer) {
     offset += 8 + length;
   }
   return chunks.length ? Buffer.concat(chunks).toString('utf8') : buffer.toString('utf8');
+}
+
+export async function getPrunePreview(kind) {
+  await requireReady();
+  const cfg = await settings();
+  if (cfg.engine === 'moby') {
+    const [rawContainers, rawItems] = await Promise.all([
+      dockerRequest('GET', '/containers/json?all=true'),
+      dockerRequest(
+        'GET',
+        kind === 'volumes' ? '/volumes' : kind === 'networks' ? '/networks' : '/images/json',
+      ),
+    ]);
+    const containers = rawContainers || [];
+    if (kind === 'images') {
+      const usedIds = new Set();
+      const usedNames = new Set();
+      for (const c of containers) {
+        if (c.ImageID) {
+          const id = c.ImageID.replace('sha256:', '');
+          usedIds.add(id);
+          usedIds.add(id.slice(0, 12));
+        }
+        if (c.Image) {
+          usedNames.add(c.Image);
+          if (c.Image.startsWith('sha256:')) {
+            const id = c.Image.replace('sha256:', '');
+            usedIds.add(id);
+            usedIds.add(id.slice(0, 12));
+          }
+        }
+      }
+      const images = rawItems || [];
+      const unused = images.filter((img) => {
+        const fullId = (img.Id || '').replace('sha256:', '');
+        const shortId = fullId.slice(0, 12);
+        if (usedIds.has(fullId) || usedIds.has(shortId)) return false;
+        const tags = img.RepoTags || [];
+        if (tags.some((tag) => usedNames.has(tag))) return false;
+        return true;
+      });
+      return unused.map((img) => ({
+        id: (img.Id || '').replace('sha256:', '').slice(0, 12),
+        name:
+          img.RepoTags && img.RepoTags[0] && img.RepoTags[0] !== '<none>:<none>'
+            ? img.RepoTags[0]
+            : img.Id
+              ? img.Id.replace('sha256:', '').slice(0, 12)
+              : '—',
+        size: img.Size || 0,
+      }));
+    }
+    if (kind === 'volumes') {
+      const usedVolumeNames = new Set();
+      for (const c of containers) {
+        for (const m of c.Mounts || []) {
+          if (m.Name) usedVolumeNames.add(m.Name);
+        }
+      }
+      const volumes = rawItems?.Volumes || [];
+      const unused = volumes.filter((v) => !usedVolumeNames.has(v.Name));
+      return unused.map((v) => ({
+        name: v.Name,
+        driver: v.Driver || 'local',
+      }));
+    }
+    if (kind === 'networks') {
+      const defaultNetworks = new Set(['bridge', 'host', 'none']);
+      const usedNetworkNames = new Set();
+      const usedNetworkIds = new Set();
+      for (const c of containers) {
+        const nets = c.NetworkSettings?.Networks || {};
+        for (const [netName, netObj] of Object.entries(nets)) {
+          usedNetworkNames.add(netName);
+          if (netObj.NetworkID) {
+            usedNetworkIds.add(netObj.NetworkID);
+            usedNetworkIds.add(netObj.NetworkID.slice(0, 12));
+          }
+        }
+      }
+      const networks = rawItems || [];
+      const unused = networks.filter((n) => {
+        if (defaultNetworks.has(n.Name)) return false;
+        if (usedNetworkNames.has(n.Name)) return false;
+        const fullId = n.Id || '';
+        const shortId = fullId.slice(0, 12);
+        if (usedNetworkIds.has(fullId) || usedNetworkIds.has(shortId)) return false;
+        return true;
+      });
+      return unused.map((n) => ({
+        id: (n.Id || '').slice(0, 12),
+        name: n.Name,
+        driver: n.Driver,
+      }));
+    }
+  }
+
+  const containers = await list('containers');
+  const items = await list(kind);
+  if (kind === 'images') {
+    const usedNames = new Set(containers.map((c) => c.Image).filter(Boolean));
+    const unused = items.filter((img) => {
+      const tags = img.RepoTags || [];
+      return !tags.some((tag) => usedNames.has(tag));
+    });
+    return unused.map((img) => ({
+      id: (img.Id || '').slice(0, 12),
+      name: img.RepoTags?.[0] || img.Id?.slice(0, 12) || '—',
+      size: typeof img.Size === 'number' ? img.Size : 0,
+    }));
+  }
+  if (kind === 'volumes') {
+    return items.map((v) => ({
+      name: v.Name,
+      driver: v.Driver || 'local',
+    }));
+  }
+  if (kind === 'networks') {
+    const defaultNetworks = new Set(['bridge', 'host', 'none']);
+    const unused = items.filter((n) => !defaultNetworks.has(n.Name));
+    return unused.map((n) => ({
+      id: (n.Id || '').slice(0, 12),
+      name: n.Name,
+      driver: n.Driver,
+    }));
+  }
+  return [];
 }
