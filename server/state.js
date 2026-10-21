@@ -9,7 +9,7 @@ export const DATA =
 export const DISTRO = 'naru';
 export const settingsSchema = z
   .object({
-    connection: z.enum(['managed', 'rancher-desktop']).default('managed'),
+    connection: z.string().default('managed').transform(() => 'managed'),
     engine: z.enum(['moby', 'containerd']).default('moby'),
     namespace: z
       .string()
@@ -37,9 +37,7 @@ export const settingsSchema = z
     pollSeconds: z.number().int().min(3).max(60).default(5),
   })
   .strict()
-  .refine((value) => value.connection !== 'rancher-desktop' || value.engine === 'moby', {
-    message: 'Rancher Desktop 공유 연결은 Docker 엔진을 사용합니다.',
-  });
+;
 
 export async function atomicJSON(file, data) {
   await fs.mkdir(path.dirname(file), { recursive: true });
@@ -60,8 +58,7 @@ export async function settings() {
 }
 export async function saveSettings(input) {
   const value = settingsSchema.parse(input);
-  if (value.connection === 'rancher-desktop' && value.engine !== 'moby')
-    throw Error('Rancher Desktop 공유 연결은 Docker 엔진을 사용합니다.');
+  
   await atomicJSON(path.join(DATA, 'settings.json'), value);
   return value;
 }

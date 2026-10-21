@@ -25,8 +25,7 @@ export const tw = {
   jsonView:
     'm-0 max-h-[65vh] overflow-auto bg-[#fafcf7] p-5.5 font-mono text-[12px] leading-[1.8] whitespace-pre-wrap wrap-anywhere',
   preserve: 'whitespace-pre-wrap wrap-anywhere',
-  skeleton:
-    'h-7.5 animate-shimmer rounded-[6px] bg-[linear-gradient(100deg,#e9eee4_20%,#f7f9f3_40%,#e9eee4_60%)] bg-[length:300%_100%]',
+  skeleton: 'h-7.5 skeleton-smooth rounded-[6px]',
   nameCell:
     'flex h-full w-full min-w-0 items-center gap-3.25 text-left [&_small]:font-mono [&_small]:text-[10px] [&_small]:text-[#9aa297] [&_strong]:overflow-hidden [&_strong]:font-semibold [&_strong]:text-ellipsis [&>div]:flex [&>div]:min-w-0 [&>div]:flex-col [&>div]:gap-px [&>div]:leading-[1.6] [&>svg]:flex-none [&>svg]:text-[#64816f]',
   rowActions: 'flex h-full items-center justify-center gap-0.75',

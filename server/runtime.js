@@ -1,4 +1,3 @@
-import { rancherRequest, requireManaged } from './external.js';
 import fs from 'node:fs/promises';
 import { createReadStream, createWriteStream } from 'node:fs';
 import path from 'node:path';
@@ -8,6 +7,8 @@ import { pipeline } from 'node:stream/promises';
 import { parse, stringify } from 'yaml';
 import { DATA, ROOT, DISTRO, settings, atomicJSON } from './state.js';
 import { command, wsl, distributions, detached } from './runner.js';
+
+export async function requireManaged() {}
 
 export const BASE = {
   version: '0.100',
@@ -38,30 +39,6 @@ export async function download(url, dest, log) {
   await fs.rename(temp, dest);
 }
 export async function status() {
-  const externalCfg = await settings();
-  if (externalCfg.connection === 'rancher-desktop') {
-    let health = null,
-      error = null;
-    try {
-      health = await rancherRequest('/info');
-    } catch (e) {
-      error = e.message;
-    }
-    return {
-      connection: 'rancher-desktop',
-      managed: false,
-      installed: true,
-      running: !!health,
-      ready: !!health,
-      engine: 'moby',
-      kubernetes: { ...externalCfg.kubernetes, enabled: false },
-      health,
-      error,
-      distro: 'rancher-desktop',
-      dataPath: DATA,
-      pollSeconds: externalCfg.pollSeconds,
-    };
-  }
   const [all, running, cfg] = await Promise.all([distributions(), distributions(true), settings()]);
   const installed = all.includes(DISTRO),
     active = running.includes(DISTRO);
@@ -117,10 +94,6 @@ export async function status() {
   };
 }
 export async function requireReady() {
-  if ((await settings()).connection === 'rancher-desktop') {
-    await rancherRequest('/_ping');
-    return;
-  }
   const running = await distributions(true);
   if (!running.includes(DISTRO)) throw new Error('Naru 엔진을 먼저 시작해 주세요.');
 }
@@ -149,14 +122,7 @@ export async function install(log) {
   try {
     await fs.access(tar);
   } catch {
-    const local = 'C:/Program Files/Rancher Desktop/resources/resources/win32/distro-0.100.tar';
-    try {
-      await fs.access(local);
-      log('설치된 공개 배포판을 Naru 캐시에 복사합니다.\n');
-      await fs.copyFile(local, tar);
-    } catch {
-      await download(BASE.url, tar, log);
-    }
+    await download(BASE.url, tar, log);
   }
   log('공식 SHA256으로 배포판을 검증합니다.\n');
   if ((await sha256(tar)) !== BASE.sha256) {
@@ -192,10 +158,10 @@ export async function install(log) {
   await atomicJSON(path.join(DATA, 'provenance.json'), {
     base: BASE,
     installedAt: new Date().toISOString(),
-    upstream: 'Rancher Desktop WSL distro (Apache-2.0)',
+    upstream: 'WSL distro (Apache-2.0)',
     independent: true,
   });
-  log('Naru 전용 WSL2 배포판 설치 완료. 기존 Rancher Desktop과 데이터가 분리됩니다.\n');
+  log('Naru 전용 WSL2 배포판 설치 완료.\n');
 }
 async function installScripts(log) {
   for (const name of ['naru-boot.sh', 'naru-k3s.sh', 'naru-layout.sh']) {

@@ -406,6 +406,8 @@ export function DataGrid({
           onViewportChanged={handleViewportChanged}
           onModelUpdated={handleModelUpdated}
           overlayNoRowsTemplate={emptyMessage}
+          loading={false}
+          suppressNoRowsOverlay={isLoading || !!errorMessage}
           postSortRows={hasGroups ? postSortRows : undefined}
           isFullWidthRow={hasGroups ? isFullWidthRow : undefined}
           {...gridProps}
@@ -421,7 +423,13 @@ export function DataGrid({
             gridProps.onColumnResized?.(event);
           }}
         />
-        {isLoading ? <DataGridSkeleton columnCount={skeletonColumnCount} /> : null}
+        {isLoading ? (
+          <DataGridSkeleton
+            columnCount={skeletonColumnCount}
+            headerHeight={headerHeight}
+            rowHeight={rowHeight}
+          />
+        ) : null}
         {!isLoading && errorMessage ? <DataGridStatus message={errorMessage} /> : null}
       </div>
     </div>
@@ -528,23 +536,28 @@ function DataGridStatus({ message }) {
   );
 }
 
-function DataGridSkeleton({ columnCount }) {
+function DataGridSkeleton({ columnCount, headerHeight, rowHeight }) {
   useLocale();
   return (
     <div
-      className="absolute inset-x-0 top-11 bottom-0 z-2 flex flex-col overflow-hidden bg-white"
+      className="absolute inset-x-0 bottom-0 z-2 flex flex-col overflow-hidden bg-white"
+      style={{ top: headerHeight }}
+      role="status"
       aria-label={t('목록 데이터를 불러오는 중입니다.')}
     >
-      {Array.from({ length: 9 }).map((_, rowIndex) => (
-        <div
-          className="flex min-h-13 items-center gap-4 border-b border-[#efede9] px-3.5"
-          key={rowIndex}
-        >
-          {Array.from({ length: columnCount }).map((_, colIndex) => (
-            <span className={cn(tw.skeleton, 'h-3.5 min-w-0 flex-1')} key={colIndex} />
-          ))}
-        </div>
-      ))}
+      <div className="skeleton-enter" aria-hidden="true">
+        {Array.from({ length: 9 }).map((_, rowIndex) => (
+          <div
+            className="flex items-center gap-4 border-b border-[#efede9] px-3.5"
+            style={{ height: rowHeight }}
+            key={rowIndex}
+          >
+            {Array.from({ length: columnCount }).map((_, colIndex) => (
+              <span className={cn(tw.skeleton, 'h-3.5 min-w-0 flex-1')} key={colIndex} />
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

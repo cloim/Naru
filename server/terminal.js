@@ -1,6 +1,5 @@
 import net from 'node:net';
 import { PassThrough } from 'node:stream';
-import { RANCHER_PIPE } from './external.js';
 import { wsl } from './runner.js';
 import { WebSocketServer } from 'ws';
 import { spawn } from 'node:child_process';
@@ -148,18 +147,8 @@ export function registerTerminal(app, server, port, remote = null) {
         },
       );
       execId = exec.Id;
-      if (cfg.connection === 'rancher-desktop') {
-        const socket = net.connect(RANCHER_PIPE);
-        child = {
-          stdin: socket,
-          stdout: socket,
-          stderr: new PassThrough(),
-          on: (...args) => socket.on(...args),
-          kill: () => socket.destroy(),
-        };
-      } else
-        child = spawn(
-          'wsl.exe',
+      child = spawn(
+        'wsl.exe',
           [
             '-d',
             DISTRO,

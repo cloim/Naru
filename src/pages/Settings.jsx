@@ -80,8 +80,8 @@ function Settings() {
   }, [data.data, value]);
   if (data.error) return <ErrorState error={data.error} />;
   if (!value) return <Skeleton />;
-  const locked = !!status?.running && status?.managed !== false;
-  const managedLocked = locked || saving || value.connection === 'rancher-desktop';
+  const locked = !!status?.running;
+  const managedLocked = locked || saving;
   return (
     <section className={cn(tw.page, 'max-w-[1150px]')}>
       <PageActions>
@@ -104,14 +104,12 @@ function Settings() {
           }}
         />
       </PageActions>
-      {(locked || value.connection === 'rancher-desktop') &&
+      {locked &&
         ['engine', 'kubernetes', 'proxy'].includes(tab) && (
           <p className={cn(tw.panel, tw.groupText, 'px-5 py-3.5')}>
-            {locked
-              ? t(
-                  '엔진, Kubernetes와 프록시 설정은 엔진을 정상 종료한 뒤 바꿀 수 있습니다. 서버 시작 시 엔진 자동 시작과 화면 설정은 바로 저장됩니다.',
-                )
-              : t('공유 모드에서는 엔진 설정을 Rancher Desktop에서 관리합니다.')}
+            {t(
+              '엔진, Kubernetes와 프록시 설정은 엔진을 정상 종료한 뒤 바꿀 수 있습니다. 서버 시작 시 엔진 자동 시작과 화면 설정은 바로 저장됩니다.',
+            )}
           </p>
         )}
       <div className={cn(tw.panel, 'flex flex-col')}>
@@ -181,21 +179,7 @@ function Settings() {
                   </div>
                 </section>
               )}
-              {status?.managed !== false && status?.installed && <DiskSpace />}
-              <section className="mb-8">
-                <h3>{t('연결할 엔진')}</h3>
-                <SelectControl
-                  aria-label={t('엔진 연결')}
-                  disabled={locked || saving}
-                  value={value.connection}
-                  onChange={(e) =>
-                    setValue({ ...value, connection: e.target.value, engine: 'moby' })
-                  }
-                >
-                  <option value="rancher-desktop">{t('Rancher Desktop의 Docker 엔진 공유')}</option>
-                  <option value="managed">{t('Naru 독립 엔진')}</option>
-                </SelectControl>
-              </section>
+              {status?.installed && <DiskSpace />}
               <fieldset disabled={managedLocked} className={cn(fieldset, 'mb-8')}>
                 <h3>{t('컨테이너 엔진')}</h3>
                 <div className="mb-4 flex gap-3.5 max-desktop:flex-col">
@@ -229,7 +213,7 @@ function Settings() {
                 </label>
               </fieldset>
               <fieldset
-                disabled={saving || value.connection === 'rancher-desktop'}
+                disabled={saving}
                 className={fieldset}
               >
                 <label className={tw.checkbox}>

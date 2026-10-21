@@ -30,13 +30,56 @@
   --breakpoint-tablet: 761px;
   --breakpoint-desktop: 1101px;
   --breakpoint-wide: 1500px;
+}
 
-  --animate-shimmer: shimmer 1.5s infinite;
+/* 짧은 요청은 표시를 생략하고, 공간은 유지해 레이아웃 이동을 막는다. */
+.skeleton-enter {
+  animation: skeleton-reveal 180ms ease-out 160ms both;
+}
 
-  @keyframes shimmer {
-    to {
-      background-position: -150% 0;
-    }
+.skeleton-smooth {
+  position: relative;
+  overflow: hidden;
+  background-color: #e7ece3;
+}
+
+.skeleton-smooth::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(
+    --skeleton-highlight,
+    linear-gradient(90deg, transparent, rgb(255 255 255 / 55%), transparent)
+  );
+  animation: skeleton-shimmer 1s linear infinite;
+}
+
+/* 공용 클래스가 직접 참조하므로 Tailwind의 테마 애니메이션 제거와 분리한다. */
+@keyframes skeleton-shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes skeleton-reveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes skeleton-breathe {
+  0%,
+  100% {
+    opacity: 0.12;
+  }
+  50% {
+    opacity: 0.6;
   }
 }
 
@@ -99,6 +142,13 @@
     *::after {
       animation-duration: 0.01ms !important;
       transition-duration: 0.01ms !important;
+    }
+
+    /* 로딩 진행 표시는 유지한다. 위치 이동 대신 낮은 대비의 밝기만 천천히 바꾼다.
+       전역 모션 감소 규칙과 같은 레이어에서 duration까지 명시해 초고속 반복을 막는다. */
+    .skeleton-smooth::after {
+      --skeleton-highlight: #b9cbb0;
+      animation: skeleton-breathe 1s ease-in-out infinite !important;
     }
   }
 }

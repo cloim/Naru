@@ -24,7 +24,7 @@ try {
     '/api/session': { token: 'fixture' },
     '/api/status': {
       ready: true,
-      connection: 'rancher-desktop',
+      connection: 'managed',
       engine: 'docker',
       pollSeconds: 60,
     },

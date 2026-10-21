@@ -1,11 +1,12 @@
 import { t, useLocale } from '../i18n.js';
 import React, { lazy, Suspense, useEffect, useRef, useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
-import { RotateCw, Pause, Terminal, RefreshCw, Search, X, ArrowDown, Copy, TriangleAlert } from 'lucide-react';
+import { RotateCw, Pause, Search, X, ArrowDown, TriangleAlert } from 'lucide-react';
 import {
   useActions,
   useData,
   Button,
+  IconButton,
   CopyButton,
   Skeleton,
   ErrorState,
@@ -15,7 +16,6 @@ import {
   usePageTitle,
 } from '../ui.jsx';
 import { cn, tw } from '../tw.js';
-import { api } from '../api.js';
 import { ContainerFileExplorer } from '../components/ContainerFileExplorer.jsx';
 const TerminalPanel = lazy(() => import('../components/TerminalPanel.jsx'));
 
@@ -47,11 +47,8 @@ export function resourceUsage(stats) {
 function ContainerDetail() {
   useLocale();
   const { id } = useParams(),
-    { job, notify, busy } = useActions();
+    { job, busy } = useActions();
   const [tab, setTab] = useState('logs'),
-    [args, setArgs] = useState('pwd'),
-    [output, setOutput] = useState(''),
-    [execBusy, setExecBusy] = useState(false),
     [logSearch, setLogSearch] = useState(''),
     [autoScroll, setAutoScroll] = useState(true);
   const logEndRef = useRef(null),
@@ -89,35 +86,8 @@ function ContainerDetail() {
     }
   }, [logs.data?.text, autoScroll, tab]);
 
-  const executeCommand = async (cmdToRun) => {
-    const target = (cmdToRun !== undefined ? cmdToRun : args).trim();
-    if (!target) return;
-    setExecBusy(true);
-    try {
-      let parsed;
-      if (target.startsWith('[')) {
-        parsed = JSON.parse(target);
-        if (!Array.isArray(parsed) || !parsed.length || parsed.some((arg) => typeof arg !== 'string'))
-          throw new Error(t('실행 인수를 문자열이 담긴 JSON 배열로 입력해 주세요.'));
-      } else {
-        parsed = ['sh', '-c', target];
-      }
-      const result = await api(`/containers/${id}/exec`, {
-        method: 'POST',
-        body: { args: parsed },
-      });
-      setOutput(
-        [result.text, result.stderr].filter(Boolean).join('\n') ||
-          t('명령이 완료되었습니다. 출력이 없습니다.'),
-      );
-    } catch (e) {
-      notify(e);
-    } finally {
-      setExecBusy(false);
-    }
-  };
   return (
-    <section className={cn(tw.page, tab === 'logs' && 'h-full')}>
+    <section className={cn(tw.page, 'h-full')}>
       <PageActions>
         <PageAction
           label={t('재시작')}
@@ -134,14 +104,15 @@ function ContainerDetail() {
           }
         />
       </PageActions>
-      <div className={cn(tw.panel, 'flex-1', tab === 'logs' && 'flex min-h-0 flex-col')}>
+
+      <div className={cn(tw.panel, 'flex min-h-0 flex-1 flex-col')}>
+        {/* 탭 순서: 로그, 리소스, 파일, 터미널, 구성 */}
         <div className={tw.tabs}>
           {[
             ['logs', t('로그')],
             ['resources', t('리소스')],
             ['files', t('파일')],
             ['terminal', t('터미널')],
-            ['exec', t('명령 실행')],
             ['inspect', t('구성')],
           ].map(([key, label]) => (
             <button
@@ -154,6 +125,7 @@ function ContainerDetail() {
             </button>
           ))}
         </div>
+
         {tab === 'logs' ? (
           logs.isLoading ? (
             <Skeleton />
@@ -183,27 +155,20 @@ function ContainerDetail() {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button
-                    compact
+                  <IconButton
                     icon={ArrowDown}
-                    className={cn(autoScroll && 'border-[#bdcdbb] bg-[#eef5e9] text-[#407543]')}
+                    label={t('자동 스크롤')}
+                    className={cn(
+                      'border border-[#dce2d9] bg-white',
+                      autoScroll && 'border-[#bdcdbb] bg-[#eef5e9] text-[#407543]',
+                    )}
                     onClick={() => setAutoScroll(!autoScroll)}
-                  >
-                    {t('자동 스크롤')}
-                  </Button>
+                  />
                   <CopyButton
                     text={filteredLog || rawLog}
                     label={t('로그 복사')}
                     className="h-8.5 w-8.5 border border-[#dce2d9] bg-white"
                   />
-                  <Button
-                    compact
-                    icon={RefreshCw}
-                    disabled={logs.isFetching}
-                    onClick={() => logs.refetch()}
-                  >
-                    {t('새로고침')}
-                  </Button>
                 </div>
               </div>
               <pre
@@ -221,6 +186,7 @@ function ContainerDetail() {
             </div>
           )
         ) : null}
+
         {tab === 'resources' ? (
           stats.isLoading ? (
             <Skeleton />
@@ -228,13 +194,13 @@ function ContainerDetail() {
             <ErrorState error={stats.error} retry={() => stats.refetch()} />
           ) : stats.data?.text !== undefined ? (
             <pre
-              className={cn(tw.terminal, 'min-h-[400px] rounded-none')}
+              className={cn(tw.terminal, 'min-h-0 flex-1 rounded-none overflow-auto')}
               aria-label={t('containerd 리소스 사용량')}
             >
               {stats.data.text || t('리소스 사용량을 아직 수집하지 못했습니다.')}
             </pre>
           ) : usage ? (
-            <div className="p-6 max-tablet:p-5">
+            <div className="min-h-0 flex-1 overflow-y-auto p-6 max-tablet:p-5">
               {((usage.cpu !== null && usage.cpu > 80) ||
                 (usage.percent !== null && usage.percent > 85)) && (
                 <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-[#f5c6cb] bg-[#fdf2f2] p-3.5 text-[12px] text-[#721c24]">
@@ -301,72 +267,26 @@ function ContainerDetail() {
             </div>
           ) : null
         ) : null}
+
         {tab === 'files' && <ContainerFileExplorer containerId={id} />}
+
+        {tab === 'terminal' && (
+          <Suspense fallback={<Skeleton />}>
+            <TerminalPanel key={id} containerId={id} />
+          </Suspense>
+        )}
+
         {tab === 'inspect' ? (
           detail.isLoading ? (
             <Skeleton />
           ) : detail.error ? (
             <ErrorState error={detail.error} retry={() => detail.refetch()} />
           ) : (
-            <pre className={tw.jsonView}>{JSON.stringify(detail.data, null, 2)}</pre>
+            <pre className="m-0 min-h-0 flex-1 overflow-auto bg-[#fafcf7] p-5.5 font-mono text-[12px] leading-[1.8] whitespace-pre-wrap wrap-anywhere">
+              {JSON.stringify(detail.data, null, 2)}
+            </pre>
           )
         ) : null}
-        {tab === 'terminal' && (
-          <Suspense fallback={<Skeleton />}>
-            <TerminalPanel key={id} containerId={id} />
-          </Suspense>
-        )}
-        {tab === 'exec' && (
-          <form
-            className="p-5"
-            onSubmit={(e) => {
-              e.preventDefault();
-              executeCommand();
-            }}
-          >
-            <div className="mb-3.5 flex flex-wrap items-center gap-1.5">
-              <span className="mr-1 text-[12px] font-semibold text-[#536454]">
-                {t('추천 명령')}:
-              </span>
-              {['pwd', 'ls -la', 'env', 'df -h', 'ps aux'].map((cmd) => (
-                <button
-                  key={cmd}
-                  type="button"
-                  className="rounded-[5px] border border-[#dce2d9] bg-white px-2.5 py-1 font-mono text-[11px] text-ink hover:border-[#bdcdbb] hover:bg-[#f2f6ed]"
-                  onClick={() => {
-                    setArgs(cmd);
-                    executeCommand(cmd);
-                  }}
-                >
-                  {cmd}
-                </button>
-              ))}
-            </div>
-            <label className={tw.field}>
-              <span>{t('실행 인수 (셸 명령 또는 JSON 배열)')}</span>
-              <input
-                value={args}
-                placeholder="pwd 또는 [&quot;sh&quot;, &quot;-c&quot;, &quot;pwd&quot;]"
-                onChange={(e) => setArgs(e.target.value)}
-              />
-              <small>
-                {t('일반 명령(예: pwd, ls -la) 또는 JSON 배열(["sh", "-c", "..."])을 입력할 수 있습니다.')}
-              </small>
-            </label>
-            <Button type="submit" icon={Terminal} disabled={execBusy || busy}>
-              {execBusy ? t('실행 중') : t('실행')}
-            </Button>
-            <div className="mt-5">
-              <div className="mb-1 flex items-center justify-between">
-                <span className="text-[12px] font-semibold text-[#536454]">{t('명령 실행 결과')}</span>
-                {output && <CopyButton text={output} label={t('결과 복사')} />}
-              </div>
-              <pre className={tw.terminal} aria-label={t('명령 실행 결과')}>
-                {output || t('명령 결과가 여기에 표시됩니다.')}
-              </pre>
-            </div>
-          </form>
-        )}
       </div>
     </section>
   );

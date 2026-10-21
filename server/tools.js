@@ -4,7 +4,7 @@ import { DATA, settings, atomicJSON } from './state.js';
 import { wsl, command } from './runner.js';
 import * as runtime from './runtime.js';
 
-// Pins from Rancher Desktop v1.24.0 dependencies.yaml; archives are verified before extraction.
+// Official tool versions; archives are verified before extraction.
 export const windowsTools = {
   docker: {
     file: 'docker.exe',
