@@ -1,6 +1,6 @@
 # Naru
 
-Windows에서 컨테이너 엔진을 관리하는 로컬 웹앱입니다. External Engine의 기존 Docker 엔진 공유 연결과 Naru 독립 WSL 런타임을 지원합니다. External Engine 1.24.0 설치본의 REA 분석과 공식 소스를 참고했으며, UI와 제어 서버는 별도로 구현했습니다.
+Windows에서 컨테이너 엔진을 관리하는 로컬 웹앱입니다. Naru 독립 WSL2 런타임을 기반으로 컨테이너, 이미지, 볼륨, 네트워크와 Kubernetes 환경을 제어하며, 직관적인 UI와 경량 제어 서버를 제공합니다.
 
 ## 실행
 
@@ -17,19 +17,17 @@ Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
 }
 ```
 
-로그와 종료코드는 `.local`에 저장됩니다. process manager에 서비스를 등록한 환경에서는 process manager로 시작하고 종료합니다. 서버는 loopback에만 바인딩합니다.
+로그와 종료코드는 `.local`에 저장됩니다. 프로세스 관리자를 사용하는 환경에서는 해당 관리 도구로 시작하고 종료합니다. 서버는 loopback에만 바인딩합니다.
 
-처음 실행하면 화면에서 런타임을 설치하고 시작합니다. 공식 WSL rootfs를 다운로드하고 SHA256을 검증한 뒤 `naru` 배포판을 생성합니다. 인터넷 연결과 디스크 공간이 필요합니다. 기존 External Engine 배포판과 데이터는 별도로 유지합니다.
+처음 실행하면 화면에서 런타임을 설치하고 시작합니다. 공식 WSL rootfs를 다운로드하고 SHA256을 검증한 뒤 `naru` 배포판을 생성합니다. 인터넷 연결과 디스크 공간이 필요합니다.
 
 ## 엔진 연결
 
-설정의 **연결할 엔진**에서 Naru 독립 엔진 또는 External Engine 공유를 선택합니다. 기존 데이터를 옮길 때는 먼저 백업하고 [이관 회고](docs/reviews/261016-external-data-migration.md)의 절차와 검증 항목을 참고합니다.
+Windows 연결은 Naru 서버가 여는 named pipe입니다. Docker 기본 context `naru`는 `naru_engine`을 쓰고, 기본 `docker_engine` pipe도 같은 엔진으로 연결하여 context를 읽지 않는 Docker SDK와 도구도 그대로 동작합니다. 설정의 **Naru 서버 시작 시 엔진도 시작**(기본 켬)으로 서버가 시작될 때 엔진과 재시작 정책이 있는 컨테이너가 함께 올라옵니다. 프로세스 관리자를 사용하는 환경에서는 서비스 자동 시작을 설정할 수 있습니다.
 
-독립 모드의 Windows 연결은 Naru 서버가 여는 named pipe입니다. Docker 기본 context `naru`는 `naru_engine`을 쓰고, External Engine이 실행 중이 아니면 기본 `docker_engine` pipe도 같은 엔진으로 연결하여 context를 읽지 않는 Docker SDK와 도구도 그대로 동작합니다. 설정의 **Naru 서버 시작 시 엔진도 시작**(기본 켬)으로 서버가 시작될 때 엔진과 재시작 정책이 있는 컨테이너가 함께 올라옵니다. process manager를 사용하는 환경에서는 패드의 자동 시작을 설정할 수 있습니다.
+pipe 연결은 컨테이너와 볼륨 생성 요청의 Windows 경로(`D:\work\app`)를 `/mnt/d/work/app`으로 바꿔 전달합니다. 그래서 Windows 터미널의 `docker run -v D:\...`와 상대 bind가 있는 `docker compose up`이 그대로 동작합니다. 다만 표준 입력을 넘긴 뒤 출력을 기다리는 `docker exec -i ... < file`과 `docker run -i`는 Windows named pipe에서 끝나지 않는 문제가 남아 있습니다. 당분간은 `docker exec ... sh -c "..."`나 WSL 안의 docker를 사용합니다.
 
-독립 모드의 pipe 연결은 External Engine처럼 컨테이너와 볼륨 생성 요청의 Windows 경로(`D:\work\app`)를 `/mnt/d/work/app`으로 바꿔 전달합니다. 그래서 Windows 터미널의 `docker run -v D:\...`와 상대 bind가 있는 `docker compose up`이 그대로 동작합니다. 다만 표준 입력을 넘긴 뒤 출력을 기다리는 `docker exec -i ... < file`과 `docker run -i`는 Windows named pipe에서 끝나지 않는 문제가 남아 있습니다. 당분간은 `docker exec ... sh -c "..."`나 WSL 안의 docker를 사용합니다.
-
-dockerd는 `/etc/naru/dockerd.json`의 containerd snapshotter와 `min-api-version 1.41`을 사용하여 External Engine과 같은 이미지 저장소와 API 범위를 유지합니다. 컨테이너가 공개한 포트는 WSL localhost 전달로 Windows의 `127.0.0.1`에서 접속합니다. 모든 WSL 배포판이 같은 네트워크를 공유하므로 External Engine 엔진과 Naru 엔진을 동시에 실행하지 않습니다.
+dockerd는 `/etc/naru/dockerd.json`의 containerd snapshotter와 `min-api-version 1.41`을 사용하여 이미지 저장소와 API 범위를 유지합니다. 컨테이너가 공개한 포트는 WSL localhost 전달로 Windows의 `127.0.0.1`에서 접속합니다.
 
 ## Tailscale 원격 접속
 
@@ -63,8 +61,6 @@ Naru의 사이드바에는 11개 메뉴가 있습니다. 실행할 프로그램�
 | 작업 기록 | 요청한 작업의 진행과 결과 확인 | 다운로드, 빌드와 설치 결과 추적 |
 | 진단 | 기반 환경의 상태와 로그 확인 | 엔진과 Kubernetes 실행 문제 조사 |
 | 설정 | 실행 방식과 연결 도구 설정 | 엔진 선택, 자동 시작과 CLI 준비 |
-
-**연결 모드에 따른 범위:** Naru 독립 엔진에서는 위 기능을 Naru에서 관리합니다. External Engine 공유 모드에서는 컨테이너, 이미지, 볼륨, 네트워크와 Compose를 Naru에서 관리하며, Kubernetes, 포트 전달, 스냅샷과 확장 화면은 External Engine에서 관리하도록 안내해요. 공유 모드의 실행 환경 설정도 External Engine에서 관리합니다.
 
 ### 1. 컨테이너
 
@@ -236,6 +232,4 @@ Kubernetes 개발은 **Kubernetes 시작 → YAML 적용 → 리소스 상태와
 
 ## 참고와 라이선스
 
-- [External Engine 공식 소스](https://github.com/example/external-engine/tree/v1.24.0), commit `a56c23d398cdf92866dd37af8fe6215266a49b3e`
-- [공식 WSL distro](https://github.com/example/base-distro/releases/tag/v0.100)
-- External Engine Apache-2.0 라이선스는 [원문](docs/external-engine-LICENSE.txt)을 보관합니다. 공식 rootfs와 도구에는 각 구성 요소의 라이선스가 적용됩니다. Naru 전체 배포 패키지의 라이선스 고지와 SBOM 검증은 배포 전에 완료해야 합니다.
+- 공식 rootfs와 도구에는 각 구성 요소의 오픈소스 라이선스가 적용됩니다. Naru 전체 배포 패키지의 라이선스 고지와 SBOM 검증은 배포 전에 완료해야 합니다.
