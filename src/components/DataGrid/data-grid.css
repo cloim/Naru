@@ -18,6 +18,10 @@
 }
 
 .data-grid .ag-root-wrapper {
+  /* 행 구분선은 AG Grid가 한 번만 그린다. */
+  --ag-row-border-style: solid;
+  --ag-row-border-width: 1px;
+  --ag-row-border-color: #efede9;
   flex: 1;
   min-height: 0;
   border: 0;
@@ -88,7 +92,6 @@
 
 /* 행 높이는 DataGrid rowHeight prop이 정한다. CSS로 고정하면 실제 배치와 어긋나 행 사이에 틈이 생긴다. */
 .data-grid .ag-row {
-  border-bottom: 1px solid #efede9;
   background: #ffffff;
   color: #50604f;
   cursor: pointer;
@@ -143,9 +146,12 @@
 /* 포커스 링 등 AG Grid 기본 장식을 지운다. */
 .data-grid .ag-cell:focus,
 .data-grid .ag-cell:focus-within,
-.data-grid .ag-cell-focus,
-.data-grid .ag-row-focus {
+.data-grid .ag-cell-focus {
   border: none !important;
+  outline: none !important;
+}
+
+.data-grid .ag-row-focus {
   outline: none !important;
 }
 
