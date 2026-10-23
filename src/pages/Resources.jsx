@@ -55,7 +55,7 @@ function VolumeProjectRow({ data: g }) {
   const named = g.__group !== NO_PROJECT;
   return (
     <div
-      className="flex h-full cursor-pointer items-center gap-3 border-b border-line bg-[#f6f8f2] pr-3 pl-3.5 max-tablet:gap-2 max-tablet:pl-2.5"
+      className="flex h-full cursor-pointer items-center gap-3 bg-[#f6f8f2] pr-3 pl-3.5 max-tablet:gap-2 max-tablet:pl-2.5"
       onClick={() => toggle(g.__group)}
     >
       <ChevronRight
