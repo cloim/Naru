@@ -57,6 +57,8 @@ export const isSystemContainer = (r) =>
   );
 const PROJECT_LABEL = 'com.docker.compose.project';
 const NO_PROJECT = '';
+// Compose 프로젝트명에 사용할 수 없는 구분자로 표시용 그룹의 키를 분리한다.
+const COOLIFY_UTIL = 'group:coolify-util';
 const COLLAPSED_KEY = 'naru.collapsedProjects';
 const composeExample =
   'services:\n  web:\n    image: nginx:alpine\n    ports:\n      - "127.0.0.1:8080:80"\n';
@@ -99,16 +101,18 @@ function ProjectRow({ data: g }) {
       <Boxes size={19} className="flex-none text-[#4f7750]" aria-hidden />
       <div className="flex min-w-0 flex-col leading-[1.5] max-tablet:flex-1">
         <strong className="truncate text-[13px] text-ink">
-          {named ? g.__group : t('프로젝트 없음')}
+          {g.virtual ? 'coolify-util' : named ? g.__group : t('프로젝트 없음')}
         </strong>
         <small className="truncate font-mono text-[10px] text-[#9aa297]">
-          {named
-            ? g.info?.workingDir || t('작업 폴더 정보 없음')
-            : t('Compose로 만들지 않은 컨테이너')}
+          {g.virtual
+            ? t('Coolify 보조 서비스')
+            : named
+              ? g.info?.workingDir || t('작업 폴더 정보 없음')
+              : t('Compose로 만들지 않은 컨테이너')}
         </small>
       </div>
       <Badge state={g.running > 0 ? 'running' : 'exited'}>{`${g.running}/${g.total}`}</Badge>
-      {named && (
+      {named && !g.virtual && (
         <div className={cn(tw.rowActions, 'ml-auto')} onClick={(e) => e.stopPropagation()}>
           {g.total === 0 && (
             <IconButton
@@ -610,7 +614,9 @@ function Containers() {
     key === 'all' || (key === 'running' ? r.State === 'running' : r.State !== 'running');
   // 프로젝트 머리 행 다음에 소속 컨테이너가 오도록 행을 만든다. 실행 수는 탭이나 검색과 무관하게 센다.
   const rows = useMemo(() => {
-    const projectOf = (r) => r.Labels?.[PROJECT_LABEL] || NO_PROJECT;
+    const projectOf = (r) =>
+      r.Labels?.[PROJECT_LABEL] ||
+      (r.Labels?.['coolify.managed'] === 'true' ? COOLIFY_UTIL : NO_PROJECT);
     const infos = new Map((projects.data || []).map((p) => [p.name, p]));
     const all = new Map();
     for (const r of candidates) {
@@ -637,6 +643,7 @@ function Containers() {
       const members = all.get(key) || [];
       result.push({
         __group: key,
+        virtual: key === COOLIFY_UTIL,
         __keepEmpty: members.length === 0,
         Id: 'project:' + key,
         info: infos.get(key),

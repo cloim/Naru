@@ -1,4 +1,5 @@
 export default {
+  'Coolify 보조 서비스': 'Coolify auxiliary services',
   '엔진 연결': 'Connections',
   사용자: 'User',
   취소: 'Cancel',
