@@ -74,7 +74,7 @@ import {
 
 import { Modal } from './components/Modal/Modal.jsx';
 import SelectControl from './components/SelectControl/SelectControl.tsx';
-import { api, downloadConfig, engineBinding } from './api.js';
+import { api, downloadConfig, engineBinding, isRemoteEngine } from './api.js';
 import { cn, tw } from './tw.js';
 import './tailwind.css';
 import 'ag-grid-community/styles/ag-grid.css';
@@ -92,6 +92,7 @@ const navLink = ({ isActive }) =>
   );
 
 function Shell() {
+  const remote = isRemoteEngine();
   const locale = useLocale();
   useEffect(() => {
     document.documentElement.lang = locale;
@@ -251,9 +252,9 @@ function Shell() {
     ['/images', t('이미지'), Layers],
     ['/volumes', t('볼륨'), HardDrive],
     ['/networks', t('네트워크'), Network],
-    ['/kubernetes', 'Kubernetes', ShipWheel],
-    ['/snapshots', t('스냅샷'), Camera],
-    ['/extensions', t('확장'), Puzzle],
+    ['/kubernetes', 'Kubernetes', ShipWheel, true],
+    ['/snapshots', t('스냅샷'), Camera, true],
+    ['/extensions', t('확장'), Puzzle, true],
   ];
   const title = location.pathname.startsWith('/containers/')
     ? t('컨테이너 상세')
@@ -296,12 +297,14 @@ function Shell() {
             </Link>
             <EngineSelector />
             <nav aria-label={t('주요 메뉴')} className="flex flex-col gap-1.25">
-              {nav.map(([to, label, Icon]) => (
-                <NavLink end={to === '/'} key={to} to={to} className={navLink}>
-                  <Icon size={19} aria-hidden="true" />
-                  {label}
-                </NavLink>
-              ))}
+              {nav
+                .filter(([, , , localOnly]) => !remote || !localOnly)
+                .map(([to, label, Icon]) => (
+                  <NavLink end={to === '/'} key={to} to={to} className={navLink}>
+                    <Icon size={19} aria-hidden="true" />
+                    {label}
+                  </NavLink>
+                ))}
             </nav>
             <div className="mt-auto flex flex-col gap-0.5 border-t border-[#ffffff16] pt-4.5">
               <NavLink to="/engines" className={navLink}>
@@ -311,12 +314,16 @@ function Shell() {
               <NavLink to="/jobs" className={navLink}>
                 <History size={18} /> {t('작업 기록')}{' '}
               </NavLink>
-              <NavLink to="/diagnostics" className={navLink}>
-                <Activity size={18} /> {t('진단')}{' '}
-              </NavLink>
-              <NavLink to="/settings" className={navLink}>
-                <Settings2 size={18} /> {t('설정')}{' '}
-              </NavLink>
+              {!remote && (
+                <>
+                  <NavLink to="/diagnostics" className={navLink}>
+                    <Activity size={18} /> {t('진단')}{' '}
+                  </NavLink>
+                  <NavLink to="/settings" className={navLink}>
+                    <Settings2 size={18} /> {t('설정')}{' '}
+                  </NavLink>
+                </>
+              )}
             </div>
           </aside>
           <div id="workspace" className="flex min-w-0 flex-1 flex-col" inert={mobile && drawer}>
@@ -386,35 +393,20 @@ function Shell() {
                   <Route path="/volumes" element={<Resources kind="volumes" />} />
                   <Route path="/networks" element={<Resources kind="networks" />} />
                   <Route path="/compose" element={<Navigate to="/" replace />} />
-                  <Route
-                    path="/kubernetes"
-                    element={status.data?.managed === false ? <LocalScope /> : <Kubernetes />}
-                  />
+                  <Route path="/kubernetes" element={remote ? <LocalScope /> : <Kubernetes />} />
                   <Route
                     path="/ports"
                     element={<Navigate to="/kubernetes?tab=forwards" replace />}
                   />
-                  <Route
-                    path="/extensions"
-                    element={status.data?.managed === false ? <LocalScope /> : <Extensions />}
-                  />
+                  <Route path="/extensions" element={remote ? <LocalScope /> : <Extensions />} />
                   <Route
                     path="/extensions/:id"
-                    element={status.data?.managed === false ? <LocalScope /> : <Extensions />}
+                    element={remote ? <LocalScope /> : <Extensions />}
                   />
-                  <Route
-                    path="/snapshots"
-                    element={status.data?.managed === false ? <LocalScope /> : <Snapshots />}
-                  />
+                  <Route path="/snapshots" element={remote ? <LocalScope /> : <Snapshots />} />
                   <Route path="/engines" element={<Engines />} />
-                  <Route
-                    path="/settings"
-                    element={status.data?.managed === false ? <LocalScope /> : <Settings />}
-                  />
-                  <Route
-                    path="/diagnostics"
-                    element={status.data?.managed === false ? <LocalScope /> : <Diagnostics />}
-                  />
+                  <Route path="/settings" element={remote ? <LocalScope /> : <Settings />} />
+                  <Route path="/diagnostics" element={remote ? <LocalScope /> : <Diagnostics />} />
                   <Route path="/jobs" element={<Jobs openJob={setJobId} />} />
                   <Route
                     path="*"
