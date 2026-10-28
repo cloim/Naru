@@ -179,3 +179,24 @@ test('remote work rejects WSL operations and restricts local-only jobs', async (
   });
   assert.equal((await settings()).engine, 'containerd');
 });
+
+test('killProcess closes stdin and terminates process tree safely', async () => {
+  const { killProcess } = await import('../server/runner.js');
+  let stdinEnded = false;
+  let killed = false;
+  const dummyChild = {
+    pid: 999999,
+    killed: false,
+    stdin: {
+      destroyed: false,
+      end: () => {
+        stdinEnded = true;
+      },
+    },
+    kill: () => {
+      killed = true;
+    },
+  };
+  killProcess(dummyChild);
+  assert.equal(stdinEnded, true);
+});

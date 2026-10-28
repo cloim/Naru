@@ -6,6 +6,7 @@ import { createRewriter } from './paths.js';
 import { spawn } from 'node:child_process';
 import { DISTRO } from './state.js';
 import { requireReady } from './runtime.js';
+import { killProcess } from './runner.js';
 
 const NARU_PIPE = '\\\\.\\pipe\\naru_engine';
 const DOCKER_PIPE = '\\\\.\\pipe\\docker_engine';
@@ -131,8 +132,8 @@ export function startKubernetesBridge(port) {
     child.stdin.on('error', () => socket.destroy());
     socket.pipe(child.stdin);
     child.stdout.pipe(socket);
-    socket.on('error', () => child.kill());
-    socket.on('close', () => child.kill());
+    socket.on('error', () => killProcess(child));
+    socket.on('close', () => killProcess(child));
     child.on('close', () => socket.destroy());
   });
   server.stop = () => {

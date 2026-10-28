@@ -19,6 +19,28 @@ export function assertDistroAvailable() {
     throw new Error('디스크를 압축하는 중입니다. 끝나면 엔진이 다시 시작됩니다.');
 }
 
+export function killProcess(child) {
+  if (!child || child.killed) return;
+  try {
+    if (child.stdin && !child.stdin.destroyed) {
+      child.stdin.end();
+    }
+  } catch {}
+  if (process.platform === 'win32' && child.pid) {
+    try {
+      execFile('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true }, () => {});
+    } catch {
+      try {
+        child.kill();
+      } catch {}
+    }
+  } else {
+    try {
+      child.kill();
+    } catch {}
+  }
+}
+
 export function command(
   exe,
   args,
@@ -49,7 +71,7 @@ export function command(
     let bytes = 0,
       finished = false;
     const timer = setTimeout(() => {
-      child.kill();
+      killProcess(child);
       finish(new Error(`명령 제한 시간 ${timeout / 1000}초 초과: ${path.basename(exe)}`));
     }, timeout);
     const finish = (e, value) => {
@@ -66,7 +88,7 @@ export function command(
       stream.on('data', (data) => {
         bytes += data.length;
         if (bytes > maxBytes) {
-          child.kill();
+          killProcess(child);
           finish(new Error('출력 크기 제한을 초과했습니다.'));
           return;
         }
