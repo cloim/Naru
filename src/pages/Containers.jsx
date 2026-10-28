@@ -1,3 +1,4 @@
+import { engineStorageKey, isRemoteEngine } from '../api.js';
 import { t, useLocale } from '../i18n.js';
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -62,7 +63,7 @@ const composeExample =
 
 function readCollapsedState() {
   try {
-    const raw = localStorage.getItem(COLLAPSED_KEY);
+    const raw = localStorage.getItem(engineStorageKey(COLLAPSED_KEY));
     if (!raw) return {};
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
@@ -106,9 +107,7 @@ function ProjectRow({ data: g }) {
             : t('Compose로 만들지 않은 컨테이너')}
         </small>
       </div>
-      <Badge state={g.running > 0 ? 'running' : 'exited'}>
-        {`${g.running}/${g.total}`}
-      </Badge>
+      <Badge state={g.running > 0 ? 'running' : 'exited'}>{`${g.running}/${g.total}`}</Badge>
       {named && (
         <div className={cn(tw.rowActions, 'ml-auto')} onClick={(e) => e.stopPropagation()}>
           {g.total === 0 && (
@@ -414,7 +413,9 @@ function ProjectManage({ group, onClose, onLogs, containers = [] }) {
               </div>
               {members.length === 0 ? (
                 <div className="rounded-[8px] border border-dashed border-[#dce4d6] p-6 text-center text-[12px] text-muted">
-                  {t('프로젝트에 생성된 컨테이너가 없습니다. 아래 up 버튼으로 서비스를 기동할 수 있습니다.')}
+                  {t(
+                    '프로젝트에 생성된 컨테이너가 없습니다. 아래 up 버튼으로 서비스를 기동할 수 있습니다.',
+                  )}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -434,15 +435,22 @@ function ProjectManage({ group, onClose, onLogs, containers = [] }) {
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex min-w-0 items-center gap-1.5">
                               <Box size={16} className="flex-none text-[#64816f]" />
-                              <strong className="truncate text-[13px] text-ink">{serviceName}</strong>
+                              <strong className="truncate text-[13px] text-ink">
+                                {serviceName}
+                              </strong>
                               {serviceName !== cleanName && (
-                                <span className="truncate text-[11px] text-muted">({cleanName})</span>
+                                <span className="truncate text-[11px] text-muted">
+                                  ({cleanName})
+                                </span>
                               )}
                             </div>
                             <Badge state={c.State} />
                           </div>
 
-                          <div className="font-mono text-[11px] text-[#718073] truncate" title={c.Image}>
+                          <div
+                            className="font-mono text-[11px] text-[#718073] truncate"
+                            title={c.Image}
+                          >
                             {c.Image}
                           </div>
 
@@ -464,10 +472,22 @@ function ProjectManage({ group, onClose, onLogs, containers = [] }) {
                             <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
                               <span className="text-[11px] text-[#7a857c]">{t('포트')}:</span>
                               {ports.map((p) => {
+                                if (isRemoteEngine())
+                                  return (
+                                    <span
+                                      key={`${p.PublicPort}-${p.PrivatePort}`}
+                                      className="font-mono"
+                                    >
+                                      {p.PublicPort} → {p.PrivatePort} ({t('원격 서버')})
+                                    </span>
+                                  );
                                 const directUrl = `http://localhost:${p.PublicPort}`;
                                 const vhostUrl = `http://${subDomain}.naru.localhost:${window.location.port || '49170'}`;
                                 return (
-                                  <div key={`${p.PublicPort}-${p.PrivatePort}`} className="flex items-center gap-1">
+                                  <div
+                                    key={`${p.PublicPort}-${p.PrivatePort}`}
+                                    className="flex items-center gap-1"
+                                  >
                                     <a
                                       href={directUrl}
                                       target="_blank"
@@ -481,14 +501,18 @@ function ProjectManage({ group, onClose, onLogs, containers = [] }) {
                                     <IconButton
                                       icon={Globe}
                                       label={t('{0} 가상 도메인으로 열기', [vhostUrl])}
-                                      onClick={() => window.open(vhostUrl, '_blank', 'noopener,noreferrer')}
+                                      onClick={() =>
+                                        window.open(vhostUrl, '_blank', 'noopener,noreferrer')
+                                      }
                                     />
                                   </div>
                                 );
                               })}
                             </div>
                           ) : (
-                            <div className="text-[11px] text-[#9aa29b]">{t('외부 포트 매핑 없음')}</div>
+                            <div className="text-[11px] text-[#9aa29b]">
+                              {t('외부 포트 매핑 없음')}
+                            </div>
                           )}
                         </div>
 
@@ -516,7 +540,9 @@ function ProjectManage({ group, onClose, onLogs, containers = [] }) {
               {!ready && (
                 <p className={tw.groupText}>
                   {' '}
-                  {t('compose 파일을 찾을 수 없어 컨테이너 시작, 정지, 재시작만 할 수 있습니다.')}{' '}
+                  {t(
+                    'compose 파일을 찾을 수 없어 컨테이너 시작, 정지, 재시작만 할 수 있습니다.',
+                  )}{' '}
                 </p>
               )}
               {managed ? (
@@ -639,7 +665,7 @@ function Containers() {
         const currentlyCollapsed = collapsed.has(key);
         const next = { ...current, [key]: !currentlyCollapsed };
         try {
-          localStorage.setItem(COLLAPSED_KEY, JSON.stringify(next));
+          localStorage.setItem(engineStorageKey(COLLAPSED_KEY), JSON.stringify(next));
         } catch {}
         return next;
       }),
@@ -722,11 +748,17 @@ function Containers() {
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
                 <strong className="truncate">{containerName(r)}</strong>
-                <CopyButton text={containerName(r)} label={t('{0} 이름 복사', [containerName(r)])} />
+                <CopyButton
+                  text={containerName(r)}
+                  label={t('{0} 이름 복사', [containerName(r)])}
+                />
               </div>
               <div className="flex items-center gap-1 text-[11px] text-[#8c978e]">
                 <small>{r.Id?.slice(0, 12)}</small>
-                <CopyButton text={r.Id?.slice(0, 12)} label={t('{0} ID 복사', [containerName(r)])} />
+                <CopyButton
+                  text={r.Id?.slice(0, 12)}
+                  label={t('{0} ID 복사', [containerName(r)])}
+                />
               </div>
             </div>
           </div>
@@ -758,6 +790,12 @@ function Containers() {
               onClick={(e) => e.stopPropagation()}
             >
               {publicPorts.map((p, idx) => {
+                if (isRemoteEngine())
+                  return (
+                    <span key={idx} className="font-mono text-xs">
+                      {p.PublicPort} → {p.PrivatePort} ({t('원격 서버')})
+                    </span>
+                  );
                 const url = `http://127.0.0.1:${p.PublicPort}`;
                 const naruPort = window.location.port ? `:${window.location.port}` : '';
                 const virtualUrl = `http://${containerName(r).toLowerCase()}.naru.localhost${naruPort}`;
@@ -841,13 +879,10 @@ function Containers() {
                     .join(', ');
                   const mountsStr = (data.Mounts || [])
                     .map(
-                      (m) =>
-                        `${m.Source || m.Name}:${m.Destination}${m.RW === false ? ':ro' : ''}`,
+                      (m) => `${m.Source || m.Name}:${m.Destination}${m.RW === false ? ':ro' : ''}`,
                     )
                     .join('\n');
-                  const envStr = (cfg.Env || [])
-                    .filter((e) => !e.startsWith('PATH='))
-                    .join('\n');
+                  const envStr = (cfg.Env || []).filter((e) => !e.startsWith('PATH=')).join('\n');
                   const cmdStr = Array.isArray(cfg.Cmd) ? cfg.Cmd.join(' ') : cfg.Cmd || '';
 
                   setCloneTarget({
@@ -972,7 +1007,9 @@ function Containers() {
               )}
             </div>
             {systemToggle && !selectedIds.size && (
-              <label className={cn(tw.checkbox, 'whitespace-nowrap py-0 text-[12px] max-tablet:hidden')}>
+              <label
+                className={cn(tw.checkbox, 'whitespace-nowrap py-0 text-[12px] max-tablet:hidden')}
+              >
                 <input
                   type="checkbox"
                   checked={showSystem}

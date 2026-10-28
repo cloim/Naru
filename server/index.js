@@ -1,3 +1,5 @@
+import { registerConnections } from './connection-routes.js';
+import { target, engineKey } from './engine-context.js';
 import { requireManaged } from './runtime.js';
 import http, { createServer as createHttpServer } from 'node:http';
 import { registerTerminal } from './terminal.js';
@@ -98,8 +100,10 @@ app.use(async (req, res, next) => {
 
 app.use(security(port, token, remote));
 app.use(express.json({ limit: '2mb' }));
+registerConnections(app);
 const cache = new Map();
 async function cached(key, fn, ttl = 3000) {
+  key = JSON.stringify(target()) + ':' + key;
   const now = Date.now(),
     prev = cache.get(key);
   if (prev && prev.until > now) return prev.promise;
@@ -470,12 +474,14 @@ app.get('/api/jobs', async (req, res) => {
     completedJobs = finished;
     cache.clear();
   }
-  res.json(jobs);
+  res.json(jobs.filter((j) => (j.engineScopeId || j.engineId || 'local') === engineKey()));
 });
 app.get('/api/jobs/:id', async (req, res) => {
   const id = z.uuid().parse(req.params.id);
   await reconcileJobs();
   const current = await readJSON(path.join(DATA, 'jobs', `${id}.json`));
+  if ((current.engineScopeId || current.engineId || 'local') !== engineKey())
+    throw new Error('다른 엔진의 작업입니다.');
   if (['succeeded', 'failed'].includes(current.state)) cache.clear();
   res.json({
     job: await readJSON(path.join(DATA, 'jobs', `${id}.json`)),

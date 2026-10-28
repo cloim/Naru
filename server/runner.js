@@ -1,3 +1,4 @@
+import { localOnly } from './engine-context.js';
 import { spawn, execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { promisify } from 'node:util';
@@ -88,6 +89,7 @@ export function command(
   });
 }
 export async function wsl(args, options) {
+  localOnly();
   assertDistroAvailable();
   return command(
     'wsl.exe',

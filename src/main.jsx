@@ -1,3 +1,5 @@
+import Engines from './pages/Engines.jsx';
+import { EngineSelector } from './components/EngineSelector.jsx';
 import { t, useLocale } from './i18n.js';
 import { Actions, TopBar, Button, PageAction, Skeleton, Empty, useData, jobNames } from './ui.jsx';
 import { FormDialog, JobDialog } from './dialogs.jsx';
@@ -41,6 +43,7 @@ import {
   HardDrive,
   Network,
   Settings2,
+  PlugZap,
   Activity,
   History,
   Camera,
@@ -71,7 +74,7 @@ import {
 
 import { Modal } from './components/Modal/Modal.jsx';
 import SelectControl from './components/SelectControl/SelectControl.tsx';
-import { api, downloadConfig } from './api.js';
+import { api, downloadConfig, engineBinding } from './api.js';
 import { cn, tw } from './tw.js';
 import './tailwind.css';
 import 'ag-grid-community/styles/ag-grid.css';
@@ -256,6 +259,7 @@ function Shell() {
     ? t('컨테이너 상세')
     : [
         ...nav,
+        ['/engines', t('연결 관리')],
         ['/settings', t('설정')],
         ['/diagnostics', t('진단')],
         ['/jobs', t('작업 기록')],
@@ -284,8 +288,13 @@ function Shell() {
               to="/"
               className="mx-auto mb-11 flex w-fit max-w-full flex-none items-center rounded-[10px] hover:bg-[#ffffff0b] max-tablet:mb-6"
             >
-              <img className="h-auto w-[100px] max-w-full" src="/brand/naru-wordmark.png?v=20261017c" alt="Naru" />
+              <img
+                className="h-auto w-[100px] max-w-full"
+                src="/brand/naru-wordmark.png?v=20261017c"
+                alt="Naru"
+              />
             </Link>
+            <EngineSelector />
             <nav aria-label={t('주요 메뉴')} className="flex flex-col gap-1.25">
               {nav.map(([to, label, Icon]) => (
                 <NavLink end={to === '/'} key={to} to={to} className={navLink}>
@@ -295,6 +304,10 @@ function Shell() {
               ))}
             </nav>
             <div className="mt-auto flex flex-col gap-0.5 border-t border-[#ffffff16] pt-4.5">
+              <NavLink to="/engines" className={navLink}>
+                <PlugZap size={18} className="flex-none" />
+                <span className="min-w-0 truncate">{t('엔진 연결')}</span>
+              </NavLink>
               <NavLink to="/jobs" className={navLink}>
                 <History size={18} /> {t('작업 기록')}{' '}
               </NavLink>
@@ -344,6 +357,13 @@ function Shell() {
                 ) : null}
               </div>
             </header>
+            {status.data?.managed === false && (
+              <p className="border-b border-line bg-[#edf5e2] px-4 py-2 text-xs text-brand">
+                {t(
+                  '원격 SSH 대상입니다. 마운트는 서버 경로를 사용합니다. WSL 설정, 디스크, 스냅샷, Kubernetes, 확장과 로컬 파일 도구는 로컬 전용입니다.',
+                )}
+              </p>
+            )}
             {active && (
               <button
                 className="flex items-center gap-2.5 border-b border-[#dde8d3] bg-[#edf5e2] px-9.5 py-2.5 text-left text-[12px] text-[#496d3e] max-tablet:px-4"
@@ -361,29 +381,51 @@ function Shell() {
               <Suspense fallback={<Skeleton />}>
                 <Routes>
                   <Route path="/" element={<Containers />} />
-                    <Route path="/containers/:id" element={<ContainerDetail />} />
-                    <Route path="/images" element={<Images />} />
-                    <Route path="/volumes" element={<Resources kind="volumes" />} />
-                    <Route path="/networks" element={<Resources kind="networks" />} />
-                    <Route path="/compose" element={<Navigate to="/" replace />} />
-                    <Route path="/kubernetes" element={<Kubernetes />} />
-                    <Route path="/ports" element={<Navigate to="/kubernetes?tab=forwards" replace />} />
-                    <Route path="/extensions" element={<Extensions />} />
-                    <Route path="/extensions/:id" element={<Extensions />} />
-                    <Route path="/snapshots" element={<Snapshots />} />
-                    <Route path="/settings" element={<Settings />} />
-                    <Route path="/diagnostics" element={<Diagnostics />} />
-                    <Route path="/jobs" element={<Jobs openJob={setJobId} />} />
-                    <Route
-                      path="*"
-                      element={
-                        <Empty
-                          title={t('페이지를 찾을 수 없습니다')}
-                          action={<Link to="/">{t('컨테이너로 이동')}</Link>}
-                        />
-                      }
-                    />
-                  </Routes>
+                  <Route path="/containers/:id" element={<ContainerDetail />} />
+                  <Route path="/images" element={<Images />} />
+                  <Route path="/volumes" element={<Resources kind="volumes" />} />
+                  <Route path="/networks" element={<Resources kind="networks" />} />
+                  <Route path="/compose" element={<Navigate to="/" replace />} />
+                  <Route
+                    path="/kubernetes"
+                    element={status.data?.managed === false ? <LocalScope /> : <Kubernetes />}
+                  />
+                  <Route
+                    path="/ports"
+                    element={<Navigate to="/kubernetes?tab=forwards" replace />}
+                  />
+                  <Route
+                    path="/extensions"
+                    element={status.data?.managed === false ? <LocalScope /> : <Extensions />}
+                  />
+                  <Route
+                    path="/extensions/:id"
+                    element={status.data?.managed === false ? <LocalScope /> : <Extensions />}
+                  />
+                  <Route
+                    path="/snapshots"
+                    element={status.data?.managed === false ? <LocalScope /> : <Snapshots />}
+                  />
+                  <Route path="/engines" element={<Engines />} />
+                  <Route
+                    path="/settings"
+                    element={status.data?.managed === false ? <LocalScope /> : <Settings />}
+                  />
+                  <Route
+                    path="/diagnostics"
+                    element={status.data?.managed === false ? <LocalScope /> : <Diagnostics />}
+                  />
+                  <Route path="/jobs" element={<Jobs openJob={setJobId} />} />
+                  <Route
+                    path="*"
+                    element={
+                      <Empty
+                        title={t('페이지를 찾을 수 없습니다')}
+                        action={<Link to="/">{t('컨테이너로 이동')}</Link>}
+                      />
+                    }
+                  />
+                </Routes>
               </Suspense>
             </main>
           </div>
@@ -417,10 +459,24 @@ function Shell() {
   );
 }
 
+function LocalScope() {
+  return <p className={tw.page}>{t('로컬 WSL 전용 기능입니다. 로컬 엔진을 선택해 주세요.')}</p>;
+}
+function EngineBootstrap() {
+  const state = useQuery({
+    queryKey: ['engine-bootstrap'],
+    queryFn: async () => {
+      await api('/engines');
+      return engineBinding();
+    },
+  });
+  if (state.error) return <p className={tw.page}>{state.error.message}</p>;
+  return state.data ? <Shell /> : <Skeleton />;
+}
 createRoot(document.getElementById('root')).render(
   <QueryClientProvider client={client}>
     <BrowserRouter>
-      <Shell />
+      <EngineBootstrap />
     </BrowserRouter>
   </QueryClientProvider>,
 );

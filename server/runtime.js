@@ -1,3 +1,4 @@
+import { remoteTarget, localOnly, target } from './engine-context.js';
 import fs from 'node:fs/promises';
 import { createReadStream, createWriteStream } from 'node:fs';
 import path from 'node:path';
@@ -8,7 +9,9 @@ import { parse, stringify } from 'yaml';
 import { DATA, ROOT, DISTRO, settings, atomicJSON } from './state.js';
 import { command, wsl, distributions, detached } from './runner.js';
 
-export async function requireManaged() {}
+export async function requireManaged() {
+  localOnly();
+}
 
 export const BASE = {
   version: '0.100',
@@ -39,6 +42,32 @@ export async function download(url, dest, log) {
   await fs.rename(temp, dest);
 }
 export async function status() {
+  if (remoteTarget()) {
+    const cfg = await settings();
+    let health = null,
+      error = null;
+    try {
+      health = await (
+        await import('./engine.js')
+      ).dockerRequest('GET', '/info', undefined, { timeout: 15000 });
+    } catch (e) {
+      error = e.message;
+    }
+    return {
+      connection: 'ssh',
+      managed: false,
+      installed: !!health,
+      running: !!health,
+      ready: !!health,
+      engine: 'moby',
+      health,
+      error,
+      engineId: target().id,
+      engineName: target().name,
+      kubernetes: { ...cfg.kubernetes, enabled: false },
+      pollSeconds: cfg.pollSeconds,
+    };
+  }
   const [all, running, cfg] = await Promise.all([distributions(), distributions(true), settings()]);
   const installed = all.includes(DISTRO),
     active = running.includes(DISTRO);
@@ -94,6 +123,7 @@ export async function status() {
   };
 }
 export async function requireReady() {
+  if (remoteTarget()) return;
   const running = await distributions(true);
   if (!running.includes(DISTRO)) throw new Error('Naru 엔진을 먼저 시작해 주세요.');
 }

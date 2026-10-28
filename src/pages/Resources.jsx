@@ -1,3 +1,4 @@
+import { engineStorageKey } from '../api.js';
 import { t, useLocale } from '../i18n.js';
 import React, { createContext, useContext, useMemo, useState } from 'react';
 import {
@@ -40,7 +41,9 @@ const COLLAPSED_VOLUMES_KEY = 'naru.collapsedVolumeProjects';
 
 function readCollapsed() {
   try {
-    return new Set(JSON.parse(localStorage.getItem(COLLAPSED_VOLUMES_KEY) || '[]'));
+    return new Set(
+      JSON.parse(localStorage.getItem(engineStorageKey(COLLAPSED_VOLUMES_KEY)) || '[]'),
+    );
   } catch {
     return new Set();
   }
@@ -127,7 +130,10 @@ function Resources({ kind }) {
           const next = new Set(current);
           next.has(key) ? next.delete(key) : next.add(key);
           try {
-            localStorage.setItem(COLLAPSED_VOLUMES_KEY, JSON.stringify([...next]));
+            localStorage.setItem(
+              engineStorageKey(COLLAPSED_VOLUMES_KEY),
+              JSON.stringify([...next]),
+            );
           } catch {}
           return next;
         }),

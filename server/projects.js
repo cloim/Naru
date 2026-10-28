@@ -1,3 +1,5 @@
+import { target, remoteTarget, engineKey } from './engine-context.js';
+import { remoteCommand } from './connections.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
@@ -16,10 +18,11 @@ export const LABEL = {
 export const projectName = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,127}$/);
 const split = (value) => (value ? value.split(',').filter(Boolean) : []);
 
-async function scope() {
+export async function scope() {
+  const base = remoteTarget() ? path.join(DATA, 'engines', engineKey()) : DATA;
   return {
-    registry: path.join(DATA, 'projects.json'),
-    managedDir: path.join(DATA, 'compose'),
+    registry: path.join(base, 'projects.json'),
+    managedDir: path.join(base, 'compose'),
     host: 'npipe:////./pipe/naru_engine',
   };
 }
@@ -64,7 +67,19 @@ export async function listProjects(containers) {
         name,
         ...p,
         filesFound:
-          p.configFiles.length > 0 && (await Promise.all(p.configFiles.map(exists))).every(Boolean),
+          p.configFiles.length > 0 &&
+          (
+            await Promise.all(
+              p.configFiles.map((file) =>
+                remoteTarget() && !p.managed
+                  ? remoteCommand(['test', '-f', file]).then(
+                      () => true,
+                      () => false,
+                    )
+                  : exists(file),
+              ),
+            )
+          ).every(Boolean),
       })),
   );
 }
@@ -89,6 +104,10 @@ export async function forgetProject(name, containers) {
 export async function readProjectFiles(project) {
   return Promise.all(
     project.configFiles.map(async (file) => {
+      if (remoteTarget() && !project.managed) {
+        const text = await remoteCommand(['head', '-c', '1048576', '--', file]).catch(() => null);
+        return { path: file, text };
+      }
       const stat = await fs.stat(file).catch(() => null);
       if (!stat?.isFile()) return { path: file, text: null };
       if (stat.size > 1024 * 1024) return { path: file, text: null, error: '파일이 너무 큽니다.' };
@@ -106,6 +125,32 @@ export async function saveManagedProject(name, yaml) {
 
 // Runs Windows Compose against Naru's pipe; the pipe maps Windows bind paths for the engine.
 export async function compose(project, args, options = {}) {
+  if (remoteTarget()) {
+    const workingDir = project.managed
+      ? `/var/tmp/naru-compose/${engineKey()}/${project.name}`
+      : project.workingDir;
+    if (!workingDir?.startsWith('/')) throw new Error('원격 Compose 작업 경로를 확인해 주세요.');
+    if (project.managed) await remoteCommand(['mkdir', '-p', '--', workingDir]);
+    const files = project.managed ? ['-'] : project.configFiles;
+    return remoteCommand(
+      [
+        'docker',
+        'compose',
+        '--project-name',
+        project.name,
+        '--project-directory',
+        workingDir,
+        ...files.flatMap((file) => ['--file', file]),
+        ...project.envFiles.flatMap((file) => ['--env-file', file]),
+        ...args,
+      ],
+      {
+        timeout: 30 * 60 * 1000,
+        ...options,
+        ...(project.managed ? { input: await fs.readFile(project.configFiles[0], 'utf8') } : {}),
+      },
+    );
+  }
   const { host } = await scope();
   const binary = await ensureWindowsTool('compose', options.log);
   return command(

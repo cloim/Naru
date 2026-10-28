@@ -1,3 +1,5 @@
+import { engineContext, target } from './engine-context.js';
+import { sshArgs } from './connections.js';
 import net from 'node:net';
 import { PassThrough } from 'node:stream';
 import { wsl } from './runner.js';
@@ -23,6 +25,7 @@ export function registerTerminal(app, server, port, remote = null) {
     const ticket = randomBytes(24).toString('hex');
     tickets.set(ticket, {
       id,
+      target: { ...target() },
       shell,
       engine: cfg.engine,
       connection: cfg.connection,
@@ -53,7 +56,9 @@ export function registerTerminal(app, server, port, remote = null) {
       socket.destroy();
       return;
     }
-    wsServer.handleUpgrade(req, socket, head, (ws) => start(ws, ticket));
+    wsServer.handleUpgrade(req, socket, head, (ws) =>
+      engineContext.run(ticket.target, () => start(ws, ticket)),
+    );
   });
   async function start(ws, ticket) {
     let child,
@@ -148,19 +153,21 @@ export function registerTerminal(app, server, port, remote = null) {
       );
       execId = exec.Id;
       child = spawn(
-        'wsl.exe',
-          [
-            '-d',
-            DISTRO,
-            '-u',
-            'root',
-            '--exec',
-            'socat',
-            '-',
-            'UNIX-CONNECT:/run/naru/docker.sock',
-          ],
-          { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] },
-        );
+        ticket.target.id === 'local' ? 'wsl.exe' : 'ssh.exe',
+        ticket.target.id === 'local'
+          ? [
+              '-d',
+              DISTRO,
+              '-u',
+              'root',
+              '--exec',
+              'socat',
+              '-',
+              'UNIX-CONNECT:/run/naru/docker.sock',
+            ]
+          : sshArgs(ticket.target, ['docker', 'system', 'dial-stdio']),
+        { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] },
+      );
       child.on('error', fail);
       child.stdin.on('error', fail);
       child.stderr.on('data', () => {});
@@ -197,7 +204,9 @@ export function registerTerminal(app, server, port, remote = null) {
             const columns = z.number().int().min(2).max(500).parse(data.cols),
               rows = z.number().int().min(1).max(250).parse(data.rows);
             if (connected)
-              await dockerRequest('POST', `/exec/${execId}/resize?h=${rows}&w=${columns}`);
+              await engineContext.run(ticket.target, () =>
+                dockerRequest('POST', `/exec/${execId}/resize?h=${rows}&w=${columns}`),
+              );
           } else throw new Error('터미널 메시지 형식이 잘못되었습니다.');
         } catch (e) {
           fail(e);

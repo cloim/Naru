@@ -1,4 +1,6 @@
 export default {
+  '엔진 연결': 'Connections',
+  사용자: 'User',
   취소: 'Cancel',
   닫기: 'Close',
   '접수 중…': 'Submitting…',
@@ -447,8 +449,7 @@ export default {
   '통신 실패': 'Connection Failed',
   '결과가 없습니다.': 'No output.',
   '{0} 볼륨 파일 탐색기': '{0} Volume File Explorer',
-  '볼륨 전체 데이터를 TAR.GZ로 압축 다운로드':
-    'Download all volume data compressed as TAR.GZ',
+  '볼륨 전체 데이터를 TAR.GZ로 압축 다운로드': 'Download all volume data compressed as TAR.GZ',
   'TAR.GZ 아카이브로 볼륨 복원': 'Restore volume from TAR.GZ archive',
   '볼륨 데이터 복원': 'Restore volume data',
   '{0} 아카이브로 볼륨 데이터를 덮어씁니다. 계속하시겠습니까?':
@@ -496,4 +497,32 @@ export default {
   '진단 로그': 'Diagnostic logs',
   '엔진을 시작하면 컨테이너 사용량을 확인할 수 있습니다.':
     'Start the engine to view container resource usage.',
+
+  '연결 대상': 'Engine target',
+  '로컬 WSL': 'Local WSL',
+  '연결 관리': 'Engine connections',
+  연결됨: 'Connected',
+  '연결 실패': 'Connection failed',
+  '연결 확인 중': 'Checking connection',
+  '연결 추가': 'Add connection',
+  '연결 수정': 'Edit connection',
+  '연결 삭제': 'Delete connection',
+  '연결 테스트': 'Test connection',
+  'SSH 호스트 별칭 또는 주소': 'SSH host alias or address',
+  'SSH 설정 사용': 'Use SSH configuration',
+  '개인 키 파일 경로': 'Private key file path',
+  '원격 서버': 'Remote server',
+  '프로필을 삭제합니다. 서버의 컨테이너와 데이터는 유지됩니다.':
+    'Delete this profile. Server containers and data will be kept.',
+  '기존 SSH 설정의 호스트 별칭, 사용자, 포트와 키를 재사용합니다. 호스트 키는 SSH에서 먼저 확인해 주세요.':
+    'Reuse your SSH host alias, user, port and key settings. Verify the host key with SSH first.',
+  '원격 마운트는 서버 경로를 사용합니다. Compose 상대 경로는 서버 작업 폴더 기준입니다. WSL 설정, 디스크, 스냅샷, Kubernetes와 확장은 로컬 전용입니다.':
+    'Remote mounts use server paths. Compose resolves relative paths on the server. WSL settings, disk, snapshots, Kubernetes and extensions apply to the local engine.',
+  '원격 SSH 대상입니다. 마운트는 서버 경로를 사용합니다. WSL 설정, 디스크, 스냅샷, Kubernetes, 확장과 로컬 파일 도구는 로컬 전용입니다.':
+    'SSH remote engine. Mounts use server paths. WSL settings, disk, snapshots, Kubernetes, extensions and local file tools apply to the local engine.',
+  '로컬 WSL 전용 기능입니다. 로컬 엔진을 선택해 주세요.':
+    'This feature applies to local WSL. Select the local engine.',
+  '볼륨 파일 탐색과 아카이브는 로컬 WSL 전용입니다.':
+    'Volume file browsing and archives apply to local WSL.',
+  '원격 엔진 연결을 확인해 주세요': 'Check the remote engine connection',
 };

@@ -286,6 +286,14 @@ export const imageName = (r) =>
 export function RuntimeEmpty() {
   useLocale();
   const { status, job, busy } = useActions();
+  if (status?.managed === false)
+    return (
+      <div className={tw.page}>
+        <h2>{t('원격 엔진 연결을 확인해 주세요')}</h2>
+        <p className={tw.preserve}>{status.error}</p>
+        <Link to="/engines">{t('연결 관리')}</Link>
+      </div>
+    );
   return (
     <div className="flex min-h-[calc(100dvh-86px)] flex-col items-center justify-center px-7.5 py-15 text-center max-tablet:min-h-[calc(100dvh-68px)]">
       <div className="mb-7 flex h-23.5 w-23.5 -rotate-5 items-center justify-center rounded-[26px] bg-brand">

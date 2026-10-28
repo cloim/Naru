@@ -1,3 +1,5 @@
+import { target, remoteTarget } from './engine-context.js';
+import { sshArgs, remoteCommand } from './connections.js';
 import net from 'node:net';
 import path from 'node:path';
 import { DATA } from './state.js';
@@ -11,18 +13,28 @@ import { requireReady } from './runtime.js';
 
 // The engine socket stays inside WSL. No unauthenticated Docker TCP port is exposed.
 let sharedAgent;
+const remoteAgents = new Map();
+export function closeRemoteConnections() {
+  for (const agent of remoteAgents.values()) agent.destroy();
+  remoteAgents.clear();
+}
 export function enableDockerPool() {
   sharedAgent = createAgent(true);
 }
-function createAgent(keepAlive) {
-  const agent = new http.Agent({ keepAlive, maxSockets: 6, maxFreeSockets: 2, timeout: 10000 });
-  agent.createConnection = () => naruSocket();
+function createAgent(keepAlive, profile = target()) {
+  const agent = new http.Agent({
+    keepAlive,
+    maxSockets: profile.id === 'local' ? 6 : 2,
+    maxFreeSockets: 1,
+    timeout: 10000,
+  });
+  agent.createConnection = () => naruSocket(profile);
   return agent;
 }
 // A socket-like stream to the engine's Unix socket inside the naru distribution.
-export function naruSocket() {
+export function naruSocket(profile = target()) {
   try {
-    assertDistroAvailable();
+    if (profile.id === 'local') assertDistroAvailable();
   } catch (e) {
     const blocked = new Duplex({ read() {}, write: (chunk, encoding, done) => done() });
     // 실제 소켓처럼 기본 오류 수신자를 둔다. 요청 쪽은 에이전트가 붙인 수신자로 오류를 받는다.
@@ -31,8 +43,10 @@ export function naruSocket() {
     return blocked;
   }
   const p = spawn(
-    'wsl.exe',
-    ['-d', DISTRO, '-u', 'root', '--exec', 'socat', '-', 'UNIX-CONNECT:/run/naru/docker.sock'],
+    profile.id === 'local' ? 'wsl.exe' : 'ssh.exe',
+    profile.id === 'local'
+      ? ['-d', DISTRO, '-u', 'root', '--exec', 'socat', '-', 'UNIX-CONNECT:/run/naru/docker.sock']
+      : sshArgs(profile, ['docker', 'system', 'dial-stdio']),
     { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] },
   );
   const socket = Duplex.from({ readable: p.stdout, writable: p.stdin });
@@ -58,16 +72,57 @@ export function naruSocket() {
   };
   socket.unref = () => socket;
   p.on('error', (e) => socket.destroy(e));
-  p.stderr.on('data', () => {});
+  let stderr = '';
+  socket.transportError = () => stderr.trim();
+  p.stderr.on('data', (data) => {
+    stderr = (stderr + data).slice(-4096);
+  });
+  p.on('close', (code) => {
+    if (code) socket.destroy(new Error(stderr || `엔진 연결 종료 (${code})`));
+  });
   socket.on('close', () => {
     clearTimeout(idleTimer);
     if (!p.killed) p.kill();
   });
   return socket;
 }
-export async function dockerRequest(method, route, body, { timeout = 30000, stream = false } = {}) {
+export async function dockerRequest(method, route, body, options) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await dockerRequestOnce(method, route, body, options);
+    } catch (e) {
+      if (
+        !remoteTarget() ||
+        method !== 'GET' ||
+        attempt >= 1 ||
+        !/socket hang up|Connection reset|ECONNRESET|kex_exchange/i.test(e.message)
+      )
+        throw e;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  }
+}
+async function dockerRequestOnce(
+  method,
+  route,
+  body,
+  { timeout = 30000, stream = false, pool = true } = {},
+) {
   return new Promise((resolve, reject) => {
-    const agent = sharedAgent || createAgent(false);
+    const profile = target();
+    let agent = pool && profile.id === 'local' ? sharedAgent : undefined;
+    if (pool && profile.id !== 'local') {
+      // Names and profile revisions do not change the physical SSH endpoint.
+      const key = JSON.stringify([profile.host, profile.user, profile.port, profile.identityFile]);
+      agent = remoteAgents.get(key);
+      if (!agent) {
+        agent = createAgent(true, profile);
+        remoteAgents.set(key, agent);
+      }
+    }
+    // Keep stdin open until the full Docker response, then close one-shot agents.
+    agent ||= createAgent(profile.id !== 'local', profile);
+    const pooled = pool && (agent === sharedAgent || profile.id !== 'local');
     const payload = body === undefined ? undefined : JSON.stringify(body);
     const req = http.request(
       {
@@ -82,6 +137,7 @@ export async function dockerRequest(method, route, body, { timeout = 30000, stre
       (res) => {
         if (stream && res.statusCode < 400) {
           clearTimeout(timer);
+          if (!pooled) res.once('close', () => agent.destroy());
           resolve(res);
           return;
         }
@@ -92,7 +148,7 @@ export async function dockerRequest(method, route, body, { timeout = 30000, stre
         });
         res.on('end', () => {
           clearTimeout(timer);
-          if (agent !== sharedAgent) agent.destroy();
+          if (!pooled) agent.destroy();
           if (res.statusCode >= 400) {
             try {
               data = JSON.parse(data).message || data;
@@ -110,15 +166,18 @@ export async function dockerRequest(method, route, body, { timeout = 30000, stre
       },
     );
     const timer = setTimeout(() => req.destroy(new Error('Docker API 응답 시간 초과')), timeout);
-    req.on('error', (e) => {
+    req.once('error', (e) => {
+      const transportError = req.socket?.transportError?.();
+      if (transportError) e = new Error(`SSH: ${transportError}`, { cause: e });
       clearTimeout(timer);
-      if (agent !== sharedAgent) agent.destroy();
+      if (!pooled) agent.destroy();
       reject(e);
     });
     req.end(payload);
   });
 }
 export async function cli(args, options = {}) {
+  if (remoteTarget()) return remoteCommand(['docker', ...args], options);
   await requireReady();
   const cfg = await settings();
   const namespace = options.namespace ?? cfg.namespace;
@@ -224,6 +283,8 @@ export async function inspect(kind, id) {
   );
 }
 export async function containerAction(id, action, log) {
+  if (remoteTarget())
+    return cli([action === 'remove' ? 'rm' : action, id], { log, timeout: 60000 });
   const cfg = await settings();
   await requireReady();
   if (cfg.engine === 'moby') {

@@ -1,6 +1,16 @@
+import { engineStorageKey } from '../api.js';
 import { t, useLocale } from '../i18n.js';
 import React, { useState, useEffect, useMemo } from 'react';
-import { Terminal, Bookmark, ClipboardPaste, Plus, Trash2, Check, Sparkles, ChevronDown } from 'lucide-react';
+import {
+  Terminal,
+  Bookmark,
+  ClipboardPaste,
+  Plus,
+  Trash2,
+  Check,
+  Sparkles,
+  ChevronDown,
+} from 'lucide-react';
 import { Modal } from './Modal/Modal.jsx';
 import { Button, CopyButton } from '../ui.jsx';
 import { tw, cn } from '../tw.js';
@@ -77,7 +87,7 @@ const PRESETS_STORAGE_KEY = 'naru.envPresets';
 
 function readCustomPresets() {
   try {
-    return JSON.parse(localStorage.getItem(PRESETS_STORAGE_KEY) || '[]');
+    return JSON.parse(localStorage.getItem(engineStorageKey(PRESETS_STORAGE_KEY)) || '[]');
   } catch {
     return [];
   }
@@ -97,7 +107,8 @@ export function parseMountsInput(text) {
     .filter(Boolean)
     .map((line) => {
       const match = line.match(/^([a-zA-Z]:[\\/][^:]+|[^:]+):([^:]+)(?::([^:]+))?$/);
-      if (!match) throw new Error(t('볼륨 마운트 형식(source:target)이 올바르지 않습니다: {0}', [line]));
+      if (!match)
+        throw new Error(t('볼륨 마운트 형식(source:target)이 올바르지 않습니다: {0}', [line]));
       const [, source, target, mode] = match;
       return {
         source: source.trim(),
@@ -186,7 +197,9 @@ export function parseDockerRunCommand(str) {
     } else if (t.startsWith('--volume=')) {
       mountList.push(t.slice(9));
     } else if (t.startsWith('-')) {
-      if (['--restart', '-w', '--workdir', '-u', '--user', '--network', '--entrypoint'].includes(t)) {
+      if (
+        ['--restart', '-w', '--workdir', '-u', '--user', '--network', '--entrypoint'].includes(t)
+      ) {
         i++;
       }
     } else {
@@ -316,7 +329,7 @@ export function CreateContainerModal({ isOpen, onClose, onSubmit, busy, initialV
     const updated = [...customPresets, { name: newPresetName.trim(), env: env.trim() }];
     setCustomPresets(updated);
     try {
-      localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(updated));
+      localStorage.setItem(engineStorageKey(PRESETS_STORAGE_KEY), JSON.stringify(updated));
     } catch {}
     setNewPresetName('');
     setSavingPreset(false);
@@ -326,7 +339,7 @@ export function CreateContainerModal({ isOpen, onClose, onSubmit, busy, initialV
     const updated = customPresets.filter((p) => p.name !== nameToDelete);
     setCustomPresets(updated);
     try {
-      localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(updated));
+      localStorage.setItem(engineStorageKey(PRESETS_STORAGE_KEY), JSON.stringify(updated));
     } catch {}
   };
 
@@ -559,7 +572,9 @@ export function CreateContainerModal({ isOpen, onClose, onSubmit, busy, initialV
             onChange={(e) => setMounts(e.target.value)}
           />
           <small>
-            {t('줄마다 source:target 형식(예: my-vol:/data, D:\\data:/app) 또는 JSON 배열을 입력합니다.')}
+            {t(
+              '줄마다 source:target 형식(예: my-vol:/data, D:\\data:/app) 또는 JSON 배열을 입력합니다.',
+            )}
           </small>
         </label>
 
@@ -567,7 +582,7 @@ export function CreateContainerModal({ isOpen, onClose, onSubmit, busy, initialV
           <span>{t('실행 인수')}</span>
           <input
             autoComplete="off"
-            placeholder="sh -c &quot;...&quot; 또는 [&quot;sleep&quot;, &quot;infinity&quot;]"
+            placeholder='sh -c "..." 또는 ["sleep", "infinity"]'
             value={command}
             onChange={(e) => setCommand(e.target.value)}
           />

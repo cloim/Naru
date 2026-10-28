@@ -1,3 +1,4 @@
+import { engineContext, remoteTarget } from './engine-context.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
@@ -6,7 +7,7 @@ import { DATA, DISTRO, settings, saveSettings, atomicJSON, readJSON } from './st
 import { wsl, command } from './runner.js';
 import * as runtime from './runtime.js';
 import * as engine from './engine.js';
-import { validateJob } from './jobs.js';
+import { validateJob, assertJobTarget } from './jobs.js';
 import { createForward, stopForward, removeForward } from './forwarding.js';
 import { ensureWindowsTool } from './tools.js';
 import { compactDisk } from './disk.js';
@@ -22,11 +23,15 @@ const dir = path.join(DATA, 'jobs'),
 const logHandle = await fs.open(path.join(dir, `${id}.log`), 'a');
 const log = (text) => logHandle.write(String(text));
 let job = await readJSON(file);
+if (job.engineId && (!job.target || job.target.id !== job.engineId))
+  throw new Error('작업의 엔진 정보가 잘못되었습니다.');
+engineContext.enterWith(job.target || { id: 'local', name: '로컬 WSL' });
 const inputFile = path.join(dir, `${id}.input.json.private`);
 let lock;
 try {
   lock = await fs.open(path.join(DATA, 'runtime.lock'), 'wx');
   await lock.writeFile(String(process.pid));
+  assertJobTarget(job.type);
   const p = validateJob(job.type, await readJSON(inputFile));
   job = { ...job, state: 'running', pid: process.pid, startedAt: new Date().toISOString() };
   await atomicJSON(file, job);
@@ -297,6 +302,8 @@ try {
       for (const m of p.mounts) {
         if (m.source.includes(',') || m.target.includes(','))
           throw new Error('마운트 경로에는 쉼표를 사용할 수 없습니다.');
+        if (remoteTarget() && /^[a-zA-Z]:[\\/]/.test(m.source))
+          throw new Error('원격 엔진의 Linux 마운트 경로를 입력해 주세요.');
         const source = m.source.startsWith('/')
           ? m.source
           : /^[a-zA-Z]:[\\/]/.test(m.source)
@@ -427,6 +434,7 @@ try {
   job = { ...job, state: 'failed', error: e.message, finishedAt: new Date().toISOString() };
   process.exitCode = 1;
 } finally {
+  engine.closeRemoteConnections();
   await atomicJSON(file, job);
   await fs.unlink(inputFile).catch(() => {});
   if (lock) {

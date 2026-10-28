@@ -1,3 +1,4 @@
+import { remoteTarget } from './engine-context.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
@@ -9,7 +10,10 @@ export const DATA =
 export const DISTRO = 'naru';
 export const settingsSchema = z
   .object({
-    connection: z.string().default('managed').transform(() => 'managed'),
+    connection: z
+      .string()
+      .default('managed')
+      .transform(() => 'managed'),
     engine: z.enum(['moby', 'containerd']).default('moby'),
     namespace: z
       .string()
@@ -36,8 +40,7 @@ export const settingsSchema = z
       .default({ http: '', https: '', noProxy: 'localhost,127.0.0.1,::1,.svc,.cluster.local' }),
     pollSeconds: z.number().int().min(3).max(60).default(5),
   })
-  .strict()
-;
+  .strict();
 
 export async function atomicJSON(file, data) {
   await fs.mkdir(path.dirname(file), { recursive: true });
@@ -54,11 +57,12 @@ export async function readJSON(file, fallback) {
   }
 }
 export async function settings() {
-  return settingsSchema.parse(await readJSON(path.join(DATA, 'settings.json'), {}));
+  const cfg = settingsSchema.parse(await readJSON(path.join(DATA, 'settings.json'), {}));
+  return remoteTarget() ? { ...cfg, engine: 'moby', connection: 'ssh' } : cfg;
 }
 export async function saveSettings(input) {
   const value = settingsSchema.parse(input);
-  
+
   await atomicJSON(path.join(DATA, 'settings.json'), value);
   return value;
 }

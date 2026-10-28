@@ -1,3 +1,4 @@
+import { target, remoteTarget, engineKey } from './engine-context.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
@@ -255,6 +256,7 @@ export async function reconcileJobs() {
 }
 export async function submit(type, input) {
   const payload = validateJob(type, input);
+  assertJobTarget(type);
   if (submitting) throw new Error('다른 작업을 접수 중입니다.');
   submitting = true;
   try {
@@ -263,7 +265,15 @@ export async function submit(type, input) {
     if (active) throw new Error(`진행 중인 작업이 있습니다: ${active.type}`);
     const id = crypto.randomUUID(),
       dir = path.join(DATA, 'jobs');
-    const job = { id, type, state: 'queued', createdAt: new Date().toISOString() };
+    const job = {
+      id,
+      type,
+      engineId: target().id,
+      engineScopeId: engineKey(),
+      target: { ...target() },
+      state: 'queued',
+      createdAt: new Date().toISOString(),
+    };
     await atomicJSON(path.join(dir, `${id}.input.json.private`), payload);
     await atomicJSON(path.join(dir, `${id}.json`), job);
     // Persist first; dispatch independently so the UI receives its durable job id immediately.
@@ -285,4 +295,27 @@ export async function submit(type, input) {
   } finally {
     submitting = false;
   }
+}
+
+export function assertJobTarget(type) {
+  const remoteJobs = [
+    'containerAction',
+    'pullImage',
+    'pushImage',
+    'removeImage',
+    'tagImage',
+    'createVolume',
+    'removeVolume',
+    'createNetwork',
+    'removeNetwork',
+    'pruneResources',
+    'pruneImages',
+    'pruneVolumes',
+    'pruneNetworks',
+    'createContainer',
+    'compose',
+    'project',
+  ];
+  if (remoteTarget() && !remoteJobs.includes(type))
+    throw new Error('로컬 WSL 전용 작업입니다. 로컬 엔진을 선택해 주세요.');
 }

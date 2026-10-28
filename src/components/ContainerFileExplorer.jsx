@@ -1,3 +1,4 @@
+import { engineHeaders } from '../api.js';
 import { t, useLocale } from '../i18n.js';
 import React, { useState, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -14,17 +15,30 @@ import {
   RefreshCw,
   Save,
 } from 'lucide-react';
-import { useActions, useData, Button, IconButton, CopyButton, Skeleton, ErrorState, bytes } from '../ui.jsx';
+import {
+  useActions,
+  useData,
+  Button,
+  IconButton,
+  CopyButton,
+  Skeleton,
+  ErrorState,
+  bytes,
+} from '../ui.jsx';
 import { Modal } from './Modal/Modal.jsx';
 import { api } from '../api.js';
 import { cn, tw } from '../tw.js';
 
-export function ResourceFileExplorer({ containerId, targetType: propTargetType, targetId: propTargetId }) {
+export function ResourceFileExplorer({
+  containerId,
+  targetType: propTargetType,
+  targetId: propTargetId,
+}) {
   useLocale();
   const targetType = propTargetType || 'containers';
   const targetId = propTargetId || containerId;
   const isVolume = targetType === 'volumes';
-  const { notify, confirm } = useActions();
+  const { notify, confirm, status } = useActions();
   const qc = useQueryClient();
   const [currentPath, setCurrentPath] = useState('/');
   const [search, setSearch] = useState('');
@@ -33,9 +47,13 @@ export function ResourceFileExplorer({ containerId, targetType: propTargetType, 
   const [saving, setSaving] = useState(false);
 
   const queryKey = [`${targetType}-files`, targetId, currentPath];
-  const files = useData(queryKey, `/${targetType}/${targetId}/files?path=${encodeURIComponent(currentPath)}`, {
-    enabled: !!targetId,
-  });
+  const files = useData(
+    queryKey,
+    `/${targetType}/${targetId}/files?path=${encodeURIComponent(currentPath)}`,
+    {
+      enabled: !!targetId && !(isVolume && status?.managed === false),
+    },
+  );
 
   const pathParts = useMemo(() => {
     const parts = currentPath.split('/').filter(Boolean);
@@ -64,7 +82,9 @@ export function ResourceFileExplorer({ containerId, targetType: propTargetType, 
 
   const openFile = async (entry) => {
     try {
-      const res = await api(`/${targetType}/${targetId}/files/content?path=${encodeURIComponent(entry.path)}`);
+      const res = await api(
+        `/${targetType}/${targetId}/files/content?path=${encodeURIComponent(entry.path)}`,
+      );
       setEditFile(entry);
       setEditContent(res.text ?? '');
     } catch (e) {
@@ -141,7 +161,7 @@ export function ResourceFileExplorer({ containerId, targetType: propTargetType, 
           const buffer = await file.arrayBuffer();
           const res = await fetch(`/api/volumes/${encodeURIComponent(targetId)}/import`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/gzip' },
+            headers: { ...engineHeaders(), 'Content-Type': 'application/gzip' },
             body: buffer,
           });
           if (!res.ok) throw new Error(await res.text());
@@ -173,6 +193,8 @@ export function ResourceFileExplorer({ containerId, targetType: propTargetType, 
     window.open(`/api/volumes/${encodeURIComponent(targetId)}/export`, '_blank');
   };
 
+  if (isVolume && status?.managed === false)
+    return <p className={tw.groupText}>{t('볼륨 파일 탐색과 아카이브는 로컬 WSL 전용입니다.')}</p>;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* 탐색기 상단 툴바 */}
@@ -231,7 +253,10 @@ export function ResourceFileExplorer({ containerId, targetType: propTargetType, 
               >
                 {t('백업')}
               </Button>
-              <label className="inline-flex h-8.5 cursor-pointer items-center gap-1.5 rounded-[6px] border border-[#dce2d9] bg-white px-2.5 text-[12px] font-semibold text-ink hover:border-[#bdcdbb] hover:bg-[#f2f6ed]" title={t('TAR.GZ 아카이브로 볼륨 복원')}>
+              <label
+                className="inline-flex h-8.5 cursor-pointer items-center gap-1.5 rounded-[6px] border border-[#dce2d9] bg-white px-2.5 text-[12px] font-semibold text-ink hover:border-[#bdcdbb] hover:bg-[#f2f6ed]"
+                title={t('TAR.GZ 아카이브로 볼륨 복원')}
+              >
                 <Upload size={14} />
                 <span>{t('복원')}</span>
                 <input
@@ -304,11 +329,7 @@ export function ResourceFileExplorer({ containerId, targetType: propTargetType, 
                 <div className="flex flex-none items-center gap-1">
                   {!entry.isDir && (
                     <>
-                      <IconButton
-                        icon={Edit}
-                        label={t('편집')}
-                        onClick={() => openFile(entry)}
-                      />
+                      <IconButton icon={Edit} label={t('편집')} onClick={() => openFile(entry)} />
                       <IconButton
                         icon={Download}
                         label={t('다운로드')}
@@ -371,4 +392,3 @@ export function ResourceFileExplorer({ containerId, targetType: propTargetType, 
 export const ContainerFileExplorer = ({ containerId }) => (
   <ResourceFileExplorer targetType="containers" targetId={containerId} />
 );
-
