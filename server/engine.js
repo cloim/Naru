@@ -8,7 +8,7 @@ import http from 'node:http';
 import { spawn } from 'node:child_process';
 import { Duplex } from 'node:stream';
 import { settings, DISTRO } from './state.js';
-import { wsl, assertDistroAvailable } from './runner.js';
+import { wsl, assertDistroAvailable, killProcess } from './runner.js';
 import { requireReady } from './runtime.js';
 
 // The engine socket stays inside WSL. No unauthenticated Docker TCP port is exposed.
@@ -82,7 +82,7 @@ export function naruSocket(profile = target()) {
   });
   socket.on('close', () => {
     clearTimeout(idleTimer);
-    if (!p.killed) p.kill();
+    killProcess(p);
   });
   return socket;
 }
@@ -109,6 +109,19 @@ async function dockerRequestOnce(
   { timeout = 30000, stream = false, pool = true } = {},
 ) {
   return new Promise((resolve, reject) => {
+    let settled = false;
+    const safeResolve = (val) => {
+      if (!settled) {
+        settled = true;
+        resolve(val);
+      }
+    };
+    const safeReject = (err) => {
+      if (!settled) {
+        settled = true;
+        reject(err);
+      }
+    };
     const profile = target();
     let agent = pool && profile.id === 'local' ? sharedAgent : undefined;
     if (pool && profile.id !== 'local') {
@@ -138,7 +151,7 @@ async function dockerRequestOnce(
         if (stream && res.statusCode < 400) {
           clearTimeout(timer);
           if (!pooled) res.once('close', () => agent.destroy());
-          resolve(res);
+          safeResolve(res);
           return;
         }
         let data = '';
@@ -153,25 +166,29 @@ async function dockerRequestOnce(
             try {
               data = JSON.parse(data).message || data;
             } catch {}
-            reject(new Error(data || `Docker HTTP ${res.statusCode}`));
+            safeReject(new Error(data || `Docker HTTP ${res.statusCode}`));
             return;
           }
           try {
-            resolve(data ? JSON.parse(data) : null);
+            safeResolve(data ? JSON.parse(data) : null);
           } catch {
-            resolve(data);
+            safeResolve(data);
           }
         });
-        res.on('error', reject);
+        res.on('error', (e) => {
+          clearTimeout(timer);
+          if (!pooled) agent.destroy();
+          safeReject(e);
+        });
       },
     );
     const timer = setTimeout(() => req.destroy(new Error('Docker API 응답 시간 초과')), timeout);
-    req.once('error', (e) => {
-      const transportError = req.socket?.transportError?.();
-      if (transportError) e = new Error(`SSH: ${transportError}`, { cause: e });
+    req.on('error', (e) => {
       clearTimeout(timer);
       if (!pooled) agent.destroy();
-      reject(e);
+      const transportError = req.socket?.transportError?.();
+      if (transportError) e = new Error(`SSH: ${transportError}`, { cause: e });
+      safeReject(e);
     });
     req.end(payload);
   });

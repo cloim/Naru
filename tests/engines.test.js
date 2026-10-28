@@ -200,3 +200,21 @@ test('killProcess closes stdin and terminates process tree safely', async () => 
   killProcess(dummyChild);
   assert.equal(stdinEnded, true);
 });
+
+test('dockerRequest handles socket teardown cleanly without unhandled AbortError', async () => {
+  const { dockerRequest } = await import('../server/engine.js');
+  const dummyProfile = {
+    id: 'failing-engine',
+    name: 'Failing Engine',
+    host: 'invalid-host-name-xyz',
+    user: '',
+    port: null,
+    identityFile: '',
+  };
+  await engineContext.run(dummyProfile, async () => {
+    await assert.rejects(
+      dockerRequest('GET', '/version', undefined, { timeout: 3000, pool: false }),
+      /SSH|hang up|Docker/i,
+    );
+  });
+});
