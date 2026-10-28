@@ -475,6 +475,25 @@ export default {
   '프리셋 삭제': 'Delete preset',
   'Docker CLI 명령어': 'Docker CLI command',
   '명령어 복사': 'Copy command',
+  '최근 5분': 'Last 5 minutes',
+  '진단 그래프': 'Diagnostic graphs',
+  '엔진 로그': 'Engine logs',
+  'Kubernetes 로그': 'Kubernetes logs',
+  '빌드 엔진 로그': 'Build engine logs',
+  '3초마다 자동 갱신': 'Refreshes every 3 seconds',
+  '마지막 수집': 'Last sample',
+  '리소스 대상': 'Resource target',
+  '전체 컨테이너': 'All containers',
+  '종료된 컨테이너': 'Stopped container',
+  '컨테이너 CPU': 'Container CPU',
+  '컨테이너 메모리': 'Container memory',
+  'Naru 제어 서버 CPU': 'Naru control server CPU',
+  'Naru 제어 서버 메모리': 'Naru control server memory',
+  '호스트 시스템 CPU': 'Host system CPU',
+  '호스트 시스템 메모리': 'Host system memory',
+  '컨테이너와 제어 서버 CPU는 코어 1개를 100%로 표시합니다. 호스트 CPU는 전체 코어 기준입니다.':
+    'Container and control server CPU use 100% per core. Host CPU is relative to all cores.',
+  '진단 로그': 'Diagnostic logs',
+  '엔진을 시작하면 컨테이너 사용량을 확인할 수 있습니다.':
+    'Start the engine to view container resource usage.',
 };
-
-

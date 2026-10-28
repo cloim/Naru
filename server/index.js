@@ -22,6 +22,7 @@ import { security, loadRemote } from './security.js';
 import { jobList, submit, identifier, reconcileJobs } from './jobs.js';
 import * as runtime from './runtime.js';
 import * as engine from './engine.js';
+import { resourceSample } from './diagnostics.js';
 import { wsl, distributions } from './runner.js';
 import { startDockerBridge, startCompatBridge, startKubernetesBridge } from './bridge.js';
 import { listForwards } from './forwarding.js';
@@ -614,6 +615,7 @@ app.delete('/api/projects/:name', async (req, res) => {
 });
 const containerLabel = (c) => (c.Names?.[0] || c.Id.slice(0, 12)).replace(/^\//, '');
 registerExtensions(app, port);
+app.get('/api/diagnostics/resources', async (req, res) => res.json(await resourceSample()));
 app.get('/api/diagnostics', async (req, res) => {
   const state = await runtime.status();
   const logs = {};
