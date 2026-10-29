@@ -168,8 +168,6 @@ export async function installExtension(image, log) {
       installedAt: new Date().toISOString(),
     };
     await atomicJSON(path.join(folder, 'extension.json'), record);
-    const hook = metadata.host?.['x-ext-install']?.windows;
-    if (hook) await runHost(record, typeof hook === 'string' ? [hook] : hook, {}, log);
     log('확장 설치 완료. UI는 별도 로컬 출처에서 격리하여 실행합니다.\n');
   } catch (e) {
     log('확장 설치가 완료되지 않았습니다. 설치 로그와 추출 파일을 보존합니다.\n');
@@ -191,8 +189,6 @@ export async function uninstallExtension(id, log) {
   await requireReady();
   const cfg = await settings();
   if (cfg.engine !== ext.engine) throw new Error('확장을 설치한 컨테이너 엔진으로 전환해 주세요.');
-  const hook = ext.metadata.host?.['x-ext-uninstall']?.windows;
-  if (hook) await runHost(ext, typeof hook === 'string' ? [hook] : hook, {}, log);
   if (ext.vmService)
     await cli(
       [

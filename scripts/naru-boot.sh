@@ -63,7 +63,7 @@ elif [ "$engine" = 'containerd' ]; then
   if [ ! -e /etc/cni/net.d ]; then ln -s /var/lib/naru/k3s/agent/etc/cni/net.d /etc/cni/net.d; fi
   /usr/bin/containerd --address /run/naru/containerd.sock --root /var/lib/naru/containerd --state /run/naru/containerd > /var/log/naru/engine.log 2>&1 &
   engine_pid=$!
-  /usr/local/bin/buildkitd --addr unix:///run/naru/buildkitd.sock --root /var/lib/naru/buildkit --oci-worker=false --containerd-worker=true --containerd-worker-addr /run/naru/containerd.sock > /var/log/naru/buildkit.log 2>&1 &
+  /usr/bin/buildkitd --addr unix:///run/naru/buildkitd.sock --root /var/lib/naru/buildkit --oci-worker=false --containerd-worker=true --containerd-worker-addr /run/naru/containerd.sock > /var/log/naru/buildkit.log 2>&1 &
   buildkit_pid=$!
 else
   echo 'Invalid engine' >&2

@@ -8,8 +8,9 @@ import * as runtime from './runtime.js';
 export const windowsTools = {
   docker: {
     file: 'docker.exe',
-    url: 'https://github.com/example/docker-cli/releases/download/v29.6.2/docker-windows-amd64.exe',
-    sha256: '0000000000000000000000000000000000000000000000000000000000000000',
+    url: 'https://download.docker.com/win/static/stable/x86_64/docker-29.9.2.zip',
+    sha256: 'b2be959bfed1281ddaf665c0972cba9a62ce30c542b6bcce82f055bf8886bc7d',
+    entry: 'docker/docker.exe',
   },
   compose: {
     file: 'cli-plugins/docker-compose.exe',

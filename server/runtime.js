@@ -13,11 +13,29 @@ export async function requireManaged() {
   localOnly();
 }
 
+// Official Alpine root filesystem. Engine packages come from the same release branch and apk verifies their signatures.
 export const BASE = {
-  version: '0.100',
-  sha256: '0000000000000000000000000000000000000000000000000000000000000000',
-  url: 'https://github.com/example/base-distro/releases/download/v0.100/base-distro.tar',
+  version: '3.24.3',
+  sha256: 'f8e1cafba9b1b283b5d30d06f9885c8d2bc161ffe9083ade8e2e157813a53407',
+  url: 'https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86_64/alpine-minirootfs-3.24.3-x86_64.tar.gz',
 };
+export const PACKAGES = [
+  'docker-engine',
+  'docker-cli',
+  'containerd',
+  'nerdctl',
+  'buildkit',
+  'buildctl',
+  'cni-plugins',
+  'iptables',
+  'ip6tables',
+  'iproute2-minimal',
+  'socat',
+  'curl',
+  'util-linux-misc',
+  'ca-certificates',
+  'tzdata',
+];
 export async function sha256(file) {
   const hash = createHash('sha256');
   for await (const chunk of createReadStream(file)) hash.update(chunk);
@@ -148,7 +166,7 @@ export async function install(log) {
   if ((await distributions()).includes(DISTRO))
     throw new Error('Naru 배포판이 이미 설치되어 있습니다.');
   await fs.mkdir(path.join(DATA, 'cache'), { recursive: true });
-  const tar = path.join(DATA, 'cache', 'base-distro.tar');
+  const tar = path.join(DATA, 'cache', path.basename(BASE.url));
   try {
     await fs.access(tar);
   } catch {
@@ -171,7 +189,9 @@ export async function install(log) {
     timeout: 180000,
     log,
   });
-  // Replace upstream-specific DNS settings; never start upstream networking helpers.
+  log('엔진 패키지를 설치합니다.\n');
+  await wsl(['apk', 'add', '--no-cache', ...PACKAGES], { timeout: 15 * 60 * 1000, log });
+  // WSL regenerates hosts and resolv.conf on the next boot from these settings.
   const conf =
     '[automount]\nmountFsTab=false\noptions=metadata\n[network]\ngenerateHosts=true\ngenerateResolvConf=true\n[user]\ndefault=root\n';
   await wsl(
@@ -183,13 +203,11 @@ export async function install(log) {
     { input: conf, log },
   );
   await installScripts(log);
-  await wsl(['/usr/local/bin/naru-layout']);
   await command('wsl.exe', ['--terminate', DISTRO], { timeout: 30000 });
   await atomicJSON(path.join(DATA, 'provenance.json'), {
     base: BASE,
+    packages: PACKAGES,
     installedAt: new Date().toISOString(),
-    upstream: 'WSL distro (Apache-2.0)',
-    independent: true,
   });
   log('Naru 전용 WSL2 배포판 설치 완료.\n');
 }
@@ -198,7 +216,6 @@ async function installScripts(log) {
     'naru-boot.sh',
     'naru-gpu.sh',
     'naru-k3s.sh',
-    'naru-layout.sh',
     'naru-netns.sh',
     'naru-port-relay.sh',
   ]) {
@@ -254,10 +271,9 @@ export async function start(log) {
           { timeout: 5000 },
         );
       else
-        await wsl(
-          ['/usr/bin/nerdctl', '--address', '/run/naru/containerd.sock', 'info'],
-          { timeout: 5000 },
-        );
+        await wsl(['/usr/bin/nerdctl', '--address', '/run/naru/containerd.sock', 'info'], {
+          timeout: 5000,
+        });
       log('컨테이너 엔진 응답 확인.\n');
       if (cfg.kubernetes.enabled) await startKubernetes(log);
       return;
