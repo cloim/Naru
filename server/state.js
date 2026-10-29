@@ -42,6 +42,22 @@ export const settingsSchema = z
   })
   .strict();
 
+// Proxy settings for containers in Docker CLI config form, or null when no proxy is set.
+// Containers reach a proxy on Windows localhost only through host.docker.internal.
+export function containerProxyConfig(proxy) {
+  const reach = (url) =>
+    url.replace(
+      /^((?:[a-z][a-z0-9+.-]*:\/\/)?(?:[^@/]*@)?)(?:localhost|127\.0\.0\.1|\[::1\])(?=[:/]|$)/i,
+      '$1host.docker.internal',
+    );
+  if (!proxy.http && !proxy.https) return null;
+  return {
+    ...(proxy.http && { httpProxy: reach(proxy.http) }),
+    ...(proxy.https && { httpsProxy: reach(proxy.https) }),
+    ...(proxy.noProxy && { noProxy: proxy.noProxy }),
+  };
+}
+
 export async function atomicJSON(file, data) {
   await fs.mkdir(path.dirname(file), { recursive: true });
   const temp = `${file}.${process.pid}.${crypto.randomUUID()}.tmp`;

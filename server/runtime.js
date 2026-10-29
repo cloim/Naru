@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { parse, stringify } from 'yaml';
-import { DATA, ROOT, DISTRO, settings, atomicJSON } from './state.js';
+import { DATA, ROOT, DISTRO, settings, atomicJSON, containerProxyConfig } from './state.js';
 import { command, wsl, distributions, detached } from './runner.js';
 
 export async function requireManaged() {
@@ -238,6 +238,14 @@ export async function start(log) {
     return;
   }
   await installScripts(log);
+  // The Docker CLI inside WSL hands these to containers and builds, as Windows clients get from bridge.js.
+  const config = JSON.parse(await wsl(['cat', '/etc/naru/docker/config.json']));
+  const proxies = containerProxyConfig(cfg.proxy);
+  if (proxies) config.proxies = { default: proxies };
+  else delete config.proxies;
+  await wsl(['sh', '-c', 'umask 077; cat > /etc/naru/docker/config.json'], {
+    input: JSON.stringify(config, null, 2) + '\n',
+  });
   // Pass proxy values as env arguments, never interpolate into a shell program.
   const proxy = [
     'HTTP_PROXY=' + cfg.proxy.http,

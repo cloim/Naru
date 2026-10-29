@@ -1,8 +1,31 @@
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
-import { DATA, settings, atomicJSON } from './state.js';
+import { DATA, settings, atomicJSON, readJSON, containerProxyConfig } from './state.js';
 import { wsl, command } from './runner.js';
 import * as runtime from './runtime.js';
+
+// The Windows Docker CLI and buildx pass these proxies to containers and BuildKit builds.
+// A proxy the user configured there stays; Naru only replaces or removes the value it wrote.
+export async function syncCliProxies() {
+  const proxies = containerProxyConfig((await settings()).proxy);
+  const file = path.join(
+    process.env.DOCKER_CONFIG || path.join(os.homedir(), '.docker'),
+    'config.json',
+  );
+  const record = path.join(DATA, 'docker', 'cli-proxies.json');
+  const config = await readJSON(file, {});
+  const current = JSON.stringify(config.proxies?.default ?? null);
+  if (current === JSON.stringify(proxies)) return;
+  if (current !== 'null' && current !== JSON.stringify(await readJSON(record, null))) return;
+  if (proxies) config.proxies = { ...config.proxies, default: proxies };
+  else {
+    delete config.proxies.default;
+    if (!Object.keys(config.proxies).length) delete config.proxies;
+  }
+  await atomicJSON(file, config);
+  await atomicJSON(record, proxies);
+}
 
 // Official tool versions; archives are verified before extraction.
 export const windowsTools = {

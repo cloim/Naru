@@ -9,7 +9,7 @@ import * as runtime from './runtime.js';
 import * as engine from './engine.js';
 import { validateJob, assertJobTarget } from './jobs.js';
 import { createForward, stopForward, removeForward } from './forwarding.js';
-import { ensureWindowsTool } from './tools.js';
+import { ensureWindowsTool, syncCliProxies } from './tools.js';
 import { compactDisk } from './disk.js';
 import { installExtension, uninstallExtension } from './extensions.js';
 import { ensureCredentialHelper } from './registry.js';
@@ -190,6 +190,7 @@ try {
         ...new Set([...(userConfig.cliPluginsExtraDirs || []), path.join(bin, 'cli-plugins')]),
       ];
       await atomicJSON(path.join(userConfigDir, 'config.json'), userConfig);
+      await syncCliProxies();
       const contextName = 'naru';
       const dockerHost = 'npipe:////./pipe/naru_engine';
       const contexts = engine.lines(

@@ -1,8 +1,8 @@
-import { settings } from './state.js';
+import { settings, containerProxyConfig } from './state.js';
 import net from 'node:net';
 import http from 'node:http';
 import { naruSocket } from './engine.js';
-import { createRewriter } from './paths.js';
+import { createRewriter, rewriteBuildUrl } from './paths.js';
 import { spawn } from 'node:child_process';
 import { DISTRO } from './state.js';
 import { requireReady } from './runtime.js';
@@ -26,6 +26,9 @@ async function proxyRequest(req, res) {
   const headers = { ...req.headers };
   let body = null;
   const rewrite = createRewriter(req.method, req.url);
+  // Only creates and builds need proxy settings; other calls skip the settings read.
+  const proxies = req.method === 'POST' ? containerProxyConfig((await settings()).proxy) : null;
+  const route = rewriteBuildUrl(req.url, proxies);
   if (rewrite)
     try {
       const chunks = [];
@@ -36,7 +39,7 @@ async function proxyRequest(req, res) {
         chunks.push(chunk);
       }
       const text = Buffer.concat(chunks).toString('utf8');
-      body = Buffer.from(text ? JSON.stringify(rewrite(JSON.parse(text))) : '');
+      body = Buffer.from(text ? JSON.stringify(rewrite(JSON.parse(text), proxies)) : '');
       headers['content-length'] = String(body.length);
       delete headers['transfer-encoding'];
     } catch (e) {
@@ -45,7 +48,7 @@ async function proxyRequest(req, res) {
       return;
     }
   const upstream = http.request(
-    { agent: engineAgent, method: req.method, path: req.url, headers, setHost: false },
+    { agent: engineAgent, method: req.method, path: route, headers, setHost: false },
     (response) => {
       res.writeHead(response.statusCode, response.statusMessage, response.rawHeaders);
       // Long polls such as wait send headers first; the CLI blocks until it sees them.

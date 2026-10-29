@@ -29,6 +29,7 @@ import { wsl, distributions } from './runner.js';
 import { startDockerBridge, startCompatBridge, startKubernetesBridge } from './bridge.js';
 import { listForwards } from './forwarding.js';
 import { startPortForwarding, portForwardingStatus } from './ports.js';
+import { syncCliProxies } from './tools.js';
 import { diskUsage, MIN_RECLAIM } from './disk.js';
 import { registerExtensions } from './extensions.js';
 import {
@@ -132,6 +133,7 @@ app.put('/api/settings', async (req, res) => {
   )
     throw new Error('엔진 설정을 변경하려면 Naru 런타임을 종료해 주세요.');
   const value = await saveSettings(req.body);
+  await syncCliProxies();
   if (current.kubernetes.port !== value.kubernetes.port) {
     kubernetesBridge?.stop();
     kubernetesBridge = startKubernetesBridge(value.kubernetes.port);
