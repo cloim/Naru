@@ -369,6 +369,7 @@ try {
       await runtime.requireReady();
       await wsl(
         [
+          '/usr/local/bin/naru-netns',
           '/usr/local/bin/k3s',
           'kubectl',
           '--kubeconfig',
@@ -385,6 +386,7 @@ try {
       await runtime.requireReady();
       await wsl(
         [
+          '/usr/local/bin/naru-netns',
           '/usr/local/bin/k3s',
           'kubectl',
           '--kubeconfig',

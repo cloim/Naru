@@ -7,6 +7,7 @@ import { spawn } from 'node:child_process';
 import { DISTRO } from './state.js';
 import { requireReady } from './runtime.js';
 import { killProcess } from './runner.js';
+import { pipeRelay } from './ports.js';
 
 const NARU_PIPE = '\\\\.\\pipe\\naru_engine';
 const DOCKER_PIPE = '\\\\.\\pipe\\docker_engine';
@@ -115,6 +116,8 @@ export function startKubernetesBridge(port) {
   const server = net.createServer(async (socket) => {
     sockets.add(socket);
     socket.on('close', () => sockets.delete(socket));
+    // The relay is a plain TCP hop; the wsl.exe fallback spawns a process for every connection.
+    if (pipeRelay(socket, port)) return;
     try {
       await requireReady();
     } catch {

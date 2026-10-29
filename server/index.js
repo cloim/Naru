@@ -28,6 +28,7 @@ import { resourceSample } from './diagnostics.js';
 import { wsl, distributions } from './runner.js';
 import { startDockerBridge, startCompatBridge, startKubernetesBridge } from './bridge.js';
 import { listForwards } from './forwarding.js';
+import { startPortForwarding, portForwardingStatus } from './ports.js';
 import { diskUsage, MIN_RECLAIM } from './disk.js';
 import { registerExtensions } from './extensions.js';
 import {
@@ -116,6 +117,7 @@ async function cached(key, fn, ttl = 3000) {
 }
 app.get('/api/session', (req, res) => res.json({ token }));
 app.get('/api/forwards', async (req, res) => res.json(await listForwards()));
+app.get('/api/port-forwarding', (req, res) => res.json(portForwardingStatus()));
 app.get('/api/status', async (req, res) => res.json(await cached('status', runtime.status)));
 app.get('/api/disk', async (req, res) =>
   res.json({ ...(await cached('disk', diskUsage, 30000)), minReclaim: MIN_RECLAIM }),
@@ -532,6 +534,7 @@ app.get('/api/kubernetes', async (req, res) => {
     ])
     .parse(req.query.kind || 'pods');
   const args = [
+    '/usr/local/bin/naru-netns',
     '/usr/local/bin/k3s',
     'kubectl',
     '--kubeconfig',
@@ -558,6 +561,7 @@ app.get('/api/kubernetes/logs', async (req, res) => {
   res.json({
     text: await wsl(
       [
+        '/usr/local/bin/naru-netns',
         '/usr/local/bin/k3s',
         'kubectl',
         '--kubeconfig',
@@ -698,6 +702,7 @@ server.listen(port, '127.0.0.1', () =>
 if (process.platform === 'win32') {
   startDockerBridge();
   startCompatBridge();
+  startPortForwarding();
 }
 kubernetesBridge = startKubernetesBridge((await settings()).kubernetes.port);
 // Containers with a restart policy come back only when the engine starts with the server.

@@ -194,7 +194,14 @@ export async function install(log) {
   log('Naru 전용 WSL2 배포판 설치 완료.\n');
 }
 async function installScripts(log) {
-  for (const name of ['naru-boot.sh', 'naru-gpu.sh', 'naru-k3s.sh', 'naru-layout.sh']) {
+  for (const name of [
+    'naru-boot.sh',
+    'naru-gpu.sh',
+    'naru-k3s.sh',
+    'naru-layout.sh',
+    'naru-netns.sh',
+    'naru-port-relay.sh',
+  ]) {
     const contents = (await fs.readFile(path.join(ROOT, 'scripts', name), 'utf8')).replace(
       /\r/g,
       '',
@@ -330,6 +337,7 @@ export async function startKubernetes(log) {
     try {
       await wsl(
         [
+          '/usr/local/bin/naru-netns',
           '/usr/local/bin/k3s',
           'kubectl',
           '--kubeconfig',

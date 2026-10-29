@@ -15,4 +15,4 @@ else
   set -- "$@" --container-runtime-endpoint unix:///run/naru/containerd.sock
 fi
 if [ "$traefik" = 'false' ]; then set -- "$@" --disable traefik; fi
-exec /usr/local/bin/k3s "$@" >> /var/log/naru/kubernetes.log 2>&1
+exec /usr/local/bin/naru-netns /usr/local/bin/k3s "$@" >> /var/log/naru/kubernetes.log 2>&1
