@@ -556,6 +556,14 @@ export default {
   'PC를 다시 시작하면 WSL 설치가 끝나고, 그 뒤 Naru를 열면 이어서 진행합니다':
     'Restart the PC to finish installing WSL, then open Naru to continue',
   'WSL을 설치했습니다': 'WSL is installed',
+  'PC를 다시 시작하면 WSL 설치가 끝나고, 로그인 후 Naru가 자동으로 열려 이어서 진행합니다':
+    'Restart the PC to finish installing WSL; Naru opens after sign-in to continue',
+  'WSL을 설치한 뒤 확인합니다': 'Checked after WSL is installed',
+  'Naru 종료': 'Quit Naru',
+  '{0} 서버에 연결할 수 없습니다': 'Cannot reach the {0} server',
+  '설치에 필요한 파일을 내려받을 수 없어 설치를 시작하지 않았습니다. 인터넷 연결을 확인하고, 회사 네트워크라면 프록시 주소를 입력해 주세요':
+    'Setup did not start because the files it needs cannot be downloaded. Check the internet connection, and on a company network enter the proxy address',
+  '프록시 설정으로 돌아가기': 'Back to proxy settings',
   '새 데이터 폴더를 쓰려면 Naru 서버를 다시 시작해 주세요':
     'Restart the Naru server to use the new data folder',
   '새 데이터 폴더로 Naru를 다시 시작합니다': 'Restarting Naru with the new data folder',

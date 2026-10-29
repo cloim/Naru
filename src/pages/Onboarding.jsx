@@ -8,6 +8,7 @@ import {
   CircleAlert,
   HardDrive,
   LoaderCircle,
+  Power,
   RefreshCw,
   ShieldCheck,
   TriangleAlert,
@@ -128,7 +129,17 @@ export default function Onboarding({ onDone }) {
   useEffect(() => heading.current?.focus(), [step]);
 
   const ready = s && s.wsl?.installed && s.virtualization?.ready;
+  // WSL은 있는데 가상화를 쓸 수 없으면 이 PC에서는 더 진행할 수 없다.
+  const blocked = s && s.wsl?.installed && !s.virtualization?.ready;
   const key = STEPS[step][0];
+
+  async function quitApp() {
+    try {
+      await api('/app/quit', { method: 'POST' });
+    } catch (e) {
+      setNotice(e.message);
+    }
+  }
 
   async function installWsl() {
     setWorking(true);
@@ -136,9 +147,13 @@ export default function Onboarding({ onDone }) {
     try {
       const result = await api('/onboarding/wsl', { method: 'POST' });
       setNotice(
-        result.restartRequired
-          ? t('PC를 다시 시작하면 WSL 설치가 끝나고, 그 뒤 Naru를 열면 이어서 진행합니다')
-          : t('WSL을 설치했습니다'),
+        !result.restartRequired
+          ? t('WSL을 설치했습니다')
+          : s.packaged
+            ? t(
+                'PC를 다시 시작하면 WSL 설치가 끝나고, 로그인 후 Naru가 자동으로 열려 이어서 진행합니다',
+              )
+            : t('PC를 다시 시작하면 WSL 설치가 끝나고, 그 뒤 Naru를 열면 이어서 진행합니다'),
       );
       await status.refetch();
     } catch (e) {
@@ -322,15 +337,18 @@ export default function Onboarding({ onDone }) {
                           ? t('설치됨, 버전 {0}', [s.wsl.version || '-'])
                           : t('설치가 필요하며, 관리자 승인 뒤 설치하고 PC를 다시 시작해야 합니다')}
                       </CheckRow>
+                      {/* WSL 설치 전에는 하이퍼바이저가 꺼져 있어 가상화를 판정할 수 없다. */}
                       <CheckRow
-                        state={s.virtualization.ready ? 'ok' : 'error'}
+                        state={s.virtualization.ready ? 'ok' : s.wsl.installed ? 'error' : 'wait'}
                         title={t('하드웨어 가상화')}
                       >
                         {s.virtualization.ready
                           ? t('사용할 수 있습니다')
-                          : t(
-                              'BIOS 또는 UEFI 설정에서 가상화(Intel VT-x, AMD-V)를 켠 뒤 다시 확인해 주세요',
-                            )}
+                          : s.wsl.installed
+                            ? t(
+                                'BIOS 또는 UEFI 설정에서 가상화(Intel VT-x, AMD-V)를 켠 뒤 다시 확인해 주세요',
+                              )
+                            : t('WSL을 설치한 뒤 확인합니다')}
                       </CheckRow>
                       <CheckRow
                         state={s.freeBytes == null || s.freeBytes >= MIN_FREE ? 'ok' : 'warn'}
@@ -478,7 +496,15 @@ export default function Onboarding({ onDone }) {
                 </div>
               )}
 
-              {key === 'install' && s && <Install plan={plan} status={s} onDone={onDone} />}
+              {key === 'install' && s && (
+                <Install
+                  plan={plan}
+                  status={s}
+                  onDone={onDone}
+                  onBack={() => setStep(3)}
+                  onQuit={quitApp}
+                />
+              )}
             </div>
 
             {notice && (
@@ -504,6 +530,11 @@ export default function Onboarding({ onDone }) {
               </Button>
             )}
             <div className="ml-auto flex gap-2.25">
+              {key === 'check' && blocked && (
+                <Button icon={Power} onClick={quitApp}>
+                  {t('Naru 종료')}
+                </Button>
+              )}
               {step > 0 && (
                 <Button icon={ArrowLeft} disabled={working} onClick={() => setStep((n) => n - 1)}>
                   {t('이전')}
@@ -522,8 +553,10 @@ export default function Onboarding({ onDone }) {
 }
 
 // 설치 단계: 필요한 작업만 차례로 실행하고, 실패한 작업부터 다시 시도한다.
-function Install({ plan, status, onDone }) {
+function Install({ plan, status, onDone, onBack, onQuit }) {
   useLocale();
+  // 내려받기 전에 필요한 서버에 닿는지 확인한다. 실패하면 설치를 시작하지 않고 원인을 보여 준다.
+  const [unreachable, setUnreachable] = useState(null);
   const tasks = [
     !status.runtimeInstalled && ['installRuntime', t('Naru 런타임 설치')],
     ['startRuntime', t('엔진 시작')],
@@ -538,8 +571,22 @@ function Install({ plan, status, onDone }) {
 
   async function run(from) {
     setProgress({ index: from, failed: null, log: '' });
+    setUnreachable(null);
     try {
       if (from === 0) {
+        const proxy = {
+          http: plan.http.trim(),
+          https: plan.https.trim(),
+          noProxy: plan.noProxy.trim(),
+        };
+        const network = await api('/onboarding/network', {
+          method: 'POST',
+          body: { proxy, installCli: plan.installCli, kubernetes: plan.kubernetes },
+        });
+        if (!network.ok) {
+          setUnreachable(network.results.filter((r) => !r.ok));
+          return;
+        }
         const current = await api('/settings');
         await api('/settings', {
           method: 'PUT',
@@ -548,11 +595,7 @@ function Install({ plan, status, onDone }) {
             engine: plan.engine,
             autoStart: true,
             kubernetes: { ...current.kubernetes, enabled: plan.kubernetes },
-            proxy: {
-              http: plan.http.trim(),
-              https: plan.https.trim(),
-              noProxy: plan.noProxy.trim(),
-            },
+            proxy,
           },
         });
       }
@@ -574,6 +617,41 @@ function Install({ plan, status, onDone }) {
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [progress.log]);
+
+  if (unreachable)
+    return (
+      <div className="flex flex-col gap-5">
+        <div role="alert" className={cn(tw.panel, 'px-6 max-tablet:px-4')}>
+          <ul>
+            {unreachable.map((r) => (
+              <CheckRow
+                key={r.name}
+                state="error"
+                title={t('{0} 서버에 연결할 수 없습니다', [r.name])}
+              >
+                {r.detail}
+              </CheckRow>
+            ))}
+          </ul>
+        </div>
+        <p className="text-[12px] leading-[1.7] text-[#5f6e63]">
+          {t(
+            '설치에 필요한 파일을 내려받을 수 없어 설치를 시작하지 않았습니다. 인터넷 연결을 확인하고, 회사 네트워크라면 프록시 주소를 입력해 주세요',
+          )}
+        </p>
+        <div className="flex flex-wrap justify-end gap-2.25">
+          <Button icon={Power} onClick={onQuit}>
+            {t('Naru 종료')}
+          </Button>
+          <Button icon={ArrowLeft} onClick={onBack}>
+            {t('프록시 설정으로 돌아가기')}
+          </Button>
+          <Button primary icon={RefreshCw} onClick={() => run(0)}>
+            {t('다시 확인')}
+          </Button>
+        </div>
+      </div>
+    );
 
   return (
     <div className="flex flex-col gap-5">
@@ -611,11 +689,16 @@ function Install({ plan, status, onDone }) {
           {progress.log || t('작업을 준비하는 중')}
         </pre>
       )}
-      <div className="flex justify-end gap-2.25">
+      <div className="flex flex-wrap justify-end gap-2.25">
         {progress.failed && (
-          <Button icon={RefreshCw} onClick={() => run(progress.index)}>
-            {t('이 단계부터 다시 시도')}
-          </Button>
+          <>
+            <Button icon={Power} onClick={onQuit}>
+              {t('Naru 종료')}
+            </Button>
+            <Button icon={RefreshCw} onClick={() => run(progress.index)}>
+              {t('이 단계부터 다시 시도')}
+            </Button>
+          </>
         )}
         {done && (
           <Button
