@@ -342,6 +342,10 @@ try {
       break;
     }
     case 'project': {
+      if (p.action === 'delete') {
+        await projects.deleteProject(p.name, { log });
+        break;
+      }
       const containers = await engine.list('containers');
       const project = await findProject(p.name, containers);
       const members = containers.filter((c) => c.Labels?.[LABEL.project] === p.name);
@@ -353,6 +357,10 @@ try {
         log('compose 파일이 없어 컨테이너를 직접 제어합니다.\n');
         for (const c of members) await engine.containerAction(c.Id, p.action, log);
       } else throw new Error('compose 파일을 찾을 수 없어 이 작업을 실행할 수 없습니다.');
+      break;
+    }
+    case 'deleteProject': {
+      await projects.deleteProject(p.name, { log });
       break;
     }
     case 'kubeApply': {

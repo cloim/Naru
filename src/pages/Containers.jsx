@@ -84,7 +84,7 @@ const ProjectContext = createContext(null);
 
 function ProjectRow({ data: g }) {
   useLocale();
-  const { job, busy, toggle, collapsed, openLogs, openManage } = useContext(ProjectContext);
+  const { job, confirm, busy, toggle, collapsed, openLogs, openManage } = useContext(ProjectContext);
   const open = !collapsed.has(g.__group);
   const named = g.__group !== NO_PROJECT;
   const run = (action) => job('project', { name: g.__group, action });
@@ -159,6 +159,19 @@ function ProjectRow({ data: g }) {
             icon={Settings2}
             label={t('{0} 프로젝트 관리', [g.__group])}
             onClick={() => openManage(g)}
+          />
+          <IconButton
+            icon={Trash2}
+            label={t('{0} 프로젝트 삭제', [g.__group])}
+            danger="row"
+            disabled={busy}
+            onClick={() =>
+              confirm(
+                t('프로젝트 삭제'),
+                t('{0} 프로젝트를 삭제합니다. 소속된 컨테이너도 모두 함께 삭제됩니다.', [g.__group]),
+                () => job('deleteProject', { name: g.__group }),
+              )
+            }
           />
         </div>
       )}
@@ -288,30 +301,22 @@ function ProjectManage({ group, onClose, onLogs, containers = [] }) {
               </Button>
             </div>
           )}
-          {group?.total === 0 && (
-            <Button
-              icon={Trash2}
-              disabled={busy}
-              onClick={() => {
-                close();
-                confirm(
-                  t('프로젝트를 목록에서 제거'),
-                  managed
-                    ? t('{0} 프로젝트와 Naru에 저장한 compose.yaml을 삭제합니다.', [name])
-                    : t('{0} 프로젝트를 목록에서 뺍니다. 원본 compose 파일은 그대로 둡니다.', [
-                        name,
-                      ]),
-                  () =>
-                    api(`/projects/${name}`, { method: 'DELETE' })
-                      .then(() => qc.invalidateQueries({ queryKey: ['projects'] }))
-                      .catch(notify),
-                );
-              }}
-            >
-              {' '}
-              {t('목록에서 제거')}{' '}
-            </Button>
-          )}
+          <Button
+            icon={Trash2}
+            disabled={busy}
+            className="border-danger/30 text-danger hover:border-danger hover:bg-[#faeeeb]"
+            onClick={() => {
+              close();
+              confirm(
+                t('프로젝트 삭제'),
+                t('{0} 프로젝트를 삭제합니다. 소속된 컨테이너도 모두 함께 삭제됩니다.', [name]),
+                () => job('deleteProject', { name }),
+              );
+            }}
+          >
+            {' '}
+            {t('프로젝트 삭제')}{' '}
+          </Button>
           <div className="ml-auto flex flex-wrap justify-end gap-2.25">
             <Button
               icon={Trash2}
@@ -681,13 +686,14 @@ function Containers() {
   const projectContext = useMemo(
     () => ({
       job,
+      confirm,
       busy,
       collapsed,
       toggle,
       openLogs: setLogProject,
       openManage: setManageGroup,
     }),
-    [job, busy, collapsed, toggle],
+    [job, confirm, busy, collapsed, toggle],
   );
   const cols = useMemo(
     () => [

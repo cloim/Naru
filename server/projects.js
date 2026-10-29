@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { DATA, atomicJSON, readJSON, settings } from './state.js';
 import { command } from './runner.js';
 import { ensureWindowsTool } from './tools.js';
+import * as engine from './engine.js';
 
 // Compose labels every container it creates; these let Naru group and manage existing projects.
 export const LABEL = {
@@ -99,6 +100,60 @@ export async function forgetProject(name, containers) {
     await fs.rm(path.join(managedDir, name), { recursive: true, force: true });
   delete known[name];
   await atomicJSON(registry, known);
+}
+
+export async function deleteProject(name, options = {}) {
+  const { log = () => {}, engine: eng = engine, composeRunner = compose } = options;
+  let containers = await eng.list('containers');
+  const projectList = await listProjects(containers);
+  const project = projectList.find((p) => p.name === name);
+
+  let members = containers.filter((c) => c.Labels?.[LABEL.project] === name);
+  if (members.length > 0) {
+    log(`소속 컨테이너 ${members.length}개를 정리합니다.\n`);
+    if (project?.filesFound) {
+      try {
+        log('docker compose down 실행 중...\n');
+        await composeRunner(project, ['down'], { log });
+      } catch (err) {
+        log(`compose down 실패, 개별 컨테이너를 직접 삭제합니다: ${err.message}\n`);
+      }
+      containers = await eng.list('containers');
+      members = containers.filter((c) => c.Labels?.[LABEL.project] === name);
+    }
+
+    for (const c of members) {
+      try {
+        const isRunning =
+          c.State === 'running' || (typeof c.Status === 'string' && c.Status.startsWith('Up'));
+        if (isRunning) {
+          log(`컨테이너 정지: ${c.Names?.[0] || c.Id}\n`);
+          await eng.containerAction(c.Id, 'stop', log).catch(() => {});
+        }
+        log(`컨테이너 삭제: ${c.Names?.[0] || c.Id}\n`);
+        await eng.containerAction(c.Id, 'remove', log);
+      } catch (err) {
+        log(`컨테이너 삭제 오류 (${c.Id}): ${err.message}\n`);
+      }
+    }
+  }
+
+  containers = await eng.list('containers');
+  const remaining = containers.filter((c) => c.Labels?.[LABEL.project] === name);
+  if (remaining.length > 0) {
+    throw new Error(
+      `컨테이너 삭제에 실패하여 프로젝트를 삭제할 수 없습니다. (남은 컨테이너: ${remaining.length}개)`,
+    );
+  }
+
+  const { registry, managedDir } = await scope();
+  const known = await readJSON(registry, {});
+  if (known[name]?.managed) {
+    await fs.rm(path.join(managedDir, name), { recursive: true, force: true });
+  }
+  delete known[name];
+  await atomicJSON(registry, known);
+  log(`프로젝트 '${name}' 삭제 완료.\n`);
 }
 
 export async function readProjectFiles(project) {

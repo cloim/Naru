@@ -78,7 +78,12 @@ export const jobSchemas = {
   project: z
     .object({
       name: projectName,
-      action: z.enum(['start', 'stop', 'restart', 'up', 'down', 'pull', 'build']),
+      action: z.enum(['start', 'stop', 'restart', 'up', 'down', 'pull', 'build', 'delete']),
+    })
+    .strict(),
+  deleteProject: z
+    .object({
+      name: projectName,
     })
     .strict(),
   compose: z
@@ -315,6 +320,7 @@ export function assertJobTarget(type) {
     'createContainer',
     'compose',
     'project',
+    'deleteProject',
   ];
   if (remoteTarget() && !remoteJobs.includes(type))
     throw new Error('로컬 WSL 전용 작업입니다. 로컬 엔진을 선택해 주세요.');

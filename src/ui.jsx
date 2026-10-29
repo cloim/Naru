@@ -109,6 +109,7 @@ export const jobNames = {
   removeNetwork: '네트워크 삭제',
   compose: '프로젝트 저장',
   project: '프로젝트 작업',
+  deleteProject: '프로젝트 삭제',
   kubeApply: '리소스 적용',
   kubeDelete: '리소스 삭제',
   snapshot: '스냅샷 생성',

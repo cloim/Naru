@@ -158,6 +158,101 @@ test('engine storage preserves local layout and isolates equal Compose names', a
     await fs.readFile(path.join(dir, 'compose/sample/compose.yaml'), 'utf8'),
     'services: {}',
   );
+  await projects.forgetProject('sample', []);
+});
+
+test('deleteProject removes member containers and forgets project', async () => {
+  await projects.saveManagedProject('demo-del', 'services: {}');
+  const deleted = [];
+  const stopped = [];
+  let composeCalled = false;
+  let containers = [
+    {
+      Id: 'c1',
+      Names: ['/demo-del-web-1'],
+      State: 'running',
+      Labels: { [projects.LABEL.project]: 'demo-del' },
+    },
+    {
+      Id: 'c2',
+      Names: ['/demo-del-db-1'],
+      State: 'exited',
+      Labels: { [projects.LABEL.project]: 'demo-del' },
+    },
+    {
+      Id: 'c3',
+      Names: ['/other-app'],
+      State: 'running',
+      Labels: { [projects.LABEL.project]: 'other' },
+    },
+  ];
+  const mockEngine = {
+    async list(kind) {
+      if (kind === 'containers') return containers;
+      return [];
+    },
+    async containerAction(id, action) {
+      if (action === 'stop') stopped.push(id);
+      if (action === 'remove') {
+        deleted.push(id);
+        containers = containers.filter((c) => c.Id !== id);
+      }
+    },
+  };
+  await projects.deleteProject('demo-del', {
+    engine: mockEngine,
+    composeRunner: async () => {
+      composeCalled = true;
+      // compose down removes demo-del containers
+      containers = containers.filter((c) => c.Labels[projects.LABEL.project] !== 'demo-del');
+    },
+  });
+  assert.ok(composeCalled);
+  const remaining = await projects.listProjects(containers);
+  assert.ok(!remaining.some((p) => p.name === 'demo-del'));
+});
+
+test('deleteProject falls back to stopping and removing containers directly when compose fails', async () => {
+  await projects.saveManagedProject('demo-del2', 'services: {}');
+  const deleted = [];
+  const stopped = [];
+  let containers = [
+    {
+      Id: 'c1',
+      Names: ['/demo-del2-web-1'],
+      State: 'running',
+      Labels: { [projects.LABEL.project]: 'demo-del2' },
+    },
+    {
+      Id: 'c2',
+      Names: ['/demo-del2-db-1'],
+      State: 'exited',
+      Labels: { [projects.LABEL.project]: 'demo-del2' },
+    },
+  ];
+  const mockEngine = {
+    async list(kind) {
+      if (kind === 'containers') return containers;
+      return [];
+    },
+    async containerAction(id, action) {
+      if (action === 'stop') stopped.push(id);
+      if (action === 'remove') {
+        deleted.push(id);
+        containers = containers.filter((c) => c.Id !== id);
+      }
+    },
+  };
+  await projects.deleteProject('demo-del2', {
+    engine: mockEngine,
+    composeRunner: async () => {
+      throw new Error('compose failed');
+    },
+  });
+  assert.deepEqual(stopped, ['c1']);
+  assert.deepEqual(deleted, ['c1', 'c2']);
+  const remaining = await projects.listProjects(containers);
+  assert.ok(!remaining.some((p) => p.name === 'demo-del2'));
 });
 
 test('remote work rejects WSL operations and restricts local-only jobs', async () => {

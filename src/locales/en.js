@@ -51,6 +51,7 @@ export default {
   '네트워크 삭제': 'Delete network',
   '프로젝트 저장': 'Save project',
   '프로젝트 작업': 'Project operation',
+  '프로젝트 삭제': 'Delete project',
   '리소스 적용': 'Apply resource',
   '리소스 삭제': 'Delete resource',
   '스냅샷 생성': 'Create snapshot',
@@ -138,6 +139,9 @@ export default {
   '{0} 프로젝트 재시작': 'Restart project {0}',
   '{0} 프로젝트 로그 보기': 'View project {0} logs',
   '{0} 프로젝트 관리': 'Manage project {0}',
+  '{0} 프로젝트 삭제': 'Delete project {0}',
+  '{0} 프로젝트를 삭제합니다. 소속된 컨테이너도 모두 함께 삭제됩니다.':
+    'Delete project {0}. All containers in this project will also be deleted.',
   '{0} 프로젝트 로그': 'Project {0} logs',
   새로고침: 'Refresh',
   '프로젝트 로그': 'Project logs',
