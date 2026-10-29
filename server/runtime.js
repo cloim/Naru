@@ -33,6 +33,7 @@ export const PACKAGES = [
   'iproute2-minimal',
   'socat',
   'curl',
+  'python3',
   'util-linux-misc',
   'ca-certificates',
   'tzdata',
@@ -219,12 +220,13 @@ async function installScripts(log) {
     'naru-k3s.sh',
     'naru-netns.sh',
     'naru-port-relay.sh',
+    'naru-agent.py',
   ]) {
     const contents = (await fs.readFile(path.join(ROOT, 'scripts', name), 'utf8')).replace(
       /\r/g,
       '',
     );
-    const dest = `/usr/local/bin/${name.replace('.sh', '')}`;
+    const dest = `/usr/local/bin/${name.replace(/\.(sh|py)$/, '')}`;
     await wsl(['sh', '-c', `cat > ${dest}; chmod 755 ${dest}`], { input: contents, log });
   }
 }

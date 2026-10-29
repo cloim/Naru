@@ -168,7 +168,13 @@ Kubernetes 화면에서 로컬 k3s를 시작하고 리소스를 종류와 네임
 
 Docker context `naru`는 `naru_engine` named pipe로 연결합니다. 기본 `docker_engine` pipe도 사용 가능한 경우 같은 엔진에 연결하므로, 기본 pipe를 사용하는 SDK와 도구에서도 Naru 엔진을 사용할 수 있어요.
 
-Windows의 bind mount 경로는 엔진에 전달할 때 Linux 경로로 변환합니다. 예를 들어 `D:\work\app`은 `/mnt/d/work/app`으로 연결해요. 컨테이너가 공개한 포트는 Windows의 `127.0.0.1`에서 접속합니다.
+Windows의 bind mount 경로는 엔진에 전달할 때 Linux 경로로 변환합니다. 예를 들어 `D:\work\app`은 `/mnt/d/work/app`으로 연결해요.
+
+### 포트와 호스트 접속
+
+엔진은 전용 네트워크 네임스페이스에서 실행되고, Naru가 엔진의 포트를 Windows `localhost`(`127.0.0.1`과 `::1`)에 직접 엽니다. 컨테이너가 공개한 포트, `--network host` 컨테이너가 연 포트, Kubernetes LoadBalancer와 포트 전달이 모두 같은 방식으로 열려요. containerd 엔진에서도 동일합니다. 열린 포트와 상태는 `/api/port-forwarding`에서 확인할 수 있습니다.
+
+컨테이너와 Pod에서 Windows `localhost`의 서비스에 접속할 때는 `host.docker.internal`을 사용합니다. IPv6 `localhost`에서만 대기하는 개발 서버에도 연결돼요. 프록시 설정의 `127.0.0.1`이나 `localhost` 주소는 엔진, 컨테이너와 빌드에 `host.docker.internal`로 바꿔 전달합니다. 프록시는 Windows Docker CLI 설정에도 반영하며, 사용자가 직접 지정한 CLI 프록시는 유지해요.
 
 레지스트리 인증 정보는 Docker 자격 증명 도우미를 통해 현재 Windows 사용자의 자격 증명 저장소에 보관합니다. 기존 Docker 자격 증명 설정은 유지하고 Compose와 Buildx 검색 경로를 추가해요.
 

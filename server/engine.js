@@ -209,6 +209,8 @@ export async function cli(args, options = {}) {
           'docker',
         ]
       : [
+          // nerdctl sets up CNI networking itself, so it must run beside containerd.
+          '/usr/local/bin/naru-netns',
           'env',
           'DOCKER_CONFIG=/etc/naru/docker',
           'CNI_PATH=/usr/libexec/cni',

@@ -1,56 +1,60 @@
-import fs from 'node:fs';
 import net from 'node:net';
-import path from 'node:path';
-import { DATA, DISTRO, readJSON } from './state.js';
+import { DISTRO } from './state.js';
 import { wsl, distributions } from './runner.js';
-import { dockerRequest } from './engine.js';
 
-// Same port as naru-boot. The relay reads the target port and connects to 127.0.0.1 in the engine namespace.
+// Same ports as naru-boot and naru-agent. The relay connects to a target inside the engine namespace.
 const RELAY_PORT = 29170;
+const AGENT_PORT = 29171;
 const WINDOWS_HOSTS = ['127.0.0.1', '::1'];
-const FORWARDS = path.join(DATA, 'forwards');
-const EVENTS = `/events?filters=${encodeURIComponent(
-  JSON.stringify({ type: ['container'], event: ['start', 'die', 'destroy'] }),
-)}`;
+const TARGET = /^(?:127\.0\.0\.1|\[::1\]|198\.19\.249\.2):(\d{1,5})$/;
 const forwards = new Map();
-let containerPorts = [];
 let relayHost = null;
-let events = null;
-let syncTimer;
+let control = null;
+let targets = [];
 let ticking = false;
 let lastError = '';
 
-// The relay reaches IPv4 loopback, so only IPv4 wildcard and loopback bindings are forwarded.
-export function publishedPorts(containers) {
-  const ports = new Set();
-  for (const container of containers)
-    for (const p of container.Ports || [])
-      if (p.Type === 'tcp' && p.PublicPort && ['0.0.0.0', '127.0.0.1'].includes(p.IP))
-        ports.add(p.PublicPort);
-  return [...ports].sort((a, b) => a - b);
+// The agent's list decides which Windows ports open; anything malformed is dropped.
+export function validTargets(items) {
+  return (Array.isArray(items) ? items : []).filter(
+    (item) =>
+      Number.isInteger(item?.port) &&
+      item.port > 0 &&
+      item.port < 65536 &&
+      typeof item.target === 'string' &&
+      Number(TARGET.exec(item.target)?.[1]) > 0,
+  );
+}
+
+function relaySocket(target) {
+  const socket = net.connect({ host: relayHost, port: RELAY_PORT, allowHalfOpen: true });
+  socket.setNoDelay(true);
+  socket.write(`${target}\n`);
+  return socket;
+}
+
+function join(a, b) {
+  a.setNoDelay(true);
+  a.pipe(b).pipe(a);
+  a.on('error', () => b.destroy());
+  b.on('error', () => a.destroy());
+  a.on('close', () => b.destroy());
+  b.on('close', () => a.destroy());
 }
 
 // Returns false when the engine runs without its own namespace; callers then use their WSL path.
 export function pipeRelay(socket, port) {
   if (!relayHost) return false;
-  const upstream = net.connect({ host: relayHost, port: RELAY_PORT, allowHalfOpen: true });
-  upstream.setNoDelay(true);
-  socket.setNoDelay(true);
-  upstream.write(`${port}\n`);
-  socket.pipe(upstream).pipe(socket);
-  socket.on('error', () => upstream.destroy());
-  upstream.on('error', () => socket.destroy());
-  socket.on('close', () => upstream.destroy());
-  upstream.on('close', () => socket.destroy());
+  join(socket, relaySocket(String(port)));
   return true;
 }
 
-function open(port) {
-  const entry = { servers: [], error: null };
+function open(port, target) {
+  const entry = { target, servers: [], error: null };
   forwards.set(port, entry);
   for (const host of WINDOWS_HOSTS) {
     const server = net.createServer({ allowHalfOpen: true }, (socket) =>
-      pipeRelay(socket, port) ? undefined : socket.destroy(),
+      relayHost ? join(socket, relaySocket(target)) : socket.destroy(),
     );
     server.on('error', (e) => {
       entry.error = `${host}:${port} ${e.code || e.message}`;
@@ -68,37 +72,45 @@ function close(port) {
 
 function closeAll() {
   relayHost = null;
-  containerPorts = [];
+  targets = [];
   for (const port of [...forwards.keys()]) close(port);
 }
 
-// Kubernetes port-forward listens inside the engine namespace, so Windows needs the same relay.
-async function kubernetesPorts() {
-  const files = await fs.promises.readdir(FORWARDS).catch(() => []);
-  const rows = await Promise.all(
-    files
-      .filter((file) => file.endsWith('.json'))
-      .map((file) => readJSON(path.join(FORWARDS, file)).catch(() => null)),
-  );
-  return rows.filter((r) => ['starting', 'running'].includes(r?.state)).map((r) => r.localPort);
-}
-
-async function apply() {
-  if (!relayHost) return;
-  const wanted = new Set([...containerPorts, ...(await kubernetesPorts())]);
+function apply() {
+  const wanted = new Map(validTargets(targets).map((item) => [item.port, item.target]));
   // Failed listeners are retried on every pass, e.g. after another program releases the port.
-  for (const [port, entry] of forwards) if (!wanted.has(port) || entry.error) close(port);
-  for (const port of wanted) if (!forwards.has(port)) open(port);
+  for (const [port, entry] of forwards)
+    if (wanted.get(port) !== entry.target || entry.error) close(port);
+  for (const [port, target] of wanted) if (!forwards.has(port)) open(port, target);
 }
 
-async function sync() {
-  containerPorts = publishedPorts(await dockerRequest('GET', '/containers/json'));
-  await apply();
+// host.docker.internal: the agent holds a container connection until Windows localhost answers.
+function openHost(id, port, hosts = ['127.0.0.1', '::1']) {
+  const local = net.connect({ host: hosts[0], port, allowHalfOpen: true });
+  local.once('error', () => {
+    if (hosts.length > 1) return openHost(id, port, hosts.slice(1));
+    control?.write(JSON.stringify({ type: 'fail', id }) + '\n');
+  });
+  local.once('connect', () => {
+    local.removeAllListeners('error');
+    const upstream = relaySocket(String(AGENT_PORT));
+    upstream.write(`DATA ${id}\n`);
+    join(local, upstream);
+  });
 }
 
-function schedule(work) {
-  clearTimeout(syncTimer);
-  syncTimer = setTimeout(() => work().catch((e) => report(e)), 300);
+function handle(message) {
+  if (message.type === 'targets') {
+    targets = message.items;
+    apply();
+  } else if (
+    message.type === 'open' &&
+    /^[0-9a-f]{32}$/.test(message.id) &&
+    Number.isInteger(message.port) &&
+    message.port > 0 &&
+    message.port < 65536
+  )
+    openHost(message.id, message.port);
 }
 
 async function connect() {
@@ -106,17 +118,30 @@ async function connect() {
   if (!(await distributions(true)).includes(DISTRO)) return closeAll();
   const host = await wsl(['sh', '-c', 'cat /run/naru/port-relay 2>/dev/null || true']);
   if (!net.isIPv4(host)) return closeAll();
-  const stream = await dockerRequest('GET', EVENTS, undefined, { stream: true, pool: false });
   relayHost = host;
-  events = stream;
-  stream.on('data', () => schedule(sync));
-  stream.on('error', () => {});
-  stream.on('close', () => {
-    if (events !== stream) return;
-    events = null;
-    tick();
+  const socket = relaySocket(String(AGENT_PORT));
+  socket.write('CONTROL\n');
+  control = socket;
+  let buffer = '';
+  socket.setEncoding('utf8');
+  socket.on('data', (chunk) => {
+    buffer += chunk;
+    for (let end; (end = buffer.indexOf('\n')) >= 0; buffer = buffer.slice(end + 1))
+      try {
+        handle(JSON.parse(buffer.slice(0, end)));
+      } catch (e) {
+        report(e);
+      }
   });
-  await sync();
+  socket.on('error', () => {});
+  // The relay keeps half-open sockets; for the control channel, end means the agent is gone.
+  socket.on('end', () => socket.destroy());
+  socket.on('close', () => {
+    if (control !== socket) return;
+    control = null;
+    // The agent restarts with the engine; reconnect soon, or close everything if the engine stopped.
+    setTimeout(tick, 2000).unref();
+  });
 }
 
 function report(e) {
@@ -129,8 +154,8 @@ async function tick() {
   if (ticking) return;
   ticking = true;
   try {
-    if (!events) await connect();
-    else await apply();
+    if (!control) await connect();
+    else if ([...forwards.values()].some((entry) => entry.error)) apply();
     lastError = '';
   } catch (e) {
     report(e);
@@ -140,8 +165,6 @@ async function tick() {
 }
 
 export function startPortForwarding() {
-  fs.mkdirSync(FORWARDS, { recursive: true });
-  fs.watch(FORWARDS, () => schedule(apply)).on('error', (e) => report(e));
   tick();
   setInterval(tick, 10000).unref();
 }
@@ -149,6 +172,11 @@ export function startPortForwarding() {
 export function portForwardingStatus() {
   return {
     relay: relayHost,
-    ports: [...forwards].map(([port, entry]) => ({ port, error: entry.error })),
+    agent: !!control,
+    ports: [...forwards].map(([port, entry]) => ({
+      port,
+      target: entry.target,
+      error: entry.error,
+    })),
   };
 }
