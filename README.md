@@ -64,6 +64,19 @@ Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
 
 </details>
 
+### 데스크톱 앱 (Rust, Tauri)
+
+설치형 앱은 Rust 백엔드와 Tauri 창이 한 프로세스로 동작합니다. 처음 실행하면 대화형 온보딩이 WSL 점검, 데이터 위치, 엔진 구성과 설치를 차례로 진행해요. 창을 닫아도 트레이에서 계속 실행되어 포트 전달과 Docker pipe가 유지됩니다.
+
+| 작업 | 명령 |
+| --- | --- |
+| 개발용 서버(창 없음) | `cargo run -p naru -- --serve` |
+| 개발용 앱 | `cargo run -p naru` |
+| 테스트 | `cargo test -p naru-core` |
+| 설치 파일(NSIS) | `npm run build:desktop` |
+
+엔진 에이전트는 Linux 정적 바이너리라 `rustup target add x86_64-unknown-linux-musl`이 필요합니다. 설치 파일 빌드는 에이전트와 화면을 먼저 빌드해요.
+
 ## 기본 사용 흐름
 
 **Docker와 Compose 개발**은 엔진 시작 → 이미지 가져오기 또는 빌드 → 컨테이너나 Compose 프로젝트 실행 → 로그와 리소스 확인 순으로 진행하면 돼요. 유지할 데이터는 볼륨에 저장하고, 서비스 사이의 연결은 네트워크에서 확인합니다.
