@@ -1,7 +1,7 @@
-import { t, useLocale } from '../i18n.js';
+import { t, useLocale, formatDate } from '../i18n.js';
 import React, { lazy, Suspense, useEffect, useRef, useState, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
-import { RotateCw, Pause, Search, X, ArrowDown, TriangleAlert } from 'lucide-react';
+import { useParams, useSearchParams } from 'react-router-dom';
+import { RotateCw, Pause, Search, X, ArrowDown, TriangleAlert, Download } from 'lucide-react';
 import {
   useActions,
   useData,
@@ -18,6 +18,137 @@ import {
 import { cn, tw } from '../tw.js';
 import { ContainerFileExplorer } from '../components/ContainerFileExplorer.jsx';
 const TerminalPanel = lazy(() => import('../components/TerminalPanel.jsx'));
+
+function InfoSection({ title, rows, autoSizeLabels = false }) {
+  return (
+    <details open className="border-b border-line last:border-b-0">
+      <summary className="cursor-pointer bg-[#f5f8f2] px-5 py-2.5 text-[13px] font-semibold text-ink focus-visible:outline-accent">
+        {title}
+      </summary>
+      <dl
+        className={cn(
+          'm-0 text-[13px]',
+          autoSizeLabels &&
+            'grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 max-tablet:grid-cols-1',
+        )}
+      >
+        {rows.map(([label, value], index) => (
+          <div
+            key={index}
+            className={cn(
+              'grid gap-x-4 gap-y-1 border-t border-line px-5 py-2.5 max-tablet:px-3',
+              autoSizeLabels
+                ? 'col-span-full grid-cols-subgrid'
+                : 'grid-cols-[180px_minmax(0,1fr)] max-tablet:grid-cols-1',
+            )}
+          >
+            <dt
+              className={cn('text-muted', autoSizeLabels ? 'whitespace-nowrap' : 'wrap-anywhere')}
+            >
+              {label}
+            </dt>
+            <dd className="m-0 min-w-0 whitespace-pre-wrap wrap-anywhere text-ink">
+              {value === undefined || value === null || value === '' ? '-' : value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </details>
+  );
+}
+
+function ContainerGeneral({ inspect }) {
+  const config = inspect.Config || {};
+  const host = inspect.HostConfig || {};
+  const state = inspect.State || {};
+  const networks = Object.entries(inspect.NetworkSettings?.Networks || {});
+  const command = (value) => (Array.isArray(value) ? value.join(' ') : value);
+  const date = (value) => (value && !value.startsWith('0001-') ? formatDate(value) : null);
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto" aria-label={t('컨테이너 일반 정보')}>
+      <InfoSection
+        title={t('일반')}
+        rows={[
+          [t('컨테이너 이름'), inspect.Name?.replace(/^\//, '')],
+          ['ID', inspect.Id],
+          [t('이미지 이름'), config.Image],
+          [t('상태'), state.Paused ? t('일시 정지') : state.Running ? t('실행 중') : state.Status],
+          [t('만든 시간'), date(inspect.Created)],
+          [t('시작 시간'), date(state.StartedAt)],
+          [t('프로젝트'), config.Labels?.['com.docker.compose.project']],
+          [
+            t('CPU 제한'),
+            host.NanoCpus > 0
+              ? `${host.NanoCpus / 1e9} CPU`
+              : host.CpuQuota > 0
+                ? `${(host.CpuQuota / (host.CpuPeriod || 100000)).toFixed(2)} CPU`
+                : t('무제한'),
+          ],
+          [t('CPU 가중치'), host.CpuShares || t('자동')],
+          [t('메모리 제한'), host.Memory > 0 ? bytes(host.Memory) : t('무제한')],
+          [t('자동 재시작 정책'), host.RestartPolicy?.Name || t('없음')],
+          [
+            t('포트'),
+            Object.entries(inspect.NetworkSettings?.Ports || {})
+              .map(([port, bindings]) =>
+                bindings?.length
+                  ? bindings
+                      .map(
+                        (binding) => `${binding.HostIp || '0.0.0.0'}:${binding.HostPort} → ${port}`,
+                      )
+                      .join('\n')
+                  : port,
+              )
+              .join('\n'),
+          ],
+        ]}
+      />
+      <InfoSection
+        title={t('환경 변수')}
+        autoSizeLabels
+        rows={
+          config.Env?.length
+            ? config.Env.map((entry) => {
+                const separator = entry.indexOf('=');
+                return separator < 0
+                  ? [entry, '']
+                  : [entry.slice(0, separator), entry.slice(separator + 1)];
+              })
+            : [[t('환경 변수'), t('없음')]]
+        }
+      />
+      <InfoSection
+        title={t('네트워크')}
+        rows={
+          networks.length
+            ? networks.flatMap(([name, network]) => [
+                [t('네트워크 이름'), name],
+                [t('네트워크 모드'), host.NetworkMode],
+                [t('MAC 주소'), network.MacAddress],
+                [t('게이트웨이'), network.Gateway],
+                [t('IP 주소'), network.IPAddress],
+                ...(network.GlobalIPv6Address
+                  ? [
+                      [t('IPv6 주소'), network.GlobalIPv6Address],
+                      [t('IPv6 게이트웨이'), network.IPv6Gateway],
+                    ]
+                  : []),
+              ])
+            : [[t('네트워크 모드'), host.NetworkMode]]
+        }
+      />
+      <InfoSection
+        title={t('실행 명령')}
+        rows={[
+          [t('실행 명령'), command(config.Cmd)],
+          ['Entrypoint', command(config.Entrypoint)],
+          [t('작업 디렉터리'), config.WorkingDir],
+          [t('사용자'), config.User],
+        ]}
+      />
+    </div>
+  );
+}
 
 export function resourceUsage(stats) {
   const cpu = stats.cpu_stats,
@@ -48,7 +179,8 @@ function ContainerDetail() {
   useLocale();
   const { id } = useParams(),
     { job, busy } = useActions();
-  const [tab, setTab] = useState('logs'),
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState(searchParams.get('tab') === 'logs' ? 'logs' : 'general'),
     [logSearch, setLogSearch] = useState(''),
     [autoScroll, setAutoScroll] = useState(true);
   const logEndRef = useRef(null),
@@ -90,6 +222,25 @@ function ContainerDetail() {
     <section className={cn(tw.page, 'h-full')}>
       <PageActions>
         <PageAction
+          label={t('상세 정보 다운로드 (JSON)')}
+          icon={Download}
+          disabled={detail.isLoading || !!detail.error || !inspect}
+          onClick={() => {
+            const url = URL.createObjectURL(
+              new Blob([JSON.stringify(detail.data, null, 2)], {
+                type: 'application/json;charset=utf-8',
+              }),
+            );
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${(inspect.Name?.replace(/^\//, '') || id).replace(/[^a-zA-Z0-9_.-]/g, '_')}-inspect.json`;
+            document.body.append(link);
+            link.click();
+            link.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+          }}
+        />
+        <PageAction
           label={t('재시작')}
           icon={RotateCw}
           disabled={busy}
@@ -106,14 +257,13 @@ function ContainerDetail() {
       </PageActions>
 
       <div className={cn(tw.panel, 'flex min-h-0 flex-1 flex-col')}>
-        {/* 탭 순서: 로그, 리소스, 파일, 터미널, 구성 */}
         <div className={tw.tabs}>
           {[
+            ['general', t('일반')],
             ['logs', t('로그')],
             ['resources', t('리소스')],
             ['files', t('파일')],
             ['terminal', t('터미널')],
-            ['inspect', t('구성')],
           ].map(([key, label]) => (
             <button
               aria-pressed={key === tab}
@@ -173,10 +323,7 @@ function ContainerDetail() {
               </div>
               <pre
                 ref={logPreRef}
-                className={cn(
-                  tw.terminal,
-                  'min-h-0 flex-1 max-h-none overflow-auto rounded-none',
-                )}
+                className={cn(tw.terminal, 'min-h-0 flex-1 max-h-none overflow-auto rounded-none')}
                 aria-label={t('컨테이너 로그')}
               >
                 {filteredLog ||
@@ -276,16 +423,14 @@ function ContainerDetail() {
           </Suspense>
         )}
 
-        {tab === 'inspect' ? (
+        {tab === 'general' ? (
           detail.isLoading ? (
             <Skeleton />
           ) : detail.error ? (
             <ErrorState error={detail.error} retry={() => detail.refetch()} />
-          ) : (
-            <pre className="m-0 min-h-0 flex-1 overflow-auto bg-[#fafcf7] p-5.5 font-mono text-[12px] leading-[1.8] whitespace-pre-wrap wrap-anywhere">
-              {JSON.stringify(detail.data, null, 2)}
-            </pre>
-          )
+          ) : inspect ? (
+            <ContainerGeneral inspect={inspect} />
+          ) : null
         ) : null}
       </div>
     </section>

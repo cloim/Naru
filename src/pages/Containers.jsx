@@ -868,7 +868,7 @@ function Containers() {
             <IconButton
               icon={Terminal}
               label={t('{0} 로그 보기', [containerName(r)])}
-              onClick={() => navigate('/containers/' + r.Id)}
+              onClick={() => navigate('/containers/' + r.Id + '?tab=logs')}
             />
             <IconButton
               icon={Copy}

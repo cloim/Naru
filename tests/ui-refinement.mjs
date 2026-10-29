@@ -147,6 +147,7 @@ try {
   await page.getByRole('button', { name: /전체\s*1/, exact: true }).waitFor();
   checks.push('System container hidden by default, show toggle, search-consistent tab counts');
   await page.evaluate(() => window.mount('/containers/naru-user'));
+  await page.getByRole('button', { name: '로그', exact: true }).click();
   await page.getByLabel('컨테이너 로그').waitFor();
   assert.equal(statsRequests, 0);
   await page.getByRole('button', { name: '리소스', exact: true }).click();
