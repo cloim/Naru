@@ -13,8 +13,12 @@ use std::sync::OnceLock;
 /// Set by the desktop shell: how to restart the app, and that a packaged executable exists for login start.
 pub struct Shell {
     pub restart: Box<dyn Fn() + Send + Sync>,
+    pub quit: Box<dyn Fn() + Send + Sync>,
     pub executable: PathBuf,
 }
+
+/// The runtime image, its packages and the Windows tools all download during setup.
+const MIN_FREE: u64 = 10 * 1024 * 1024 * 1024;
 
 static SHELL: OnceLock<Shell> = OnceLock::new();
 
@@ -118,6 +122,9 @@ async fn save(Json(body): Json<Value>) -> ApiResult {
     if let Some(raw) = body.get("dataDir").filter(|v| !v.is_null()) {
         let raw = raw.as_str().ok_or_else(|| invalid("데이터 폴더 경로를 확인해 주세요."))?;
         let wanted = validate_dir(raw)?;
+        if !distro_installed().await && free_space(&wanted).is_some_and(|free| free < MIN_FREE) {
+            return Err(invalid("이 드라이브는 여유 공간이 10GB보다 적습니다. 공간이 넉넉한 드라이브의 폴더를 골라 주세요.").into());
+        }
         if wanted != data() {
             if distro_installed().await {
                 return Err(invalid("런타임을 설치한 뒤에는 데이터 폴더를 옮길 수 없습니다.").into());
@@ -148,6 +155,14 @@ async fn save(Json(body): Json<Value>) -> ApiResult {
 
 /// Installs WSL with administrator rights. Windows asks for consent and usually needs a reboot afterwards.
 async fn install_wsl() -> ApiResult {
+    // The reboot comes before the storage step, so start at login now; setup then reopens by itself.
+    // The storage step can still turn it off.
+    if SHELL.get().is_some() && !launch_registered().await {
+        set_launch(true).await?;
+        let mut config = app_config();
+        config.launch_at_login = true;
+        atomic_json(&app_file(), &config).await?;
+    }
     let script = "$p=Start-Process wsl.exe -ArgumentList '--install','--no-distribution' -Verb RunAs -Wait -PassThru;$p.ExitCode";
     let out = command("powershell.exe", &args(["-NoProfile", "-NonInteractive", "-Command", script]), Opts::timeout(30 * 60))
         .await
@@ -184,9 +199,52 @@ async fn state() -> ApiResult {
     Ok(Json(json!({ "onboarded": onboarded().await, "packaged": SHELL.get().is_some() })))
 }
 
+/// Checks, through the proxy being set up, that every server the chosen setup downloads from answers.
+async fn network(Json(body): Json<Value>) -> ApiResult {
+    let proxy: crate::state::Proxy = serde_json::from_value(body["proxy"].clone()).map_err(|e| invalid(e.to_string()))?;
+    let client = crate::runtime::proxied_client(&proxy, std::time::Duration::from_secs(20)).map_err(|e| invalid(e.to_string()))?;
+    let mut targets = vec![("Alpine Linux", crate::runtime::BASE_URL.to_string())];
+    if body["installCli"] == true {
+        targets.push(("Docker", "https://download.docker.com/win/static/stable/x86_64/".into()));
+        targets.push(("GitHub", "https://github.com/docker/compose/releases".into()));
+        targets.push(("Kubernetes", "https://dl.k8s.io/release/stable.txt".into()));
+    }
+    if body["kubernetes"] == true {
+        targets.push(("GitHub", "https://github.com/k3s-io/k3s/releases".into()));
+    }
+    let mut seen = std::collections::HashSet::new();
+    targets.retain(|(name, _)| seen.insert(*name));
+    let mut results = vec![];
+    for (name, url) in targets {
+        let outcome = client.head(&url).send().await;
+        let (ok, detail) = match outcome {
+            Ok(r) if r.status().is_success() || r.status().is_redirection() => (true, Value::Null),
+            Ok(r) => (false, format!("HTTP {}", r.status().as_u16()).into()),
+            Err(e) => (false, crate::runtime::download_error(e).to_string().into()),
+        };
+        results.push(json!({ "name": name, "url": url, "ok": ok, "detail": detail }));
+    }
+    let ok = results.iter().all(|r| r["ok"] == true);
+    Ok(Json(json!({ "ok": ok, "results": results })))
+}
+
+/// Ends the app when setup cannot continue on this PC.
+async fn quit() -> ApiResult {
+    if SHELL.get().is_none() {
+        return Err(invalid("개발 서버는 직접 종료해 주세요.").into());
+    }
+    tokio::spawn(async {
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        (SHELL.get().unwrap().quit)();
+    });
+    ok()
+}
+
 pub fn routes<S: Clone + Send + Sync + 'static>() -> Router<S> {
     Router::new()
         .route("/api/onboarding/state", get(state))
+        .route("/api/onboarding/network", post(network))
+        .route("/api/app/quit", post(quit))
         .route("/api/onboarding", get(status).put(save))
         .route("/api/onboarding/wsl", post(install_wsl))
         .route("/api/onboarding/complete", post(complete))

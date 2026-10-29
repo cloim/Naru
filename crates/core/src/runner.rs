@@ -279,8 +279,22 @@ pub async fn distributions(running: bool) -> Result<Vec<String>> {
     if running {
         a.push("--running".into());
     }
-    let text = command("wsl.exe", &a, Opts::timeout(10)).await?;
-    Ok(text.lines().map(str::trim).filter(|l| !l.is_empty()).map(String::from).collect())
+    let out = run("wsl.exe", &a, Opts::timeout(10)).await?;
+    parse_distributions(&out)
+}
+
+/// A WSL with no distributions yet (a fresh install) exits with an error; that is an empty list.
+/// The message is in the Windows display language, so only the error code identifies the case.
+fn parse_distributions(out: &Output) -> Result<Vec<String>> {
+    if out.code != Some(0) {
+        let text = format!("{}\n{}", out.stdout, out.stderr);
+        if text.contains("WSL_E_DEFAULT_DISTRO_NOT_FOUND") {
+            return Ok(vec![]);
+        }
+        let message = if text.trim().is_empty() { "WSL 배포판 목록을 확인할 수 없습니다.".to_string() } else { text.trim().to_string() };
+        bail!(message);
+    }
+    Ok(out.stdout.lines().map(str::trim).filter(|l| !l.is_empty()).map(String::from).collect())
 }
 
 pub async fn distro_running() -> Result<bool> {
@@ -354,6 +368,15 @@ mod tests {
             .await
             .unwrap_err();
         assert_eq!(err.to_string(), "broken");
+    }
+
+    #[test]
+    fn fresh_wsl_without_distributions_lists_nothing() {
+        let out = |code, stdout: &str| Output { code: Some(code), stdout: stdout.into(), stderr: String::new() };
+        assert_eq!(parse_distributions(&out(0, "naru\nUbuntu\n")).unwrap(), ["naru", "Ubuntu"]);
+        let empty = "Linux용 Windows 하위 시스템에 설치된 배포가 없습니다.\n오류 코드: Wsl/WSL_E_DEFAULT_DISTRO_NOT_FOUND";
+        assert!(parse_distributions(&out(-1, empty)).unwrap().is_empty());
+        assert!(parse_distributions(&out(1, "something else failed")).is_err());
     }
 
     #[tokio::test]

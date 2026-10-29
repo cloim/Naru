@@ -53,12 +53,40 @@ pub async fn sha256(file: &Path) -> Result<String> {
     .await?
 }
 
+/// An HTTP client for Naru's own downloads that goes through the proxy from settings, when one is set.
+pub async fn http_client(timeout: Duration) -> Result<reqwest::Client> {
+    proxied_client(&settings().await?.proxy, timeout)
+}
+
+pub fn proxied_client(proxy: &crate::state::Proxy, timeout: Duration) -> Result<reqwest::Client> {
+    let mut builder = reqwest::Client::builder().timeout(timeout).connect_timeout(Duration::from_secs(15));
+    let no_proxy = reqwest::NoProxy::from_string(&proxy.no_proxy);
+    if !proxy.http.trim().is_empty() {
+        let p = reqwest::Proxy::http(proxy.http.trim()).map_err(|e| anyhow!("HTTP 프록시 주소를 확인해 주세요: {e}"))?;
+        builder = builder.proxy(p.no_proxy(no_proxy.clone()));
+    }
+    if !proxy.https.trim().is_empty() {
+        let p = reqwest::Proxy::https(proxy.https.trim()).map_err(|e| anyhow!("HTTPS 프록시 주소를 확인해 주세요: {e}"))?;
+        builder = builder.proxy(p.no_proxy(no_proxy));
+    }
+    Ok(builder.build()?)
+}
+
+/// Turns a connection failure into guidance a user can act on.
+pub fn download_error(e: reqwest::Error) -> anyhow::Error {
+    if e.is_connect() || e.is_timeout() {
+        anyhow!("다운로드 서버에 연결하지 못했습니다. 인터넷 연결과 프록시 설정을 확인해 주세요. ({e})")
+    } else {
+        anyhow!(e)
+    }
+}
+
 pub async fn download(url: &str, dest: &Path, log: Option<&Log>) -> Result<()> {
     if let Some(dir) = dest.parent() {
         tokio::fs::create_dir_all(dir).await?;
     }
-    let client = reqwest::Client::builder().timeout(Duration::from_secs(15 * 60)).build()?;
-    let response = client.get(url).send().await?;
+    let client = http_client(Duration::from_secs(15 * 60)).await?;
+    let response = client.get(url).send().await.map_err(download_error)?;
     if !response.status().is_success() {
         bail!("다운로드 실패: HTTP {} {url}", response.status().as_u16());
     }
@@ -151,7 +179,51 @@ pub async fn export_kubeconfig() -> Result<String> {
     config["current-context"] = naru;
     let text = serde_yaml::to_string(&config)?;
     tokio::fs::write(data().join("kubeconfig.yaml"), &text).await?;
+    merge_user_kubeconfig(&config).await?;
     Ok(text)
+}
+
+/// Adds the naru cluster, user and context to an existing kubeconfig. Other entries stay; entries named
+/// naru are replaced. The current context changes only when none is set, so another cluster stays default.
+pub fn merge_kubeconfig(mut existing: serde_yaml::Value, naru: &serde_yaml::Value) -> serde_yaml::Value {
+    use serde_yaml::{Mapping, Value};
+    if !existing.is_mapping() {
+        existing = Value::Mapping(Mapping::new());
+    }
+    for (key, default) in [("apiVersion", "v1"), ("kind", "Config")] {
+        if existing.get(key).is_none() {
+            existing[key] = default.into();
+        }
+    }
+    for key in ["clusters", "contexts", "users"] {
+        let mut list: Vec<Value> = existing.get(key).and_then(Value::as_sequence).cloned().unwrap_or_default();
+        list.retain(|entry| entry.get("name").and_then(Value::as_str) != Some("naru"));
+        list.extend(naru.get(key).and_then(Value::as_sequence).cloned().unwrap_or_default());
+        existing[key] = Value::Sequence(list);
+    }
+    let current = existing.get("current-context").and_then(Value::as_str).unwrap_or_default();
+    if current.is_empty() {
+        existing["current-context"] = "naru".into();
+    }
+    existing
+}
+
+/// Plain `kubectl` and other tools read ~/.kube/config, as they do with Docker Desktop's cluster.
+async fn merge_user_kubeconfig(naru: &serde_yaml::Value) -> Result<()> {
+    let dir = std::path::PathBuf::from(std::env::var_os("USERPROFILE").unwrap_or_default()).join(".kube");
+    let file = dir.join("config");
+    let existing = match tokio::fs::read_to_string(&file).await {
+        Ok(text) if !text.trim().is_empty() => {
+            serde_yaml::from_str(&text).with_context(|| format!("{} 형식을 읽을 수 없어 합치지 않았습니다.", file.display()))?
+        }
+        _ => serde_yaml::Value::Null,
+    };
+    let merged = serde_yaml::to_string(&merge_kubeconfig(existing, naru))?;
+    tokio::fs::create_dir_all(&dir).await?;
+    let temp = dir.join(format!("config.naru-{}.tmp", std::process::id()));
+    tokio::fs::write(&temp, merged).await?;
+    tokio::fs::rename(&temp, &file).await?;
+    Ok(())
 }
 
 pub async fn install(log: &Log) -> Result<()> {
@@ -179,9 +251,29 @@ pub async fn install(log: &Log) -> Result<()> {
     let import = args(["--import", DISTRO, &location.to_string_lossy(), &tar.to_string_lossy(), "--version", "2"]);
     command("wsl.exe", &import, Opts::timeout(180).log(log)).await?;
     log("엔진 패키지를 설치합니다.\n");
-    let mut apk = args(["apk", "add", "--no-cache"]);
+    // apk takes the proxy from the environment. A proxy on Windows localhost is not reachable from WSL,
+    // so it is addressed through the WSL gateway; that works when the proxy listens beyond loopback.
+    const APK: &str = r#"gw=$(ip route | awk '/default/ {print $3; exit}')
+reach() { printf '%s' "$1" | sed -E "s#^(([a-zA-Z]+://)?([^@/]*@)?)(localhost|127\.0\.0\.1|\[::1\])([:/]|\$)#\1${gw}\5#"; }
+if [ -n "$NARU_HTTP_PROXY" ]; then export http_proxy="$(reach "$NARU_HTTP_PROXY")"; fi
+if [ -n "$NARU_HTTPS_PROXY" ]; then export https_proxy="$(reach "$NARU_HTTPS_PROXY")"; fi
+if [ -n "$NARU_NO_PROXY" ]; then export no_proxy="$NARU_NO_PROXY"; fi
+exec apk add --no-cache "$@""#;
+    let proxy = settings().await?.proxy;
+    let mut apk = args([
+        "env",
+        &format!("NARU_HTTP_PROXY={}", proxy.http.trim()),
+        &format!("NARU_HTTPS_PROXY={}", proxy.https.trim()),
+        &format!("NARU_NO_PROXY={}", proxy.no_proxy.trim()),
+        "sh",
+        "-c",
+        APK,
+        "sh",
+    ]);
     apk.extend(PACKAGES.iter().map(|p| p.to_string()));
-    wsl(&apk, Opts::timeout(15 * 60).log(log)).await?;
+    wsl(&apk, Opts::timeout(15 * 60).log(log))
+        .await
+        .map_err(|e| anyhow!("엔진 패키지를 내려받지 못했습니다. 인터넷 연결과 프록시 설정을 확인해 주세요.\n{e}"))?;
     // WSL regenerates hosts and resolv.conf on the next boot from these settings.
     let conf = "[automount]\nmountFsTab=false\noptions=metadata\n[network]\ngenerateHosts=true\ngenerateResolvConf=true\n[user]\ndefault=root\n";
     wsl_sh(
@@ -226,7 +318,13 @@ async fn install_scripts(log: &Log) -> Result<()> {
 
 /// The Docker CLI inside WSL hands these to containers and builds, as Windows clients get from the bridge.
 async fn write_cli_proxies(proxy: &crate::state::Proxy) -> Result<()> {
-    let mut config: Value = serde_json::from_str(&wsl(&args(["cat", "/etc/naru/docker/config.json"]), Opts::default()).await?)?;
+    // Before the first boot the file does not exist yet; start from the default naru-boot would write.
+    let text = wsl_sh("cat /etc/naru/docker/config.json 2>/dev/null || true", Opts::default()).await?;
+    let mut config: Value = if text.trim().is_empty() {
+        json!({ "auths": { "https://index.docker.io/v1/": {} } })
+    } else {
+        serde_json::from_str(&text)?
+    };
     match container_proxy_config(proxy) {
         Some(proxies) => config["proxies"] = json!({ "default": proxies }),
         None => {
@@ -236,7 +334,7 @@ async fn write_cli_proxies(proxy: &crate::state::Proxy) -> Result<()> {
         }
     }
     let text = serde_json::to_string_pretty(&config)? + "\n";
-    wsl_sh("umask 077; cat > /etc/naru/docker/config.json", Opts::default().input(text)).await?;
+    wsl_sh("mkdir -p /etc/naru/docker; umask 077; cat > /etc/naru/docker/config.json", Opts::default().input(text)).await?;
     Ok(())
 }
 
@@ -336,12 +434,12 @@ pub async fn start_kubernetes(log: &Log) -> Result<()> {
         let cache = data().join("cache").join(version);
         tokio::fs::create_dir_all(&cache).await?;
         let url = format!("https://github.com/k3s-io/k3s/releases/download/{}", crate::engine::encode(version));
-        let sums = reqwest::Client::builder()
-            .timeout(Duration::from_secs(30))
-            .build()?
+        let sums = http_client(Duration::from_secs(30))
+            .await?
             .get(format!("{url}/sha256sum-amd64.txt"))
             .send()
-            .await?;
+            .await
+            .map_err(download_error)?;
         if !sums.status().is_success() {
             bail!("k3s 버전 또는 체크섬을 확인할 수 없습니다.");
         }
@@ -436,4 +534,35 @@ pub async fn snapshot(name: &str, log: &Log) -> Result<()> {
         start(log).await?;
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn kubeconfig_merge_keeps_other_clusters_and_default_context() {
+        let naru: serde_yaml::Value = serde_yaml::from_str(
+            "clusters: [{name: naru, cluster: {server: 'https://127.0.0.1:6445'}}]\n\
+             contexts: [{name: naru, context: {cluster: naru, user: naru}}]\n\
+             users: [{name: naru, user: {token: x}}]\n",
+        )
+        .unwrap();
+        let existing: serde_yaml::Value = serde_yaml::from_str(
+            "apiVersion: v1\nkind: Config\ncurrent-context: work\n\
+             clusters: [{name: work, cluster: {server: 'https://work'}}, {name: naru, cluster: {server: old}}]\n\
+             contexts: [{name: work, context: {cluster: work, user: work}}]\n\
+             users: [{name: work, user: {token: w}}]\n",
+        )
+        .unwrap();
+        let merged = merge_kubeconfig(existing, &naru);
+        assert_eq!(merged["current-context"], "work");
+        let clusters = merged["clusters"].as_sequence().unwrap();
+        assert_eq!(clusters.len(), 2);
+        assert_eq!(clusters[1]["cluster"]["server"], "https://127.0.0.1:6445");
+        assert_eq!(merged["contexts"].as_sequence().unwrap().len(), 2);
+        let fresh = merge_kubeconfig(serde_yaml::Value::Null, &naru);
+        assert_eq!(fresh["current-context"], "naru");
+        assert_eq!(fresh["kind"], "Config");
+    }
 }

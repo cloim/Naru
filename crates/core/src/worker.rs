@@ -378,6 +378,7 @@ async fn install_cli(log: &Log) -> Result<()> {
     command(&docker, &args(["--config", &config, "context", "update", context, "--docker", host]), Opts::default().log(log)).await?;
     command(&docker, &args(["--config", &config, "context", "use", context]), Opts::default().log(log)).await?;
     let _ = tokio::fs::remove_file(bin.join("naru.cmd")).await;
+    crate::tools::ensure_user_path(&bin, log).await?;
     let kubeconfig = data().join("kubeconfig.yaml");
     for tool in ["kubectl", "helm"] {
         let exe = bin.join(format!("{tool}.exe"));

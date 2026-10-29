@@ -68,8 +68,8 @@ pub async fn ensure_windows_tool(name: &str, log: &Log) -> Result<PathBuf> {
                 return Ok(existing);
             }
         }
-        let client = reqwest::Client::builder().timeout(Duration::from_secs(30)).build()?;
-        let response = client.get(format!("{url}.sha256")).send().await?;
+        let client = crate::runtime::http_client(Duration::from_secs(30)).await?;
+        let response = client.get(format!("{url}.sha256")).send().await.map_err(crate::runtime::download_error)?;
         if !response.status().is_success() {
             bail!("kubectl 체크섬 다운로드 실패.");
         }
@@ -137,6 +137,31 @@ pub async fn ensure_compose(log: &Log) -> Result<()> {
         return Ok(());
     }
     wsl(&args(["apk", "add", "--no-cache", "docker-cli-compose"]), Opts::timeout(600).log(log)).await?;
+    Ok(())
+}
+
+/// Puts Naru's CLI folder on the user PATH so `docker`, `kubectl` and `helm` work in any new terminal.
+/// The registry value is edited unexpanded and keeps its type, so entries like %USERPROFILE%\bin survive.
+pub async fn ensure_user_path(dir: &std::path::Path, log: &Log) -> Result<()> {
+    let script = r#"
+$dir = $env:NARU_BIN
+$key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
+$names = $key.GetValueNames()
+$current = $key.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+$parts = @($current -split ';' | Where-Object { $_ })
+if ($parts | Where-Object { $_.TrimEnd('\') -ieq $dir.TrimEnd('\') }) { 'present'; exit }
+$kind = if ($names -contains 'Path') { $key.GetValueKind('Path') } else { [Microsoft.Win32.RegistryValueKind]::ExpandString }
+$key.SetValue('Path', (($parts + $dir) -join ';'), $kind)
+# Setting any user variable broadcasts WM_SETTINGCHANGE, so new terminals see the PATH at once.
+[Environment]::SetEnvironmentVariable('NARU_PATH_REFRESH', $null, 'User')
+'added'
+"#;
+    let mut opts = Opts::timeout(30);
+    opts.env = vec![("NARU_BIN".into(), dir.to_string_lossy().into_owned())];
+    let result = command("powershell.exe", &args(["-NoProfile", "-NonInteractive", "-Command", script]), opts).await?;
+    if result.trim() == "added" {
+        log(&format!("사용자 PATH에 추가했습니다: {}\n새 터미널에서 docker, kubectl, helm 명령을 쓸 수 있습니다.\n", dir.display()));
+    }
     Ok(())
 }
 
