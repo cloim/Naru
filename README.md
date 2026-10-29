@@ -107,6 +107,12 @@ Compose 프로젝트는 **컨테이너** 화면에서 프로젝트별로 묶어 
 
 HTTP 서비스를 실행한 컨테이너는 `http://<컨테이너이름>.naru.localhost:49170`으로도 접속할 수 있습니다. 이 프록시는 컨테이너의 첫 번째 공개 포트로 요청을 전달하므로, 웹 서비스의 포트를 공개한 뒤 사용해 주세요.
 
+### GPU 가속
+
+Windows에 NVIDIA 드라이버가 설치되어 있으면 Moby 엔진을 시작할 때 WSL GPU용 CDI 스펙(`/etc/cdi/naru-nvidia.yaml`)을 자동으로 생성합니다. 별도의 NVIDIA Container Toolkit 없이 `docker run --gpus all`, `--gpus 1` 또는 `--device nvidia.com/gpu=all`로 GPU를 사용할 수 있어요. Compose에서는 `deploy.resources.reservations.devices`에 `driver: nvidia`와 `capabilities: [gpu]`를 지정합니다.
+
+컨테이너에는 `/dev/dxg`, `/usr/lib/wsl`과 `nvidia-smi`가 연결되고 WSL GPU 라이브러리가 동적 링커 캐시에 등록됩니다. 생성 결과는 배포판의 `/var/log/naru/gpu.log`에서 확인합니다. 스펙은 드라이버 버전과 무관한 고정 경로만 사용하므로 드라이버를 업데이트해도 다시 설정할 필요가 없어요. NVIDIA 드라이버가 없던 PC에 처음 설치한 경우에만 엔진을 한 번 재시작해 주세요.
+
 ### 이미지
 
 레지스트리에서 이미지를 가져오거나 Dockerfile과 Windows 소스 폴더로 직접 빌드합니다. 이미지별로 컨테이너 실행, 태그 추가, 레지스트리 업로드, TAR 내보내기와 불러오기를 지원해요.
