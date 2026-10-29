@@ -19,6 +19,7 @@ trap cleanup EXIT
 trap 'exit 0' TERM INT
 ulimit -n 65536
 mount --make-rshared / 2>/dev/null || true
+/usr/local/bin/naru-gpu > /var/log/naru/gpu.log 2>&1 || true
 if [ "$engine" = 'moby' ]; then
   ln -sf /run/naru/docker.sock /var/run/docker.sock
   # Fixed min-api-version and containerd-snapshotter so migrated data and older clients keep working.
