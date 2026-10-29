@@ -22,6 +22,7 @@ export const BASE = {
 export const PACKAGES = [
   'docker-engine',
   'docker-cli',
+  'docker-cli-buildx',
   'containerd',
   'nerdctl',
   'buildkit',
