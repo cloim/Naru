@@ -16,3 +16,6 @@ evidence/
 *.keystore
 *.kubeconfig
 /docs/
+
+target/
+scripts/naru-agent
