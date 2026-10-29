@@ -1,6 +1,8 @@
 // Release builds have no console window; job workers run windowless as well.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod preflight;
+
 use naru_core::{onboarding, server, state, worker};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -39,9 +41,14 @@ fn show(app: &AppHandle) {
         .build();
     if let Ok(window) = built {
         let hide = window.clone();
-        // Closing the window keeps Naru running in the tray: port forwarding and the Docker pipe stay up.
         window.on_window_event(move |event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
+                // Closing during setup ends the app: nothing runs yet that the tray would keep alive.
+                if !state::app_config().onboarded {
+                    hide.app_handle().exit(0);
+                    return;
+                }
+                // Afterwards Naru stays in the tray: port forwarding and the Docker pipe stay up.
                 api.prevent_close();
                 let _ = hide.hide();
             }
@@ -76,19 +83,30 @@ fn main() {
         }
         _ => {}
     }
-    let background = argv.iter().any(|a| a == "--background");
+    if let Some(message) = preflight::system() {
+        preflight::fail(&message);
+    }
+    // A login start stays in the tray, except while setup is unfinished (after the WSL reboot, say).
+    let background = argv.iter().any(|a| a == "--background") && state::app_config().onboarded;
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| show(app)))
         .setup(move |app| {
+            // Only the first instance gets here; a second launch was handed to it above.
+            if let Some(message) = preflight::port(PORT) {
+                preflight::fail(&message);
+            }
             let handle = app.handle().clone();
-            let restart = handle.clone();
+            let (restart, quit) = (handle.clone(), handle.clone());
             onboarding::attach_shell(onboarding::Shell {
                 restart: Box::new(move || restart.restart()),
+                quit: Box::new(move || quit.exit(0)),
                 executable: std::env::current_exe()?,
             });
+            let failed = handle.clone();
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = server::run(PORT).await {
-                    eprintln!("Naru 서버: {e}");
+                    preflight::show_error(&format!("Naru를 시작하지 못했습니다.\n\n{e}"));
+                    failed.exit(1);
                 }
             });
             let open = MenuItem::with_id(app, "open", "Naru 열기", true, None::<&str>)?;
@@ -120,7 +138,7 @@ fn main() {
             Ok(())
         })
         .build(tauri::generate_context!())
-        .expect("Naru 앱을 시작할 수 없습니다")
+        .unwrap_or_else(|e| preflight::fail(&format!("Naru 창을 열지 못했습니다.\n\n{e}")))
         .run(|_, event| {
             // The window only hides; Naru ends from the tray menu.
             if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
