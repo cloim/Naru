@@ -552,4 +552,74 @@ export default {
   '볼륨 파일 탐색과 아카이브는 로컬 WSL 전용입니다.':
     'Volume file browsing and archives apply to local WSL.',
   '원격 엔진 연결을 확인해 주세요': 'Check the remote engine connection',
+  '작업이 실패했습니다': 'The job failed',
+  'PC를 다시 시작하면 WSL 설치가 끝나고, 그 뒤 Naru를 열면 이어서 진행합니다':
+    'Restart the PC to finish installing WSL, then open Naru to continue',
+  'WSL을 설치했습니다': 'WSL is installed',
+  '새 데이터 폴더를 쓰려면 Naru 서버를 다시 시작해 주세요':
+    'Restart the Naru server to use the new data folder',
+  '새 데이터 폴더로 Naru를 다시 시작합니다': 'Restarting Naru with the new data folder',
+  '컨테이너 작업 환경을 준비합니다': 'Setting up your container workspace',
+  '설정 단계': 'Setup steps',
+  'Naru에 오신 것을 환영합니다': 'Welcome to Naru',
+  '이 PC에서 엔진을 실행할 수 있는지 확인합니다': 'Checking that this PC can run the engine',
+  '데이터를 둘 위치를 정합니다': 'Choose where data lives',
+  '사용할 엔진을 고릅니다': 'Choose your engine',
+  '엔진을 설치하고 시작합니다': 'Installing and starting the engine',
+  'WSL 2 위에 Naru 전용 엔진을 설치하고 Docker, Compose와 Kubernetes를 Windows에서 바로 쓰도록 연결합니다':
+    'Naru installs its own engine on WSL 2 and connects Docker, Compose and Kubernetes to Windows',
+  'WSL 2와 하드웨어 가상화가 필요합니다': 'WSL 2 and hardware virtualization are required',
+  '컨테이너 이미지와 볼륨이 이 폴더의 가상 디스크에 저장됩니다':
+    'Container images and volumes are stored in a virtual disk in this folder',
+  '설정 화면에서 언제든 바꿀 수 있습니다': 'You can change this anytime in Settings',
+  '공식 배포물을 내려받아 검증한 뒤 설치합니다':
+    'Official releases are downloaded, verified and installed',
+  '화면 언어': 'Display language',
+  '시스템을 확인하는 중': 'Checking the system',
+  'WSL, 가상화와 디스크 공간을 살펴봅니다': 'Looking at WSL, virtualization and disk space',
+  '확인하지 못했습니다': 'Could not check',
+  'WSL 설치': 'Install WSL',
+  '설치됨, 버전 {0}': 'Installed, version {0}',
+  '설치가 필요하며, 관리자 승인 뒤 설치하고 PC를 다시 시작해야 합니다':
+    'Required: installs after administrator approval and needs a PC restart',
+  '하드웨어 가상화': 'Hardware virtualization',
+  '사용할 수 있습니다': 'Available',
+  'BIOS 또는 UEFI 설정에서 가상화(Intel VT-x, AMD-V)를 켠 뒤 다시 확인해 주세요':
+    'Turn on virtualization (Intel VT-x, AMD-V) in BIOS or UEFI, then check again',
+  '디스크 여유 공간': 'Free disk space',
+  '여유 공간을 확인하지 못했습니다': 'Free space could not be read',
+  '{0} 사용 가능': '{0} available',
+  '{0}만 남아 있어 20GB 이상 확보를 권장합니다': 'Only {0} left; 20GB or more is recommended',
+  '기존 Naru 런타임': 'Existing Naru runtime',
+  '이미 설치된 런타임과 데이터를 그대로 사용합니다': 'The installed runtime and its data are kept',
+  '데이터 폴더': 'Data folder',
+  '기본 위치': 'Default location',
+  '런타임이 이미 설치되어 있어 위치를 옮길 수 없습니다':
+    'The runtime is already installed, so the folder cannot move',
+  '여유 공간이 넉넉한 드라이브를 고르면 좋습니다': 'A drive with plenty of free space works best',
+  'Windows에 로그인하면 Naru를 백그라운드로 시작':
+    'Start Naru in the background when I sign in to Windows',
+  '설치된 앱에서 설정할 수 있습니다': 'Available in the installed app',
+  'Docker CLI와 Compose를 그대로 쓰는 일반적인 선택':
+    'The usual choice for the Docker CLI and Compose',
+  'Kubernetes(k3s)도 함께 시작': 'Also start Kubernetes (k3s)',
+  'Windows용 docker, kubectl, helm 명령 설치':
+    'Install docker, kubectl and helm commands for Windows',
+  '프록시 사용 (선택)': 'Use a proxy (optional)',
+  'Windows의 localhost 프록시는 컨테이너에서 host.docker.internal로 연결됩니다':
+    'A proxy on Windows localhost is reached from containers through host.docker.internal',
+  '다시 확인': 'Check again',
+  이전: 'Back',
+  '설치 시작': 'Start install',
+  다음: 'Next',
+  'Naru 런타임 설치': 'Install the Naru runtime',
+  'Windows 명령 설치': 'Install Windows commands',
+  대기: 'Waiting',
+  '작업을 준비하는 중': 'Preparing the job',
+  '이 단계부터 다시 시도': 'Retry from this step',
+  'Naru 시작': 'Start Naru',
+  '환경 점검': 'System check',
+  '저장 위치': 'Storage',
+  '엔진 구성': 'Engine',
+  설치: 'Install',
 };

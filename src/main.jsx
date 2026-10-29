@@ -13,6 +13,7 @@ const Snapshots = lazy(() => import('./pages/Snapshots.jsx'));
 const Settings = lazy(() => import('./pages/Settings.jsx'));
 const Diagnostics = lazy(() => import('./pages/Diagnostics.jsx'));
 const Jobs = lazy(() => import('./pages/Jobs.jsx'));
+const Onboarding = lazy(() => import('./pages/Onboarding.jsx'));
 import React, {
   createContext,
   useCallback,
@@ -465,10 +466,25 @@ function EngineBootstrap() {
   if (state.error) return <p className={tw.page}>{state.error.message}</p>;
   return state.data ? <Shell /> : <Skeleton />;
 }
+// 처음 실행하면 온보딩부터 진행한다. 상태를 알 수 없으면(원격 엔진 선택 등) 기존 화면으로 들어간다.
+function OnboardingGate() {
+  const state = useQuery({
+    queryKey: ['onboarding-state'],
+    queryFn: () => api('/onboarding/state'),
+  });
+  if (state.isLoading) return <Skeleton />;
+  if (state.data && !state.data.onboarded)
+    return (
+      <Suspense fallback={<Skeleton />}>
+        <Onboarding onDone={() => state.refetch()} />
+      </Suspense>
+    );
+  return <EngineBootstrap />;
+}
 createRoot(document.getElementById('root')).render(
   <QueryClientProvider client={client}>
     <BrowserRouter>
-      <EngineBootstrap />
+      <OnboardingGate />
     </BrowserRouter>
   </QueryClientProvider>,
 );
