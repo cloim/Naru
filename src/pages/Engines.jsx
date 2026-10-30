@@ -68,7 +68,7 @@ export default function Engines() {
       {
         colId: 'actions',
         headerName: t('작업'),
-        width: 135,
+        width: 136,
         sortable: false,
         cellRenderer: ({ data: p }) => (
           <div className="flex h-full items-center gap-1">

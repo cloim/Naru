@@ -67,7 +67,11 @@ function Jobs({ openJob }) {
         width: 150,
         filterable: true,
         filterValueGetter: (r) => t(stateNames[r.state]) || r.state,
-        cellRenderer: ({ value }) => <Badge state={value}>{t(stateNames[value])}</Badge>,
+        cellRenderer: ({ value }) => (
+          <Badge state={value} tone={value === 'running' ? 'wait' : undefined}>
+            {t(stateNames[value])}
+          </Badge>
+        ),
       },
       {
         field: 'createdAt',

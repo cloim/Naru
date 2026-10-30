@@ -1,9 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Chart, LineController, LineElement, PointElement, LinearScale, Tooltip } from 'chart.js';
+import {
+  Chart,
+  LineController,
+  LineElement,
+  PointElement,
+  LinearScale,
+  Tooltip,
+  Filler,
+} from 'chart.js';
 import { t } from '../i18n.js';
 import { cn, tw } from '../tw.js';
 
-Chart.register(LineController, LineElement, PointElement, LinearScale, Tooltip);
+Chart.register(LineController, LineElement, PointElement, LinearScale, Tooltip, Filler);
 const time = (value) => new Date(value).toLocaleTimeString();
 
 export default function ResourceChart({
@@ -13,6 +21,7 @@ export default function ResourceChart({
   format,
   color = '#35664d',
   ceiling = 0,
+  compact = false,
 }) {
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
@@ -37,6 +46,7 @@ export default function ResourceChart({
             type: 'linear',
             grid: { display: false },
             ticks: {
+              display: !compact,
               maxTicksLimit: 3,
               maxRotation: 0,
               color: '#69776d',
@@ -46,8 +56,8 @@ export default function ResourceChart({
           },
           y: {
             beginAtZero: true,
-            grid: { color: '#e5ebe2' },
-            ticks: { maxTicksLimit: 4, color: '#69776d', font: { size: 10 } },
+            grid: { display: !compact, color: '#e5ebe2' },
+            ticks: { display: !compact, maxTicksLimit: 4, color: '#69776d', font: { size: 10 } },
             border: { display: false },
           },
         },
@@ -80,9 +90,10 @@ export default function ResourceChart({
           y: Number.isFinite(point[field]) ? point[field] : null,
         })),
         borderColor: color,
-        backgroundColor: color,
         borderWidth: 2,
-        pointRadius: 2,
+        pointRadius: compact ? 0 : 2,
+        fill: compact ? 'origin' : false,
+        backgroundColor: compact ? color + '1f' : color,
         pointHoverRadius: 4,
         spanGaps: false,
       },
@@ -123,15 +134,29 @@ export default function ResourceChart({
     setTooltip(null);
   }
   return (
-    <section className={cn(tw.panel, 'p-5')}>
+    <section className={cn(tw.panel, compact ? 'px-4 py-3.5' : 'p-5')}>
       <div className="flex items-center justify-between gap-3">
-        <h3 className="text-[13px] font-semibold">{title}</h3>
-        <strong className="font-mono text-[18px] tabular-nums" style={{ color }}>
-          {Number.isFinite(current) ? format(current) : t('수집 중')}
+        <h3 className={cn('font-semibold', compact ? 'text-[12px] text-muted' : 'text-[13px]')}>
+          {title}
+        </h3>
+        <strong
+          className={cn(
+            'tabular-nums',
+            compact ? 'font-display text-[20px] text-ink' : 'font-mono text-[18px]',
+          )}
+          style={compact ? undefined : { color }}
+        >
+          {Number.isFinite(current) ? (
+            format(current)
+          ) : (
+            <span className={compact ? 'font-sans text-[12px] font-medium text-muted' : ''}>
+              {t('수집 중')}
+            </span>
+          )}
         </strong>
       </div>
-      <p className="mt-3 text-right text-[11px] text-muted">{t('최근 5분')}</p>
-      <div className="relative mt-2 h-[170px] min-w-0">
+      {!compact && <p className="mt-3 text-right text-[11px] text-muted">{t('최근 5분')}</p>}
+      <div className={cn('relative mt-2 min-w-0', compact ? 'h-[84px]' : 'h-[170px]')}>
         <canvas
           ref={canvasRef}
           role="img"

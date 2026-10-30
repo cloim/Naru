@@ -17,6 +17,7 @@ import {
 } from '../ui.jsx';
 import { cn, tw } from '../tw.js';
 import { ContainerFileExplorer } from '../components/ContainerFileExplorer.jsx';
+import ResourceChart from '../components/ResourceChart.jsx';
 const TerminalPanel = lazy(() => import('../components/TerminalPanel.jsx'));
 
 function InfoSection({ title, rows, autoSizeLabels = false }) {
@@ -150,6 +151,10 @@ function ContainerGeneral({ inspect }) {
   );
 }
 
+const percent = (value) => `${value.toFixed(1)}%`;
+const rate = (value) =>
+  value >= 1048576 ? `${(value / 1048576).toFixed(1)} MB/s` : `${(value / 1024).toFixed(1)} KB/s`;
+
 export function resourceUsage(stats) {
   const cpu = stats.cpu_stats,
     previous = stats.precpu_stats;
@@ -180,7 +185,9 @@ function ContainerDetail() {
   const { id } = useParams(),
     { job, busy } = useActions();
   const [searchParams] = useSearchParams();
-  const [tab, setTab] = useState(searchParams.get('tab') === 'logs' ? 'logs' : 'general'),
+  const [tab, setTab] = useState(
+      ['logs', 'resources'].includes(searchParams.get('tab')) ? 'logs' : 'general',
+    ),
     [logSearch, setLogSearch] = useState(''),
     [autoScroll, setAutoScroll] = useState(true);
   const logEndRef = useRef(null),
@@ -191,12 +198,33 @@ function ContainerDetail() {
     refetchInterval: 5000,
   });
   const stats = useData('stats:' + id, `/containers/${id}/stats`, {
-    enabled: tab === 'resources',
+    enabled: tab === 'logs',
     refetchInterval: 5000,
   });
+  // 로그를 보는 동안 최근 5분 사용량을 모아 작은 차트로 보여 준다. 네트워크는 누적값의 차이로 초당 전송량을 계산한다.
+  const [history, setHistory] = useState([]);
+  useEffect(() => setHistory([]), [id]);
   const inspect = Array.isArray(detail.data) ? detail.data[0] : detail.data;
   usePageTitle(inspect?.Name?.replace(/^\//, '') || id.slice(0, 12));
-  const usage = stats.data ? resourceUsage(stats.data) : null;
+  const usage = stats.data && stats.data.text === undefined ? resourceUsage(stats.data) : null;
+  useEffect(() => {
+    if (!usage) return;
+    const timestamp = stats.dataUpdatedAt;
+    setHistory((previous) => {
+      if (previous.at(-1)?.timestamp === timestamp) return previous;
+      const last = previous.at(-1);
+      const total = (usage.received ?? 0) + (usage.sent ?? 0);
+      const seconds = last ? (timestamp - last.timestamp) / 1000 : 0;
+      const network =
+        last && seconds > 0 && usage.received !== null && total >= last.total
+          ? (total - last.total) / seconds
+          : null;
+      return [
+        ...previous.filter((point) => point.timestamp >= timestamp - 300000),
+        { timestamp, cpu: usage.cpu, memory: usage.memory, network, total },
+      ];
+    });
+  }, [stats.dataUpdatedAt]);
 
   const rawLog = logs.data?.text || '';
   const filteredLog = useMemo(() => {
@@ -260,8 +288,7 @@ function ContainerDetail() {
         <div className={tw.tabs}>
           {[
             ['general', t('일반')],
-            ['logs', t('로그')],
-            ['resources', t('리소스')],
+            ['logs', t('로그와 리소스')],
             ['files', t('파일')],
             ['terminal', t('터미널')],
           ].map(([key, label]) => (
@@ -277,142 +304,143 @@ function ContainerDetail() {
         </div>
 
         {tab === 'logs' ? (
-          logs.isLoading ? (
-            <Skeleton />
-          ) : logs.error ? (
-            <ErrorState error={logs.error} retry={() => logs.refetch()} />
-          ) : (
-            <div className="flex min-h-0 flex-1 flex-col">
-              <div className="flex flex-none flex-wrap items-center justify-between gap-2.5 border-b border-line bg-[#fbfcf9] px-4 py-2.5 max-tablet:px-3 max-tablet:py-2">
-                <div className="flex h-8.5 w-full max-w-[280px] items-center gap-2 rounded-[6px] border border-[#e3e8df] bg-white px-2.5 text-[#8c978e]">
-                  <Search size={15} />
-                  <input
-                    className="h-full min-w-0 flex-1 bg-transparent text-[12px] text-ink outline-0 placeholder:text-[#9aa29b]"
-                    aria-label={t('로그 검색')}
-                    placeholder={t('로그 검색')}
-                    value={logSearch}
-                    onChange={(e) => setLogSearch(e.target.value)}
-                  />
-                  {logSearch && (
-                    <button
-                      type="button"
-                      aria-label={t('검색어 지우기')}
-                      className="text-[#8c978e] hover:text-ink"
-                      onClick={() => setLogSearch('')}
-                    >
-                      <X size={14} />
-                    </button>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <IconButton
-                    icon={ArrowDown}
-                    label={t('자동 스크롤')}
-                    className={cn(
-                      'border border-[#dce2d9] bg-white',
-                      autoScroll && 'border-[#bdcdbb] bg-[#eef5e9] text-[#407543]',
-                    )}
-                    onClick={() => setAutoScroll(!autoScroll)}
-                  />
-                  <CopyButton
-                    text={filteredLog || rawLog}
-                    label={t('로그 복사')}
-                    className="h-8.5 w-8.5 border border-[#dce2d9] bg-white"
-                  />
-                </div>
-              </div>
-              <pre
-                ref={logPreRef}
-                className={cn(tw.terminal, 'min-h-0 flex-1 max-h-none overflow-auto rounded-none')}
-                aria-label={t('컨테이너 로그')}
-              >
-                {filteredLog ||
-                  (logSearch ? t('일치하는 로그가 없습니다.') : t('아직 출력된 로그가 없습니다.'))}
-                <span ref={logEndRef} />
-              </pre>
-            </div>
-          )
-        ) : null}
-
-        {tab === 'resources' ? (
-          stats.isLoading ? (
-            <Skeleton />
-          ) : stats.error ? (
-            <ErrorState error={stats.error} retry={() => stats.refetch()} />
-          ) : stats.data?.text !== undefined ? (
-            <pre
-              className={cn(tw.terminal, 'min-h-0 flex-1 rounded-none overflow-auto')}
-              aria-label={t('containerd 리소스 사용량')}
-            >
-              {stats.data.text || t('리소스 사용량을 아직 수집하지 못했습니다.')}
-            </pre>
-          ) : usage ? (
-            <div className="min-h-0 flex-1 overflow-y-auto p-6 max-tablet:p-5">
-              {((usage.cpu !== null && usage.cpu > 80) ||
-                (usage.percent !== null && usage.percent > 85)) && (
-                <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-[#f5c6cb] bg-[#fdf2f2] p-3.5 text-[12px] text-[#721c24]">
-                  <div className="flex items-center gap-2">
-                    <TriangleAlert size={17} className="flex-none text-danger" />
-                    <span>
-                      {t(
-                        '리소스 사용량이 높습니다 (CPU {0}%, 메모리 {1}%). 누수가 발생했을 수 있습니다.',
-                        [
-                          usage.cpu ? usage.cpu.toFixed(1) : '-',
-                          usage.percent ? usage.percent.toFixed(1) : '-',
-                        ],
+          <div className="flex min-h-0 flex-1 max-desktop:flex-col">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              {logs.isLoading ? (
+                <Skeleton />
+              ) : logs.error ? (
+                <ErrorState error={logs.error} retry={() => logs.refetch()} />
+              ) : (
+                <div className="flex min-h-0 flex-1 flex-col">
+                  <div className="flex flex-none flex-wrap items-center justify-between gap-2.5 border-b border-line bg-[#fbfcf9] px-4 py-2.5 max-tablet:px-3 max-tablet:py-2">
+                    <div className="flex h-8.5 w-full max-w-[280px] items-center gap-2 rounded-[6px] border border-[#e3e8df] bg-white px-2.5 text-[#8c978e]">
+                      <Search size={15} />
+                      <input
+                        className="h-full min-w-0 flex-1 bg-transparent text-[12px] text-ink outline-0 placeholder:text-[#9aa29b]"
+                        aria-label={t('로그 검색')}
+                        placeholder={t('로그 검색')}
+                        value={logSearch}
+                        onChange={(e) => setLogSearch(e.target.value)}
+                      />
+                      {logSearch && (
+                        <button
+                          type="button"
+                          aria-label={t('검색어 지우기')}
+                          className="text-[#8c978e] hover:text-ink"
+                          onClick={() => setLogSearch('')}
+                        >
+                          <X size={14} />
+                        </button>
                       )}
-                    </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <IconButton
+                        icon={ArrowDown}
+                        label={t('자동 스크롤')}
+                        className={cn(
+                          'border border-[#dce2d9] bg-white',
+                          autoScroll && 'border-[#bdcdbb] bg-[#eef5e9] text-[#407543]',
+                        )}
+                        onClick={() => setAutoScroll(!autoScroll)}
+                      />
+                      <CopyButton
+                        text={filteredLog || rawLog}
+                        label={t('로그 복사')}
+                        className="h-8.5 w-8.5 border border-[#dce2d9] bg-white"
+                      />
+                    </div>
                   </div>
-                  <Button
-                    compact
-                    disabled={busy}
-                    onClick={() => job('containerAction', { id, action: 'restart' })}
+                  <pre
+                    ref={logPreRef}
+                    className={cn(
+                      tw.terminal,
+                      // 긴 로그 줄은 접지 않고 가로로 스크롤한다.
+                      'min-h-0 max-h-none flex-1 overflow-auto rounded-none whitespace-pre wrap-normal',
+                    )}
+                    aria-label={t('컨테이너 로그')}
                   >
-                    {t('컨테이너 재시작')}
-                  </Button>
+                    {filteredLog ||
+                      (logSearch
+                        ? t('일치하는 로그가 없습니다.')
+                        : t('아직 출력된 로그가 없습니다.'))}
+                    <span ref={logEndRef} />
+                  </pre>
                 </div>
               )}
-              <dl className="grid grid-cols-2 gap-6 max-tablet:grid-cols-1 [&_dd]:my-3 [&_dd]:text-[23px] [&_dd]:tracking-[-0.5px] [&_dd]:tabular-nums [&_dd]:wrap-anywhere [&_dt]:text-[12px] [&_dt]:text-muted [&_progress]:mt-3 [&_progress]:block [&_progress]:h-1.5 [&_progress]:w-full [&_progress]:accent-accent [&_small]:block [&_small]:leading-[1.6] [&>div]:min-w-0 [&>div]:border-b [&>div]:border-line [&>div]:pb-5">
-                <div>
-                  <dt>CPU</dt>
-                  <dd>{usage.cpu === null ? t('수집 중') : `${usage.cpu.toFixed(2)}%`}</dd>
-                  <small>{t('코어 1개 전체 사용량 = 100%')}</small>
-                </div>
-                <div>
-                  <dt>{t('메모리')}</dt>
-                  <dd>{usage.memory === null ? t('수집 중') : bytes(usage.memory)}</dd>
-                  <small>
-                    {usage.limit
-                      ? t('한도 {0}{1}', [
-                          bytes(usage.limit),
-                          usage.percent === null ? '' : ` | ${usage.percent.toFixed(1)}%`,
-                        ])
-                      : t('한도 정보 수집 중')}
-                  </small>
-                  {usage.percent !== null && (
-                    <progress
-                      aria-label={t('메모리 한도 대비 사용률')}
-                      max="100"
-                      value={Math.min(100, usage.percent)}
-                    />
-                  )}
-                </div>
-                <div>
-                  <dt>{t('네트워크 수신 / 송신')}</dt>
-                  <dd>
-                    {usage.received === null
-                      ? t('수집 중')
-                      : `${bytes(usage.received)} / ${bytes(usage.sent)}`}
-                  </dd>
-                  <small>{t('컨테이너 시작 이후 누적')}</small>
-                </div>
-                <div>
-                  <dt>{t('프로세스')}</dt>
-                  <dd>{usage.pids ?? t('수집 중')}</dd>
-                </div>
-              </dl>
             </div>
-          ) : null
+            <aside
+              aria-label={t('리소스 사용량')}
+              className="flex w-[320px] flex-none flex-col gap-3 overflow-y-auto border-l border-line bg-[#fbfcf9] p-4 max-desktop:max-h-[45%] max-desktop:w-full max-desktop:border-t max-desktop:border-l-0 max-tablet:p-3"
+            >
+              {stats.error ? (
+                <ErrorState error={stats.error} retry={() => stats.refetch()} />
+              ) : stats.data?.text !== undefined ? (
+                <pre
+                  className={cn(tw.terminal, 'min-h-[180px] flex-1 overflow-auto')}
+                  aria-label={t('containerd 리소스 사용량')}
+                >
+                  {stats.data.text || t('리소스 사용량을 아직 수집하지 못했습니다.')}
+                </pre>
+              ) : (
+                <>
+                  {usage &&
+                    ((usage.cpu !== null && usage.cpu > 80) ||
+                      (usage.percent !== null && usage.percent > 85)) && (
+                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-[#f5c6cb] bg-[#fdf2f2] p-3.5 text-[12px] text-[#721c24]">
+                        <div className="flex items-center gap-2">
+                          <TriangleAlert size={17} className="flex-none text-danger" />
+                          <span>
+                            {t(
+                              '리소스 사용량이 높습니다 (CPU {0}%, 메모리 {1}%). 누수가 발생했을 수 있습니다.',
+                              [
+                                usage.cpu ? usage.cpu.toFixed(1) : '-',
+                                usage.percent ? usage.percent.toFixed(1) : '-',
+                              ],
+                            )}
+                          </span>
+                        </div>
+                        <Button
+                          compact
+                          disabled={busy}
+                          onClick={() => job('containerAction', { id, action: 'restart' })}
+                        >
+                          {t('컨테이너 재시작')}
+                        </Button>
+                      </div>
+                    )}
+                  <ResourceChart
+                    compact
+                    title="CPU"
+                    points={history}
+                    field="cpu"
+                    format={percent}
+                  />
+                  <ResourceChart
+                    compact
+                    title={t('메모리')}
+                    points={history}
+                    field="memory"
+                    format={bytes}
+                    color="#477b9b"
+                  />
+                  <ResourceChart
+                    compact
+                    title={t('네트워크')}
+                    points={history}
+                    field="network"
+                    format={rate}
+                    color="#b07a2e"
+                  />
+                  <p className="flex justify-between px-1 text-[12px] text-muted">
+                    <span>{t('프로세스')}</span>
+                    <strong className="font-semibold text-ink tabular-nums">
+                      {usage?.pids ?? '-'}
+                    </strong>
+                  </p>
+                </>
+              )}
+            </aside>
+          </div>
         ) : null}
 
         {tab === 'files' && <ContainerFileExplorer containerId={id} />}

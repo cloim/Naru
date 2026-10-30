@@ -89,7 +89,7 @@ const client = new QueryClient({
 const navLink = ({ isActive }) =>
   cn(
     'flex items-center gap-3.25 rounded-[9px] px-4 py-3.25 text-[14px] font-medium transition-[background] duration-150 hover:bg-[#ffffff0b] max-desktop:gap-2.5 max-desktop:p-3 max-tablet:py-2.5',
-    isActive && 'bg-[#31554a] text-[#f1ffdf] hover:bg-[#31554a]',
+    isActive && 'bg-lime font-semibold text-brand hover:bg-lime',
   );
 
 function Shell() {

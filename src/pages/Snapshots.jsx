@@ -50,6 +50,8 @@ import {
   Skeleton,
   ErrorState,
   Empty,
+  Badge,
+  StatCards,
   bytes,
   PageActions,
   PageAction,
@@ -59,9 +61,15 @@ import { api, downloadConfig } from '../api.js';
 import { Modal } from '../components/Modal/Modal.jsx';
 import SelectControl from '../components/SelectControl/SelectControl.tsx';
 function Snapshots() {
-  useLocale();
+  const locale = useLocale();
   const { job, form, confirm, busy, status } = useActions(),
     data = useData('snapshots', '/snapshots');
+  // 새 스냅샷이 위에 오도록 정렬하고, 가장 최근 것을 표시한다.
+  const snapshots = useMemo(
+    () => [...(data.data || [])].sort((a, b) => String(b.createdAt).localeCompare(a.createdAt)),
+    [data.data],
+  );
+  const latest = snapshots[0];
   return (
     <section className={tw.page}>
       <PageActions>
@@ -93,55 +101,73 @@ function Snapshots() {
         <Skeleton />
       ) : data.error ? (
         <ErrorState error={data.error} />
-      ) : data.data?.length ? (
-        <div className={tw.cardList}>
-          {data.data.map((s) => (
-            <article className={cn(tw.panel, tw.card)} key={s.id}>
-              <div className={tw.cardIcon}>
-                <Camera size={24} />
-              </div>
-              <div>
-                <h3>{s.name}</h3>
-                <p>
-                  {formatDate(s.createdAt)} | {bytes(s.bytes)}
-                </p>
-              </div>
-              <div className={tw.cardActions}>
-                <Button
-                  icon={RotateCw}
-                  disabled={busy}
-                  onClick={() =>
-                    confirm(
-                      t('스냅샷 복원'),
-                      t(
-                        '현재 데이터를 이 스냅샷으로 교체합니다. 교체 직전 백업도 별도 저장합니다.',
-                      ),
-                      (v) => job('restoreSnapshot', { id: s.id, confirmation: v.confirmation }),
-                      'RESTORE',
-                    )
-                  }
-                >
-                  {' '}
-                  {t('복원')}{' '}
-                </Button>
-                <IconButton
-                  icon={Trash2}
-                  label={t('스냅샷 삭제')}
-                  danger
-                  disabled={busy}
-                  onClick={() =>
-                    confirm(
-                      t('스냅샷 삭제'),
-                      t('{0} 스냅샷 파일을 영구 삭제합니다.', [s.name]),
-                      (v) => job('deleteSnapshot', { id: s.id, confirmation: v.confirmation }),
-                      'DELETE',
-                    )
-                  }
-                />
-              </div>
-            </article>
-          ))}
-        </div>
+      ) : snapshots.length ? (
+        <>
+          <StatCards
+            items={[
+              [t('스냅샷'), snapshots.length],
+              [
+                t('전체 용량'),
+                ...bytes(snapshots.reduce((sum, s) => sum + (s.bytes || 0), 0)).split(' '),
+              ],
+              [
+                t('가장 최근'),
+                new Date(latest.createdAt).toLocaleDateString(locale === 'ko' ? 'ko-KR' : 'en-US'),
+              ],
+            ]}
+          />
+          <div className={tw.cardList}>
+            {snapshots.map((s) => (
+              <article className={cn(tw.panel, tw.card)} key={s.id}>
+                <div className={tw.cardIcon}>
+                  <Camera size={24} />
+                </div>
+                <div>
+                  <h3 className="flex flex-wrap items-center gap-2">
+                    {s.name}
+                    {s.id === latest.id && <Badge tone="ok">{t('가장 최근')}</Badge>}
+                  </h3>
+                  <p>
+                    {formatDate(s.createdAt)} | {bytes(s.bytes)}
+                  </p>
+                </div>
+                <div className={tw.cardActions}>
+                  <Button
+                    icon={RotateCw}
+                    disabled={busy}
+                    onClick={() =>
+                      confirm(
+                        t('스냅샷 복원'),
+                        t(
+                          '현재 데이터를 이 스냅샷으로 교체합니다. 교체 직전 백업도 별도 저장합니다.',
+                        ),
+                        (v) => job('restoreSnapshot', { id: s.id, confirmation: v.confirmation }),
+                        'RESTORE',
+                      )
+                    }
+                  >
+                    {' '}
+                    {t('복원')}{' '}
+                  </Button>
+                  <IconButton
+                    icon={Trash2}
+                    label={t('스냅샷 삭제')}
+                    danger
+                    disabled={busy}
+                    onClick={() =>
+                      confirm(
+                        t('스냅샷 삭제'),
+                        t('{0} 스냅샷 파일을 영구 삭제합니다.', [s.name]),
+                        (v) => job('deleteSnapshot', { id: s.id, confirmation: v.confirmation }),
+                        'DELETE',
+                      )
+                    }
+                  />
+                </div>
+              </article>
+            ))}
+          </div>
+        </>
       ) : (
         <div className={tw.panel}>
           <Empty title={t('아직 저장한 스냅샷이 없어요')}>

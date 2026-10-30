@@ -296,16 +296,43 @@ export function DataGrid({
     [initialFirstRowIndex, initialSortState],
   );
 
+  // 가로 스크롤은 바깥 래퍼가 맡으므로 본문은 컬럼 너비 합만큼 넓다. 터치 기기의 세로 스크롤 막대는 그 넓은 본문의
+  // 맨 오른쪽에 붙어 화면 밖에 있게 되므로, 가로로 움직이지 않는 바깥 층의 오른쪽 끝에 스크롤 위치를 따로 그린다.
+  const coarsePointer = useMemo(() => window.matchMedia('(pointer: coarse)').matches, []);
+  const frameRef = useRef(null),
+    thumbRef = useRef(null),
+    thumbTimer = useRef(0);
+  useEffect(() => () => clearTimeout(thumbTimer.current), []);
+  const showScrollThumb = useCallback(() => {
+    const frame = frameRef.current,
+      thumb = thumbRef.current;
+    const viewport = frame?.querySelector('.ag-grid-viewport, .ag-body-viewport');
+    if (!thumb || !viewport) return;
+    const { scrollTop, scrollHeight, clientHeight } = viewport;
+    if (scrollHeight <= clientHeight + 1) return;
+    const size = Math.max(28, (clientHeight * clientHeight) / scrollHeight);
+    const offset = (scrollTop / (scrollHeight - clientHeight)) * (clientHeight - size);
+    const top = viewport.getBoundingClientRect().top - frame.getBoundingClientRect().top;
+    thumb.style.height = `${size}px`;
+    thumb.style.transform = `translateY(${top + offset}px)`;
+    thumb.style.opacity = '1';
+    clearTimeout(thumbTimer.current);
+    thumbTimer.current = setTimeout(() => {
+      thumb.style.opacity = '0';
+    }, 900);
+  }, []);
+
   const handleBodyScroll = useCallback(
     (event) => {
       if (event.direction === 'vertical') {
+        if (coarsePointer) showScrollThumb();
         onFirstDisplayedRowChange?.(event.api.getFirstDisplayedRowIndex());
         if (syncAnchorRow(event.api)) {
           event.api.refreshCells({ columns: suppressRepeatKeys, force: true });
         }
       }
     },
-    [onFirstDisplayedRowChange, suppressRepeatKeys, syncAnchorRow],
+    [onFirstDisplayedRowChange, suppressRepeatKeys, syncAnchorRow, coarsePointer, showScrollThumb],
   );
 
   // 스크롤 외에 창 크기 변화나 행 재구성으로 보이는 범위가 달라질 때도 기준 행을 다시 잡는다.
@@ -376,62 +403,71 @@ export function DataGrid({
   const skeletonColumnCount = Array.isArray(columnDefs) ? columnDefs.length : 6;
 
   return (
-    <div
-      data-outer-scroll={suppressHorizontalScroll || undefined}
-      className={cn(
-        'h-full min-h-0 w-full min-w-0 flex-1 overflow-x-auto overflow-y-hidden',
-        className,
-      )}
-    >
+    <div ref={frameRef} className="relative flex h-full min-h-0 w-full min-w-0 flex-1">
       <div
-        className="data-grid ag-theme-quartz relative flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden"
-        style={{ minWidth: effectiveMinWidth > 0 ? `${effectiveMinWidth}px` : '100%' }}
-        role="presentation"
+        data-outer-scroll={suppressHorizontalScroll || undefined}
+        className={cn(
+          'h-full min-h-0 w-full min-w-0 flex-1 overflow-x-auto overflow-y-hidden',
+          className,
+        )}
       >
-        <AgGridReact
-          rowData={filteredRowData}
-          columnDefs={effectiveColumnDefs}
-          context={gridContext}
-          defaultColDef={defaultColDef}
-          getRowId={getRowId}
-          theme="legacy"
-          headerHeight={headerHeight}
-          rowHeight={rowHeight}
-          suppressCellFocus
-          suppressHorizontalScroll={suppressHorizontalScroll}
-          tooltipShowDelay={200}
-          onRowClicked={onRowClicked}
-          onSortChanged={handleSortChanged}
-          onBodyScroll={handleBodyScroll}
-          onViewportChanged={handleViewportChanged}
-          onModelUpdated={handleModelUpdated}
-          overlayNoRowsTemplate={emptyMessage}
-          loading={false}
-          suppressNoRowsOverlay={isLoading || !!errorMessage}
-          postSortRows={hasGroups ? postSortRows : undefined}
-          isFullWidthRow={hasGroups ? isFullWidthRow : undefined}
-          {...gridProps}
-          onGridReady={onGridReady}
-          onColumnResized={(event) => {
-            if (event.finished && event.source === 'uiColumnResized') {
-              const total =
-                event.api
-                  .getAllDisplayedColumns()
-                  .reduce((sum, col) => sum + col.getActualWidth(), 0) + GRID_BORDER_WIDTH;
-              setUserResizedWidth(total);
-            }
-            gridProps.onColumnResized?.(event);
-          }}
-        />
-        {isLoading ? (
-          <DataGridSkeleton
-            columnCount={skeletonColumnCount}
+        <div
+          className="data-grid ag-theme-quartz relative flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden"
+          style={{ minWidth: effectiveMinWidth > 0 ? `${effectiveMinWidth}px` : '100%' }}
+          role="presentation"
+        >
+          <AgGridReact
+            rowData={filteredRowData}
+            columnDefs={effectiveColumnDefs}
+            context={gridContext}
+            defaultColDef={defaultColDef}
+            getRowId={getRowId}
+            theme="legacy"
             headerHeight={headerHeight}
             rowHeight={rowHeight}
+            suppressCellFocus
+            suppressHorizontalScroll={suppressHorizontalScroll}
+            tooltipShowDelay={200}
+            onRowClicked={onRowClicked}
+            onSortChanged={handleSortChanged}
+            onBodyScroll={handleBodyScroll}
+            onViewportChanged={handleViewportChanged}
+            onModelUpdated={handleModelUpdated}
+            overlayNoRowsTemplate={emptyMessage}
+            loading={false}
+            suppressNoRowsOverlay={isLoading || !!errorMessage}
+            postSortRows={hasGroups ? postSortRows : undefined}
+            isFullWidthRow={hasGroups ? isFullWidthRow : undefined}
+            {...gridProps}
+            onGridReady={onGridReady}
+            onColumnResized={(event) => {
+              if (event.finished && event.source === 'uiColumnResized') {
+                const total =
+                  event.api
+                    .getAllDisplayedColumns()
+                    .reduce((sum, col) => sum + col.getActualWidth(), 0) + GRID_BORDER_WIDTH;
+                setUserResizedWidth(total);
+              }
+              gridProps.onColumnResized?.(event);
+            }}
           />
-        ) : null}
-        {!isLoading && errorMessage ? <DataGridStatus message={errorMessage} /> : null}
+          {isLoading ? (
+            <DataGridSkeleton
+              columnCount={skeletonColumnCount}
+              headerHeight={headerHeight}
+              rowHeight={rowHeight}
+            />
+          ) : null}
+          {!isLoading && errorMessage ? <DataGridStatus message={errorMessage} /> : null}
+        </div>
       </div>
+      {coarsePointer && (
+        <div
+          ref={thumbRef}
+          aria-hidden="true"
+          className="pointer-events-none absolute top-0 right-0.75 z-3 w-1 rounded-full bg-[#14281f59] opacity-0 transition-opacity duration-300"
+        />
+      )}
     </div>
   );
 }

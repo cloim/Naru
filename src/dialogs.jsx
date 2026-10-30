@@ -142,7 +142,12 @@ export function JobDialog({ id, close }) {
         <>
           <span className="mr-auto" aria-live="polite">
             {data.data && (
-              <Badge state={data.data.job.state}>{t(stateNames[data.data.job.state])}</Badge>
+              <Badge
+                state={data.data.job.state}
+                tone={data.data.job.state === 'running' ? 'wait' : undefined}
+              >
+                {t(stateNames[data.data.job.state])}
+              </Badge>
             )}
           </span>
           <Button onClick={close}>{t('닫기')}</Button>
