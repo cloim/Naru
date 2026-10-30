@@ -1,0 +1,774 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Naru 프로모션</title>
+<script src="icons.js"></script>
+<style>
+  :root {
+    --brand: #163d35;
+    --brand-deep: #0d2620;
+    --lime: #d4efae;
+    --cream: #f3f1e4;
+    --canvas: #f5f6f1;
+    --ink: #213c34;
+    --muted: #748179;
+    --line: #e2e7df;
+    --accent: #2f6955;
+    --console: #142d26;
+    --danger: #ba5b57;
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+    --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; background: #07140f; overflow: hidden; }
+  body { font-family: Pretendard, 'Noto Sans KR', 'Segoe UI', sans-serif; color: var(--ink); font-size: 14px; }
+  #stage {
+    position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; overflow: hidden;
+    transform-origin: 0 0; background: radial-gradient(120% 90% at 30% 20%, #1b4a3f 0%, var(--brand-deep) 55%, #081a15 100%);
+  }
+  svg.i { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .mono { font-family: 'Cascadia Code', Consolas, monospace; }
+
+  /* 공통 등장, 퇴장 */
+  .scene { position: absolute; inset: 0; opacity: 0; animation: fadeIn 0.6s var(--ease) var(--s) both, fadeOut 0.5s ease-in var(--e) forwards; }
+  .u { animation: up 0.9s var(--ease) var(--d, 0s) both; }
+  .pop { animation: pop 0.7s var(--spring) var(--d, 0s) both; }
+  .fade { animation: fadeIn 0.6s ease var(--d, 0s) both; }
+  .slideL { animation: slideL 0.9s var(--ease) var(--d, 0s) both; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+  @keyframes up { from { opacity: 0; transform: translateY(36px); filter: blur(8px); } to { opacity: 1; transform: none; filter: blur(0); } }
+  @keyframes pop { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: none; } }
+  @keyframes slideL { from { opacity: 0; transform: translateX(-48px); } to { opacity: 1; transform: none; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes drift1 { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(260px, 140px); } }
+  @keyframes drift2 { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(-220px, -120px); } }
+  @keyframes pulse { 0% { transform: scale(1); opacity: 0.7; } 100% { transform: scale(2.6); opacity: 0; } }
+
+  /* 배경 */
+  .grid { position: absolute; inset: -40px; background-image: radial-gradient(rgba(212, 239, 174, 0.13) 1.4px, transparent 1.4px); background-size: 40px 40px; mask-image: radial-gradient(70% 70% at 50% 45%, #000 30%, transparent 100%); }
+  .glow { position: absolute; border-radius: 50%; filter: blur(90px); }
+  .glow.a { width: 760px; height: 760px; left: -160px; top: -220px; background: rgba(120, 190, 140, 0.28); animation: drift1 18s ease-in-out infinite; }
+  .glow.b { width: 680px; height: 680px; right: -180px; bottom: -260px; background: rgba(212, 239, 174, 0.18); animation: drift2 22s ease-in-out infinite; }
+
+  /* 장면 1: 인트로 */
+  #s1 { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .mark-wrap { position: relative; width: 190px; height: 190px; display: grid; place-items: center; }
+  .mark-ring { position: absolute; inset: 0; border-radius: 48px; border: 2px solid rgba(212, 239, 174, 0.55); animation: pulse 1.6s ease-out var(--d) 2 both; }
+  .mark-box { position: relative; width: 190px; height: 190px; border-radius: 48px; background: linear-gradient(150deg, #2a6151, #163d35); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.12); display: grid; place-items: center; animation: markIn 1.1s var(--spring) 0.3s both, markOut 0.8s var(--ease) 1.5s forwards; }
+  .mark-box img { width: 104px; }
+  @keyframes markIn { from { transform: scale(0.2) rotate(-25deg); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes markOut { to { transform: translateY(-40px) scale(0.62); } }
+  .s1-word { width: 420px; margin-top: -10px; animation: wordIn 1s var(--ease) 1.7s both; }
+  @keyframes wordIn { from { opacity: 0; clip-path: inset(0 100% 0 0); transform: translateX(-30px); } to { opacity: 1; clip-path: inset(0 0 0 0); transform: none; } }
+  .s1-tag { margin-top: 38px; font-size: 34px; font-weight: 600; color: var(--cream); letter-spacing: -0.5px; }
+  .s1-tag b { color: var(--lime); font-weight: 700; }
+
+  /* 장면 2: 메시지 */
+  #s2 { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+  .big { font-size: 84px; font-weight: 800; letter-spacing: -2.5px; line-height: 1.15; color: var(--cream); }
+  .big .hl { color: var(--lime); }
+  .word { display: inline-block; }
+  .chips { display: flex; gap: 22px; margin-top: 64px; }
+  .chip { display: flex; align-items: center; gap: 14px; padding: 20px 30px; border-radius: 20px; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(212, 239, 174, 0.22); color: var(--cream); font-size: 26px; font-weight: 600; backdrop-filter: blur(8px); }
+  .chip svg { color: var(--lime); }
+
+  /* 왼쪽 캡션 */
+  .cap { position: absolute; left: 110px; top: 50%; width: 460px; transform: translateY(-50%); color: var(--cream); }
+  .eyebrow { display: inline-flex; align-items: center; gap: 10px; padding: 9px 16px; border-radius: 99px; background: rgba(212, 239, 174, 0.12); color: var(--lime); font-size: 19px; font-weight: 700; }
+  .cap h2 { margin-top: 26px; font-size: 62px; font-weight: 800; line-height: 1.16; letter-spacing: -2px; white-space: pre-line; }
+  .cap p { margin-top: 26px; font-size: 23px; line-height: 1.6; color: #b9cbc1; }
+  .caption { opacity: 0; animation: fadeIn 0.4s ease var(--s) both, capOut 0.45s ease-in var(--e) forwards; }
+  @keyframes capOut { to { opacity: 0; transform: translateY(-50%) translateX(-30px); } }
+
+  /* 장면 3: 온보딩 */
+  .onb { position: absolute; left: 700px; top: 170px; width: 1060px; height: 740px; border-radius: 28px; background: var(--canvas); box-shadow: 0 50px 120px rgba(0, 0, 0, 0.5); overflow: hidden; display: flex; }
+  .onb-side { width: 330px; background: var(--brand); padding: 44px 36px; color: #c7d6ce; display: flex; flex-direction: column; }
+  .onb-side img { width: 110px; }
+  .onb-side h3 { margin-top: 64px; color: var(--cream); font-size: 30px; line-height: 1.3; font-weight: 750; }
+  .onb-side p { margin-top: 14px; font-size: 16px; line-height: 1.6; color: #9fb6aa; }
+  .onb-pct { margin-top: auto; font-family: Bahnschrift, sans-serif; font-size: 72px; color: var(--lime); font-weight: 600; }
+  .onb-bar { height: 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.1); overflow: hidden; margin-top: 10px; }
+  .onb-bar i { display: block; height: 100%; width: 0; background: var(--lime); border-radius: 8px; }
+  .onb-main { flex: 1; padding: 46px 48px; display: flex; flex-direction: column; gap: 14px; }
+  .step { display: flex; align-items: center; gap: 20px; padding: 20px 24px; border-radius: 18px; background: #fff; border: 1px solid var(--line); transition: none; }
+  .step .ico { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: #eef1ea; color: var(--muted); font-weight: 700; font-size: 18px; font-family: Bahnschrift, sans-serif; flex: none; }
+  .step .t { font-size: 21px; font-weight: 650; color: var(--ink); }
+  .step .d { font-size: 16px; color: var(--muted); margin-top: 5px; }
+  .step.active { border-color: #9cc7a8; box-shadow: 0 10px 30px rgba(22, 61, 53, 0.1); }
+  .step.active .ico { background: #e4f2df; color: var(--accent); }
+  .step.done .ico { background: var(--brand); color: var(--lime); }
+  .spinner { width: 22px; height: 22px; border-radius: 50%; border: 3px solid currentColor; border-right-color: transparent; animation: spin 0.8s linear infinite; }
+  .onb-ok { display: flex; align-items: center; gap: 14px; margin-top: auto; padding: 20px 24px; border-radius: 18px; background: var(--brand); color: var(--cream); font-size: 21px; font-weight: 650; }
+  .onb-ok svg { color: var(--lime); }
+
+  /* 앱 창 */
+  #win { position: absolute; left: 610px; top: 120px; width: 1220px; height: 840px; border-radius: 18px; overflow: hidden; background: var(--canvas); box-shadow: 0 60px 140px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.06); opacity: 0;
+    animation: winIn 1.3s var(--ease) 15s both, winBack 1s var(--ease) 40.3s forwards, fadeOut 0.6s ease 45.8s forwards; transform-origin: 50% 50%; }
+  @keyframes winIn { from { opacity: 0; transform: perspective(2200px) translateY(260px) rotateX(24deg) rotateY(-16deg) scale(0.86); } to { opacity: 1; transform: perspective(2200px); } }
+  @keyframes winBack { from { opacity: 1; transform: perspective(2200px); filter: none; } to { opacity: 0.5; transform: perspective(2200px) translate(150px, -70px) scale(0.74) rotateY(-10deg); filter: blur(2px); } }
+  .titlebar { height: 38px; background: var(--brand); display: flex; align-items: center; padding-left: 16px; color: #9fb6aa; font-size: 13px; gap: 10px; }
+  .titlebar .ctl { margin-left: auto; display: flex; height: 100%; }
+  .titlebar .ctl span { width: 46px; display: grid; place-items: center; }
+  .wbody { display: flex; height: calc(100% - 38px); }
+  .side { width: 210px; background: var(--brand); padding: 18px 14px; display: flex; flex-direction: column; color: #c7d6ce; position: relative; }
+  .side .logo { width: 92px; margin: 6px auto 26px; }
+  .eng { border-radius: 10px; background: rgba(255, 255, 255, 0.06); padding: 10px 12px; margin-bottom: 18px; font-size: 13px; display: flex; align-items: center; gap: 9px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #6ccf8e; box-shadow: 0 0 0 3px rgba(108, 207, 142, 0.2); flex: none; }
+  .nav { position: relative; display: flex; flex-direction: column; gap: 4px; }
+  .nav a, .nav2 a { position: relative; z-index: 1; display: flex; align-items: center; gap: 11px; height: 40px; padding: 0 12px; border-radius: 9px; font-size: 14px; color: #c7d6ce; text-decoration: none; }
+  .nav a.on { color: var(--brand); font-weight: 650; }
+  .navhl { position: absolute; left: 0; right: 0; height: 40px; border-radius: 9px; background: var(--lime); top: 0; }
+  .nav2 { margin-top: auto; border-top: 1px solid rgba(255, 255, 255, 0.09); padding-top: 12px; display: flex; flex-direction: column; gap: 2px; }
+  .nav2 a { height: 36px; font-size: 13px; }
+  .main { flex: 1; position: relative; overflow: hidden; }
+  .page { position: absolute; inset: 0; display: flex; flex-direction: column; opacity: 0; animation: fadeIn 0.45s ease var(--s) both, fadeOut 0.35s ease var(--e) forwards; }
+  .phead { height: 62px; min-height: 62px; border-bottom: 1px solid var(--line); background: #fbfcf8; display: flex; align-items: center; padding: 0 22px; gap: 12px; }
+  .phead h1 { font-size: 18px; font-weight: 650; }
+  .phead .acts { margin-left: auto; display: flex; gap: 6px; }
+  .ibtn { width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center; color: #5c6d64; }
+  .ibtn.pri { background: var(--brand); color: var(--lime); }
+  .pbody { flex: 1; padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; min-height: 0; position: relative; }
+  .tool { display: flex; gap: 10px; align-items: center; }
+  .search { width: 260px; height: 36px; border-radius: 9px; border: 1px solid var(--line); background: #fff; display: flex; align-items: center; gap: 8px; padding: 0 12px; color: #9aa69f; font-size: 13px; }
+  .seg { display: flex; background: #eaeee6; border-radius: 9px; padding: 3px; font-size: 13px; }
+  .seg span { padding: 6px 12px; border-radius: 7px; color: var(--muted); }
+  .seg span.on { background: #fff; color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06); }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 14px; }
+  .tbl { overflow: hidden; }
+  .tr { display: grid; grid-template-columns: 1.7fr 1.35fr 1fr 1.35fr 0.6fr 84px; align-items: center; height: 50px; padding: 0 18px; border-bottom: 1px solid #eef1eb; font-size: 13.5px; }
+  .tr.h { height: 40px; font-size: 12.5px; color: var(--muted); background: #fafbf7; font-weight: 600; }
+  .tr.grp { background: #f6f9f1; font-weight: 650; }
+  .tr .nm { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+  .tr.sub .nm { padding-left: 26px; font-weight: 500; }
+  .tr .img { color: #5c6d64; }
+  .tr .acts { display: flex; gap: 4px; justify-content: flex-end; color: #6b7b72; }
+  .tr .acts span { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 7px; }
+  .tr.hover { background: #f1f6ea; }
+  .badge { font-size: 11.5px; font-weight: 650; padding: 3px 8px; border-radius: 6px; background: #e4ecf9; color: #3d5f96; }
+  .st { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; padding: 4px 10px 4px 9px; border-radius: 99px; width: fit-content; }
+  .st.run { background: #e4f2df; color: var(--accent); }
+  .st.run::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #3f9b6b; }
+  .st.off { background: #eef0ec; color: #87918b; }
+  .st.off::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #b3bbb6; }
+  .st.wait { background: #fbf2dc; color: #94702a; }
+  .st .spinner { width: 11px; height: 11px; border-width: 2px; }
+  .port { font-family: 'Cascadia Code', Consolas, monospace; font-size: 12px; color: var(--accent); }
+  .stats { display: flex; gap: 10px; }
+  .stat { flex: 1; padding: 14px 16px; }
+  .stat .k { font-size: 12.5px; color: var(--muted); }
+  .stat .v { font-family: Bahnschrift, sans-serif; font-size: 28px; font-weight: 600; margin-top: 4px; color: var(--ink); }
+  .stat .v small { font-size: 15px; color: var(--muted); margin-left: 3px; }
+  .toast { position: absolute; right: 22px; bottom: 22px; display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-radius: 12px; background: var(--brand); color: var(--cream); font-size: 14px; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25); animation: toastIn 0.6s var(--spring) var(--d) both, fadeOut 0.4s ease var(--e) forwards; }
+  .toast svg { color: var(--lime); }
+  @keyframes toastIn { from { opacity: 0; transform: translateY(30px) scale(0.9); } to { opacity: 1; transform: none; } }
+
+  /* 상세 */
+  .crumb { display: flex; align-items: center; gap: 8px; font-size: 18px; }
+  .crumb .m { color: var(--muted); }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+  .tabs span { padding: 10px 14px; font-size: 13.5px; color: var(--muted); display: flex; gap: 7px; align-items: center; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tabs span.on { color: var(--ink); font-weight: 650; border-color: var(--brand); }
+  .console { background: var(--console); border-radius: 14px; color: #cfe0d6; font-size: 12.5px; line-height: 1.85; padding: 14px 16px; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; }
+  .console .ln { white-space: nowrap; overflow: hidden; }
+  .c-dim { color: #6f8d80; } .c-ok { color: var(--lime); } .c-warn { color: #f0c47a; } .c-key { color: #9fd3b4; } .c-str { color: #f3f1e4; } .c-cmd { color: #fff; }
+  .rcard { padding: 14px 16px; }
+  .rcard .top { display: flex; align-items: baseline; justify-content: space-between; }
+  .rcard .k { font-size: 12.5px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  .rcard .v { font-family: Bahnschrift, sans-serif; font-size: 26px; font-weight: 600; }
+  .rcard svg.ch { display: block; width: 100%; height: 70px; margin-top: 8px; }
+
+  /* 이미지 */
+  .pull { padding: 16px 18px; display: flex; flex-direction: column; gap: 9px; }
+  .pull .hd { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 14.5px; }
+  .layer { display: grid; grid-template-columns: 110px 1fr 160px; gap: 12px; align-items: center; font-size: 12px; color: var(--muted); }
+  .bar { height: 7px; border-radius: 7px; background: #edf0ea; overflow: hidden; }
+  .bar i { display: block; height: 100%; border-radius: 7px; background: var(--accent); width: 0; }
+  .tr.img6 { grid-template-columns: 1.6fr 0.9fr 0.8fr 0.9fr; }
+  .vul { padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+  .vrow { display: grid; grid-template-columns: 74px 1fr 34px; align-items: center; gap: 10px; font-size: 13px; }
+  .vrow b { font-family: Bahnschrift, sans-serif; font-size: 18px; text-align: right; }
+
+  /* Kubernetes */
+  .yaml { font-size: 13px; line-height: 1.7; justify-content: flex-start; white-space: pre; }
+  .caret { display: inline-block; width: 8px; height: 16px; background: var(--lime); vertical-align: -3px; margin-left: 1px; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 16px; border-radius: 9px; background: var(--brand); color: var(--lime); font-size: 13.5px; font-weight: 650; }
+  .tr.pod { grid-template-columns: 2.3fr 1fr 1.25fr 0.45fr 0.5fr; white-space: nowrap; }
+  .fwd { display: flex; align-items: center; gap: 12px; padding: 14px 16px; font-size: 13.5px; }
+  .fwd .arrow { color: var(--accent); }
+
+  /* 터미널 */
+  #term { position: absolute; left: 640px; top: 250px; width: 1080px; height: 640px; border-radius: 14px; background: #0c1512; box-shadow: 0 60px 140px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08); overflow: hidden; opacity: 0;
+    animation: termIn 1s var(--ease) 40.6s both, fadeOut 0.6s ease 45.8s forwards; }
+  @keyframes termIn { from { opacity: 0; transform: translateX(240px) scale(0.94); } to { opacity: 1; transform: none; } }
+  .ttabs { height: 42px; background: #17221e; display: flex; align-items: flex-end; padding-left: 10px; gap: 6px; }
+  .ttab { height: 34px; padding: 0 16px; border-radius: 8px 8px 0 0; background: #0c1512; color: #d6e2db; display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .tbody { padding: 18px 22px; font-size: 17px; line-height: 1.6; color: #d6e2db; white-space: pre; }
+  .tbody .ps { color: #6fb6ff; }
+
+  /* 기능 그리드 */
+  #s9 { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  #s9 h2 { font-size: 60px; font-weight: 800; letter-spacing: -2px; color: var(--cream); }
+  #s9 h2 .hl { color: var(--lime); }
+  .fgrid { display: grid; grid-template-columns: repeat(5, 300px); gap: 20px; margin-top: 60px; }
+  .ftile { padding: 26px 24px; border-radius: 20px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(212, 239, 174, 0.16); color: var(--cream); }
+  .ftile .fi { width: 52px; height: 52px; border-radius: 14px; background: rgba(212, 239, 174, 0.12); color: var(--lime); display: grid; place-items: center; }
+  .ftile b { display: block; margin-top: 18px; font-size: 22px; font-weight: 700; }
+  .ftile span { display: block; margin-top: 8px; font-size: 15.5px; color: #a9bfb4; line-height: 1.5; }
+
+  /* 아웃트로 */
+  #s10 { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+  #s10 .ow { width: 460px; animation: wordIn 1.1s var(--ease) var(--d) both; }
+  #s10 .ot { margin-top: 40px; font-size: 36px; font-weight: 650; color: var(--cream); letter-spacing: -0.5px; }
+  #s10 .url { margin-top: 46px; display: inline-flex; align-items: center; gap: 14px; padding: 18px 30px; border-radius: 16px; background: var(--lime); color: var(--brand); font-size: 26px; font-weight: 700; }
+  #s10 .meta { margin-top: 30px; display: flex; gap: 14px; color: #a9bfb4; font-size: 19px; }
+  #s10 .meta span { padding: 8px 16px; border-radius: 99px; border: 1px solid rgba(212, 239, 174, 0.2); }
+
+  /* 커서 */
+  #cursor { position: absolute; left: 0; top: 0; width: 30px; height: 30px; z-index: 50; pointer-events: none; opacity: 0; filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.35)); }
+  #ripple { position: absolute; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 50%; border: 3px solid var(--lime); z-index: 49; opacity: 0; pointer-events: none; }
+
+  /* 진행 표시 */
+  #hud { position: fixed; left: 12px; bottom: 10px; color: #7d978a; font: 12px Consolas, monospace; z-index: 99; }
+  body.render #hud { display: none; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="grid"></div>
+  <div class="glow a"></div>
+  <div class="glow b"></div>
+
+  <!-- 장면 1: 인트로 -->
+  <section id="s1" class="scene" style="--s: 0s; --e: 4.6s">
+    <div class="mark-wrap">
+      <div class="mark-box"><div class="mark-ring" style="--d: 0.9s"></div><img src="assets/naru-mark.png" alt="" /></div>
+    </div>
+    <img class="s1-word" src="assets/naru-wordmark.png" alt="Naru" />
+    <div class="s1-tag u" style="--d: 2.4s">Windows를 위한 <b>컨테이너</b>와 <b>Kubernetes</b> 데스크톱</div>
+  </section>
+
+  <!-- 장면 2: 메시지 -->
+  <section id="s2" class="scene" style="--s: 5s; --e: 9.2s">
+    <div class="big">
+      <span class="word u" style="--d: 5.2s">Windows에서</span>
+      <span class="word u" style="--d: 5.4s">컨테이너 개발,</span><br />
+      <span class="word u hl" style="--d: 5.8s">Naru 하나로</span>
+      <span class="word u" style="--d: 6s">충분해요</span>
+    </div>
+    <div class="chips">
+      <div class="chip pop" style="--d: 6.8s" data-ic="monitor">WSL 2 전용 배포판</div>
+      <div class="chip pop" style="--d: 7.05s" data-ic="box">Moby 또는 containerd</div>
+      <div class="chip pop" style="--d: 7.3s" data-ic="ship-wheel">k3s Kubernetes</div>
+      <div class="chip pop" style="--d: 7.55s" data-ic="terminal">Windows CLI 연동</div>
+    </div>
+  </section>
+
+  <!-- 장면 3: 온보딩 -->
+  <section id="s3" class="scene" style="--s: 9.6s; --e: 14.9s">
+    <div class="cap">
+      <div class="eyebrow u" style="--d: 9.8s" data-ic="sparkles">간편한 설치</div>
+      <h2 class="u" style="--d: 9.95s">설치 파일 하나로
+바로 시작</h2>
+      <p class="u" style="--d: 10.15s">관리자 권한 없이 설치하고, 대화형 온보딩이 환경 점검부터 엔진 시작까지 차례로 안내해요.</p>
+    </div>
+    <div class="onb u" style="--d: 10s">
+      <div class="onb-side">
+        <img src="assets/naru-wordmark.png" alt="" />
+        <h3>Naru를 시작할<br />준비를 하고 있어요</h3>
+        <p>공식 배포물을 내려받아 검증한 뒤 엔진을 설치합니다.</p>
+        <div class="onb-pct" id="onbPct">0%</div>
+        <div class="onb-bar"><i id="onbBar"></i></div>
+      </div>
+      <div class="onb-main" id="onbSteps"></div>
+    </div>
+  </section>
+
+  <!-- 장면 4~7 캡션 -->
+  <div class="cap caption" style="--s: 15.5s; --e: 22.7s">
+    <div class="eyebrow u" style="--d: 15.6s" data-ic="container">컨테이너와 Compose</div>
+    <h2 class="u" style="--d: 15.75s">한눈에 보고
+한 번에 실행</h2>
+    <p class="u" style="--d: 15.95s">Compose 프로젝트를 서비스별로 묶어 보여 주고, 시작과 정지, 재시작을 바로 실행해요.</p>
+  </div>
+  <div class="cap caption" style="--s: 23.1s; --e: 28.7s">
+    <div class="eyebrow u" style="--d: 23.1s" data-ic="activity">로그와 리소스</div>
+    <h2 class="u" style="--d: 23.25s">컨테이너 속을
+실시간으로</h2>
+    <p class="u" style="--d: 23.45s">로그 스트림과 CPU, 메모리 사용량에 파일 탐색과 터미널까지 상세 화면 하나로 확인합니다.</p>
+  </div>
+  <div class="cap caption" style="--s: 29.1s; --e: 34.1s">
+    <div class="eyebrow u" style="--d: 29.1s" data-ic="layers">이미지</div>
+    <h2 class="u" style="--d: 29.25s">가져오기부터
+취약점 분석까지</h2>
+    <p class="u" style="--d: 29.45s">레이어별 진행 상황을 보면서 빌드와 태그, 업로드, 취약점 분석을 같은 화면에서 처리해요.</p>
+  </div>
+  <div class="cap caption" style="--s: 34.5s; --e: 40.1s">
+    <div class="eyebrow u" style="--d: 34.5s" data-ic="ship-wheel">Kubernetes</div>
+    <h2 class="u" style="--d: 34.65s">로컬 k3s를
+클릭 몇 번으로</h2>
+    <p class="u" style="--d: 34.85s">YAML 적용과 Pod 상태 확인, 포트 전달까지 Kubernetes 개발 흐름을 그대로 담았습니다.</p>
+  </div>
+  <div class="cap caption" style="--s: 40.6s; --e: 45.7s">
+    <div class="eyebrow u" style="--d: 40.6s" data-ic="terminal">Windows CLI</div>
+    <h2 class="u" style="--d: 40.75s">터미널에서도
+같은 환경 그대로</h2>
+    <p class="u" style="--d: 40.95s">docker, kubectl, helm이 Naru 엔진에 바로 연결돼요. 창을 닫아도 트레이에서 계속 실행됩니다.</p>
+  </div>
+
+  <!-- 앱 창 -->
+  <div id="win">
+    <div class="titlebar"><img src="assets/naru-mark.png" style="width: 14px" alt="" /> Naru
+      <div class="ctl"><span>&#x2013;</span><span>&#x25A1;</span><span>&#x2715;</span></div>
+    </div>
+    <div class="wbody">
+      <aside class="side">
+        <img class="logo" src="assets/naru-wordmark.png" alt="" />
+        <div class="eng"><span class="dot"></span><span>Moby</span><span style="margin-left: auto; color: #8fae9f; font-size: 12px">실행 중</span></div>
+        <nav class="nav" id="nav"><div class="navhl" id="navhl"></div></nav>
+        <div class="nav2" id="nav2"></div>
+      </aside>
+      <div class="main">
+        <!-- 컨테이너 -->
+        <div class="page" style="--s: 15s; --e: 22.9s">
+          <div class="phead"><h1>컨테이너</h1>
+            <div class="acts"><span class="ibtn" data-ic="search"></span><span class="ibtn" data-ic="rotate-cw"></span><span class="ibtn pri" data-ic="play"></span></div>
+          </div>
+          <div class="pbody">
+            <div class="stats">
+              <div class="card stat u" style="--d: 15.9s"><div class="k">실행 중</div><div class="v"><span id="runCnt">4</span><small>/ 6</small></div></div>
+              <div class="card stat u" style="--d: 16s"><div class="k">Compose 프로젝트</div><div class="v">1</div></div>
+              <div class="card stat u" style="--d: 16.1s"><div class="k">CPU 사용량</div><div class="v"><span id="cpuAll">4.2</span><small>%</small></div></div>
+              <div class="card stat u" style="--d: 16.2s"><div class="k">메모리</div><div class="v"><span id="memAll">612</span><small>MB</small></div></div>
+            </div>
+            <div class="tool u" style="--d: 16.3s">
+              <div class="search"><svg class="i" width="15" height="15" viewBox="0 0 24 24" data-ici="search"></svg>이름으로 검색</div>
+              <div class="seg"><span class="on">전체 6</span><span id="segRun">실행 중 4</span><span id="segOff">정지 2</span></div>
+            </div>
+            <div class="card tbl" id="ctbl"></div>
+            <div class="toast" style="--d: 20.5s; --e: 22.4s"><span data-ic="circle-check"></span>dev-ubuntu 컨테이너를 시작했어요</div>
+          </div>
+        </div>
+        <!-- 컨테이너 상세 -->
+        <div class="page" style="--s: 23s; --e: 28.9s">
+          <div class="phead"><div class="crumb"><span class="m">컨테이너</span><svg class="i m" width="18" height="18" viewBox="0 0 24 24" data-ici="chevron-right"></svg><span>shop-web-1</span></div>
+            <span class="st run" style="margin-left: 10px">실행 중</span>
+            <div class="acts"><span class="ibtn" data-ic="square"></span><span class="ibtn" data-ic="rotate-cw"></span><span class="ibtn" data-ic="terminal"></span></div>
+          </div>
+          <div class="pbody">
+            <div class="tabs"><span class="on" data-ic="file-code">로그</span><span data-ic="activity">리소스</span><span data-ic="hard-drive">파일</span><span data-ic="terminal">터미널</span><span data-ic="settings-2">구성</span></div>
+            <div style="display: flex; gap: 14px; flex: 1; min-height: 0">
+              <div class="console mono u" style="flex: 1.45; --d: 23.4s" id="logs"></div>
+              <div style="flex: 1; display: flex; flex-direction: column; gap: 12px">
+                <div class="card rcard u" style="--d: 23.6s"><div class="top"><span class="k" data-ic="cpu">CPU</span><span class="v"><span id="vCpu">0.0</span>%</span></div><svg class="ch" viewBox="0 0 300 70" preserveAspectRatio="none" id="chCpu"></svg></div>
+                <div class="card rcard u" style="--d: 23.75s"><div class="top"><span class="k" data-ic="memory-stick">메모리</span><span class="v"><span id="vMem">0</span> MB</span></div><svg class="ch" viewBox="0 0 300 70" preserveAspectRatio="none" id="chMem"></svg></div>
+                <div class="card rcard u" style="--d: 23.9s"><div class="top"><span class="k" data-ic="arrow-right-left">네트워크</span><span class="v"><span id="vNet">0</span> KB/s</span></div><svg class="ch" viewBox="0 0 300 70" preserveAspectRatio="none" id="chNet"></svg></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- 이미지 -->
+        <div class="page" style="--s: 29s; --e: 34.3s">
+          <div class="phead"><h1>이미지</h1>
+            <div class="acts"><span class="ibtn" data-ic="search"></span><span class="ibtn" data-ic="package"></span><span class="ibtn pri" data-ic="download"></span></div>
+          </div>
+          <div class="pbody">
+            <div class="card pull u" style="--d: 29.3s" id="pull"></div>
+            <div style="display: flex; gap: 14px; flex: 1; min-height: 0">
+              <div class="card tbl u" style="flex: 1.55; --d: 29.5s" id="itbl"></div>
+              <div class="card vul u" style="flex: 1; --d: 29.7s">
+                <div style="display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 14.5px"><span style="color: var(--accent)" data-ic="shield-check"></span>취약점 분석</div>
+                <div style="font-size: 12.5px; color: var(--muted)" class="mono">node:22-slim</div>
+                <div id="vul" style="display: flex; flex-direction: column; gap: 12px; margin-top: 6px"></div>
+                <div style="margin-top: auto; padding: 12px 14px; border-radius: 10px; background: #f3f7ee; font-size: 12.5px; color: var(--accent)" class="u" data-d="31.6">수정 버전이 있는 항목 <b id="fixable">0</b>건</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Kubernetes -->
+        <div class="page" style="--s: 34.4s; --e: 99s">
+          <div class="phead"><h1>Kubernetes</h1><span class="st run" style="margin-left: 6px">k3s v1.33 실행 중</span>
+            <div class="acts"><span class="ibtn" data-ic="search"></span><span class="ibtn" data-ic="rotate-cw"></span></div>
+          </div>
+          <div class="pbody">
+            <div style="display: flex; gap: 14px; flex: 1; min-height: 0">
+              <div style="flex: 1; display: flex; flex-direction: column; gap: 10px">
+                <div style="display: flex; align-items: center; gap: 10px"><span class="mono" style="font-size: 13px; color: var(--muted)">web-deployment.yaml</span><span class="btn" id="applyBtn" style="margin-left: auto"><svg class="i" width="16" height="16" viewBox="0 0 24 24" data-ici="play"></svg>YAML 적용</span></div>
+                <div class="console yaml mono" style="flex: 1" id="yaml"></div>
+              </div>
+              <div style="flex: 1.25; display: flex; flex-direction: column; gap: 12px">
+                <div class="tabs"><span class="on" data-ic="box">Pod</span><span data-ic="network">서비스</span><span data-ic="arrow-right-left">포트 전달</span><span data-ic="file-code">로그</span></div>
+                <div class="card tbl" id="ptbl"></div>
+                <div class="card fwd" id="fwd" style="opacity: 0"><span data-ic="arrow-right-left" style="color: var(--accent)"></span><span class="mono">localhost:8080</span><span class="arrow">&#x2192;</span><span class="mono">svc/web:80</span><span class="st run" style="margin-left: auto">연결됨</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 터미널 -->
+  <div id="term">
+    <div class="ttabs"><div class="ttab"><svg class="i" width="14" height="14" viewBox="0 0 24 24" data-ici="terminal"></svg>Windows PowerShell</div></div>
+    <div class="tbody mono" id="tbody"></div>
+  </div>
+
+  <!-- 장면 9: 기능 그리드 -->
+  <section id="s9" class="scene" style="--s: 46s; --e: 50.4s">
+    <h2 class="u" style="--d: 46.1s">컨테이너 개발에 필요한 <span class="hl">모든 것</span></h2>
+    <div class="fgrid" id="fgrid"></div>
+  </section>
+
+  <!-- 장면 10: 아웃트로 -->
+  <section id="s10" class="scene" style="--s: 50.6s; --e: 99s">
+    <img class="ow" src="assets/naru-wordmark.png" alt="Naru" style="--d: 50.8s" />
+    <div class="ot u" style="--d: 51.6s">Windows를 위한 컨테이너와 Kubernetes 데스크톱</div>
+    <div class="url pop" style="--d: 52.3s"><svg class="i" width="28" height="28" viewBox="0 0 24 24" data-ici="github"></svg>github.com/cloim/Naru</div>
+    <div class="meta">
+      <span class="fade" style="--d: 53s">Windows 10 2004 이상</span>
+      <span class="fade" style="--d: 53.15s">x64</span>
+      <span class="fade" style="--d: 53.3s">관리자 권한 없이 설치</span>
+    </div>
+  </section>
+
+  <div id="ripple"></div>
+  <svg id="cursor" viewBox="0 0 24 24"><path d="M4 2.5 L4 19.5 L8.6 15.4 L11.7 22 L14.6 20.7 L11.6 14.3 L17.8 14.3 Z" fill="#fff" stroke="#10241d" stroke-width="1.4" stroke-linejoin="round" /></svg>
+</div>
+<div id="hud"></div>
+
+<script>
+const DURATION = 56;
+const $ = (s) => document.querySelector(s);
+const svg = (name, size = 18) => `<svg class="i" width="${size}" height="${size}" viewBox="0 0 24 24">${ICONS[name] || ''}</svg>`;
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const prog = (t, a, b) => clamp((t - a) / (b - a));
+const easeOut = (p) => 1 - Math.pow(1 - p, 3);
+const easeInOut = (p) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2);
+// 시드 고정 난수: 프레임마다 같은 화면이 나오도록 한다.
+const rand = (n) => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+
+// 아이콘 주입
+document.querySelectorAll('[data-ic]').forEach((el) => el.insertAdjacentHTML('afterbegin', svg(el.dataset.ic, el.classList.contains('chip') ? 30 : el.classList.contains('eyebrow') ? 20 : 17)));
+document.querySelectorAll('[data-ici]').forEach((el) => (el.innerHTML = ICONS[el.dataset.ici] || ''));
+document.querySelectorAll('[data-d]').forEach((el) => el.style.setProperty('--d', el.dataset.d + 's'));
+
+// 사이드바
+const navItems = [['container', '컨테이너'], ['layers', '이미지'], ['hard-drive', '볼륨'], ['network', '네트워크'], ['ship-wheel', 'Kubernetes'], ['camera', '스냅샷'], ['puzzle', '확장']];
+$('#nav').insertAdjacentHTML('beforeend', navItems.map(([ic, l], i) => `<a data-i="${i}">${svg(ic, 18)}${l}</a>`).join(''));
+$('#nav2').innerHTML = [['plug-zap', '엔진 연결'], ['history', '작업 기록'], ['activity', '진단'], ['settings-2', '설정']].map(([ic, l]) => `<a>${svg(ic, 16)}${l}</a>`).join('');
+
+// 온보딩 단계
+const steps = [
+  ['화면 언어 선택', '한국어'],
+  ['환경 점검', 'WSL 2, 하드웨어 가상화, 디스크 여유 128GB'],
+  ['데이터 위치', 'D:\\Naru'],
+  ['구성 선택', 'Moby 엔진, Kubernetes, Windows CLI'],
+  ['엔진 설치와 시작', '공식 배포물 다운로드와 검증'],
+];
+const STEP0 = 10.7, STEPLEN = 0.68;
+$('#onbSteps').innerHTML = steps.map(([t, d], i) => `<div class="step u" style="--d:${10.25 + i * 0.08}s"><div class="ico">${i + 1}</div><div><div class="t">${t}</div><div class="d">${d}</div></div></div>`).join('') +
+  `<div class="onb-ok pop" style="--d:${STEP0 + steps.length * STEPLEN + 0.15}s">${svg('circle-check', 26)}엔진이 준비됐어요. 이제 시작해 볼까요?</div>`;
+
+// 컨테이너 목록
+const ctr = [
+  { g: 'shop', n: 'shop', badge: 'Compose', cnt: '4개 서비스' },
+  { n: 'shop-web-1', img: 'nginx:1.27-alpine', st: 'run', port: '8080 → 80', cpu: '0.4%', sub: 1, id: 'web' },
+  { n: 'shop-api-1', img: 'node:22-slim', st: 'run', port: '3000 → 3000', cpu: '2.1%', sub: 1 },
+  { n: 'shop-db-1', img: 'postgres:17', st: 'run', port: '5432', cpu: '1.3%', sub: 1 },
+  { n: 'shop-cache-1', img: 'redis:7.4', st: 'run', port: '6379', cpu: '0.2%', sub: 1 },
+  { n: 'dev-ubuntu', img: 'ubuntu:24.04', st: 'off', port: '', cpu: '', id: 'dev' },
+  { n: 'mysql-legacy', img: 'mysql:8.4', st: 'off', port: '3306', cpu: '' },
+];
+const stLabel = { run: '실행 중', off: '정지됨' };
+$('#ctbl').innerHTML = `<div class="tr h"><span>이름</span><span>이미지</span><span>상태</span><span>포트</span><span>CPU</span><span></span></div>` +
+  ctr.map((c, i) => c.g
+    ? `<div class="tr grp u" style="--d:${16.45 + i * 0.07}s"><span class="nm">${svg('package', 16)}${c.n}<span class="badge">${c.badge}</span></span><span class="img">${c.cnt}</span><span class="st run">모두 실행 중</span><span></span><span></span><span class="acts"><span>${svg('square', 15)}</span><span>${svg('rotate-cw', 15)}</span></span></div>`
+    : `<div class="tr ${c.sub ? 'sub' : ''} u" ${c.id ? `id="row-${c.id}"` : ''} style="--d:${16.45 + i * 0.07}s"><span class="nm">${svg('box', 16)}${c.n}</span><span class="img mono" style="font-size:12.5px">${c.img}</span><span class="stc"><span class="st ${c.st}">${stLabel[c.st]}</span></span><span class="port">${c.port}</span><span class="cpuc">${c.cpu}</span><span class="acts"><span class="pbtn">${svg(c.st === 'run' ? 'square' : 'play', 15)}</span><span>${svg('terminal', 15)}</span></span></div>`).join('');
+
+// 로그
+const paths = ['/api/products', '/api/cart', '/', '/static/app.js', '/api/products/42', '/healthz', '/api/orders', '/static/logo.svg', '/api/users/me', '/favicon.ico'];
+const logs = Array.from({ length: 60 }, (_, i) => {
+  const p = paths[Math.floor(rand(i) * paths.length)];
+  const code = p === '/favicon.ico' ? 404 : p.startsWith('/static') && rand(i + 9) > 0.5 ? 304 : 200;
+  const sec = String(2 + i).padStart(2, '0');
+  const m = rand(i + 3) > 0.7 ? 'POST' : 'GET';
+  const cls = code === 200 ? 'c-ok' : code === 304 ? 'c-dim' : 'c-warn';
+  return `<div class="ln"><span class="c-dim">09:41:${sec}</span> 172.18.0.${1 + Math.floor(rand(i + 5) * 6)} <span class="c-str">"${m} ${p} HTTP/1.1"</span> <span class="${cls}">${code}</span> <span class="c-dim">${Math.floor(200 + rand(i + 7) * 4000)}</span></div>`;
+});
+const logHead = `<div class="ln c-dim">/docker-entrypoint.sh: Configuration complete; ready for start up</div><div class="ln c-key">nginx: start worker processes</div>`;
+
+// 차트 데이터
+const series = (seed, base, amp) => Array.from({ length: 40 }, (_, i) => base + amp * (0.5 + 0.5 * Math.sin(i * 0.55 + seed)) * (0.6 + 0.4 * rand(seed * 10 + i)));
+const charts = { cpu: series(1, 6, 20), mem: series(4, 40, 10), net: series(7, 10, 40) };
+function chartSvg(data, p, color) {
+  const n = Math.max(2, Math.floor(data.length * p));
+  const max = Math.max(...data) * 1.15;
+  const pts = data.slice(0, n).map((v, i) => [(i / (data.length - 1)) * 300, 70 - (v / max) * 66]);
+  const line = pts.map((q, i) => (i ? 'L' : 'M') + q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join(' ');
+  const last = pts[pts.length - 1];
+  return `<path d="${line} L${last[0].toFixed(1)} 70 L0 70 Z" fill="${color}" fill-opacity=".12"/><path d="${line}" fill="none" stroke="${color}" stroke-width="2.2" vector-effect="non-scaling-stroke"/><circle cx="${last[0]}" cy="${last[1]}" r="3.5" fill="${color}"/>`;
+}
+
+// 이미지 화면
+const layers = [['8a1e25ce7c4f', 0.6, 31.6], ['b64f3e1d2a90', 0.9, 31.2], ['f1c3a7e9d018', 1.6, 32.4], ['2d9c4b8e6f71', 1.2, 32.0], ['c7e05a3b9d42', 0.4, 31.0]];
+const L0 = 29.6;
+const layerSize = [3.2, 28.4, 104.1, 12.7, 0.9];
+const images = [['nginx', '1.27-alpine', '48.3 MB', '2주 전'], ['node', '22-slim', '226 MB', '5일 전'], ['postgres', '17', '438 MB', '방금'], ['redis', '7.4', '117 MB', '3주 전'], ['ubuntu', '24.04', '78.1 MB', '1개월 전'], ['mysql', '8.4', '603 MB', '2개월 전']];
+$('#itbl').innerHTML = `<div class="tr h img6"><span>저장소</span><span>태그</span><span>크기</span><span>생성</span></div>` +
+  images.map(([r, tg, s, c], i) => `<div class="tr img6 u" style="--d:${29.75 + i * 0.07}s" ${r === 'postgres' ? 'id="pgRow"' : ''}><span class="nm">${svg('layers', 16)}${r}</span><span class="mono" style="font-size:12.5px">${tg}</span><span>${s}</span><span style="color:var(--muted)">${c}</span></div>`).join('');
+const vul = [['Critical', 0, '#ba5b57'], ['High', 2, '#d9844a'], ['Medium', 7, '#d8b14a'], ['Low', 15, '#8fb79b']];
+$('#vul').innerHTML = vul.map(([k, , c], i) => `<div class="vrow"><span style="display:flex;align-items:center;gap:8px"><i style="width:9px;height:9px;border-radius:3px;background:${c}"></i>${k}</span><div class="bar"><i id="vb${i}" style="background:${c}"></i></div><b id="vn${i}">0</b></div>`).join('');
+
+// Kubernetes
+const yaml = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+spec:
+  replicas: 3
+  selector:
+    matchLabels: { app: web }
+  template:
+    metadata:
+      labels: { app: web }
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80`;
+const hlYaml = (s) => s.split('\n').map((l) => l.replace(/^(\s*-?\s*)([\w]+):/, '$1<span class="c-key">$2</span>:')).join('\n');
+const pods = [
+  ['coredns-6799fbcd5-8kq2z', 'kube-system', 0, null],
+  ['traefik-5d45fc8cc9-tw4lm', 'kube-system', 0, null],
+  ['web-7f9c6d8b5-2xkqp', 'default', 1, 37.3],
+  ['web-7f9c6d8b5-9hd7c', 'default', 1, 37.7],
+  ['web-7f9c6d8b5-qz5nm', 'default', 1, 38.1],
+];
+$('#ptbl').innerHTML = `<div class="tr h pod"><span>이름</span><span>네임스페이스</span><span>상태</span><span>준비</span><span>재시작</span></div>` +
+  pods.map(([n, ns, isNew], i) => `<div class="tr pod" id="pod${i}" style="${isNew ? 'opacity:0' : ''}"><span class="nm mono" style="font-size:12.5px;font-weight:500">${n}</span><span style="color:var(--muted)">${ns}</span><span class="pst"></span><span class="prd">1/1</span><span>0</span></div>`).join('');
+
+// 터미널
+const term = [
+  { cmd: 'docker ps --format "table {{.Names}}\\t{{.Image}}\\t{{.Status}}"', t0: 41.3, t1: 42.3, out: 42.45,
+    o: `NAMES          IMAGE                STATUS
+shop-web-1     nginx:1.27-alpine    Up 6 minutes
+shop-api-1     node:22-slim         Up 6 minutes
+shop-db-1      postgres:17          Up 6 minutes (healthy)
+shop-cache-1   redis:7.4            Up 6 minutes
+dev-ubuntu     ubuntu:24.04         Up 2 minutes` },
+  { cmd: 'kubectl get pods', t0: 43.1, t1: 43.6, out: 43.75,
+    o: `NAME                  READY   STATUS    RESTARTS   AGE
+web-7f9c6d8b5-2xkqp   1/1     Running   0          48s
+web-7f9c6d8b5-9hd7c   1/1     Running   0          47s
+web-7f9c6d8b5-qz5nm   1/1     Running   0          47s` },
+];
+const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+
+// 기능 그리드
+const feats = [
+  ['container', '컨테이너', '생성, 로그, 파일, 터미널'], ['layers', '이미지', '빌드, 태그, 취약점 분석'], ['hard-drive', '볼륨', '파일 편집, 백업과 복원'],
+  ['network', '네트워크', 'Ping과 TCP 통신 진단'], ['ship-wheel', 'Kubernetes', 'k3s, YAML, 포트 전달'], ['camera', '스냅샷', 'WSL 배포판 백업과 복원'],
+  ['puzzle', '확장', 'OCI 이미지 기반 도구'], ['history', '작업 기록', '진행 상황과 상세 로그'], ['activity', '진단', 'WSL, 서버와 엔진 상태'], ['settings-2', '설정', '엔진, 프록시, CLI, 레지스트리'],
+];
+$('#fgrid').innerHTML = feats.map(([ic, b, s], i) => `<div class="ftile pop" style="--d:${46.5 + (i % 5) * 0.09 + Math.floor(i / 5) * 0.25}s"><div class="fi">${svg(ic, 26)}</div><b>${b}</b><span>${s}</span></div>`).join('');
+
+// 커서 동선: [시각, 대상 선택자 또는 좌표, 클릭 여부]
+const cursorKeys = [
+  [18.0, [1900, 1000]],
+  [19.2, '#row-dev .pbtn'],
+  [19.55, '#row-dev .pbtn', 1],
+  [20.9, '#row-dev .pbtn'],
+  [22.0, '#row-web .nm'],
+  [22.45, '#row-web .nm', 1],
+  [23.0, [1500, 1150]],
+  [34.6, [1700, 1100]],
+  [35.9, '#applyBtn'],
+  [36.25, '#applyBtn', 1],
+  [37.2, [1250, 1150]],
+];
+const stageEl = $('#stage');
+let scale = 1;
+function targetPos(k) {
+  if (Array.isArray(k)) return k;
+  const r = $(k).getBoundingClientRect(), s = stageEl.getBoundingClientRect();
+  return [(r.left - s.left + r.width / 2) / scale, (r.top - s.top + r.height / 2) / scale];
+}
+function cursorAt(t) {
+  if (t < cursorKeys[0][0] || t > cursorKeys[cursorKeys.length - 1][0]) return null;
+  let i = 0;
+  while (i < cursorKeys.length - 2 && t > cursorKeys[i + 1][0]) i++;
+  const [ta, a] = cursorKeys[i], [tb, b] = cursorKeys[i + 1];
+  const p = easeInOut(prog(t, ta, tb));
+  const pa = targetPos(a), pb = targetPos(b);
+  return [pa[0] + (pb[0] - pa[0]) * p, pa[1] + (pb[1] - pa[1]) * p];
+}
+
+// 시간 기반 동적 요소
+function dynamic(t) {
+  // 온보딩
+  const op = prog(t, STEP0, STEP0 + steps.length * STEPLEN);
+  $('#onbPct').textContent = Math.round(easeOut(op) * 100) + '%';
+  $('#onbBar').style.width = easeOut(op) * 100 + '%';
+  document.querySelectorAll('.step').forEach((el, i) => {
+    const a = STEP0 + i * STEPLEN, b = a + STEPLEN;
+    const state = t >= b ? 'done' : t >= a ? 'active' : '';
+    if (el.dataset.state !== state) {
+      el.dataset.state = state;
+      el.className = 'step u ' + state;
+      el.querySelector('.ico').innerHTML = state === 'done' ? svg('check', 22) : state === 'active' ? '<span class="spinner"></span>' : i + 1;
+    }
+  });
+
+  // 사이드바 하이라이트
+  const navIdx = t < 29 ? 0 : t < 34.4 ? 1 : 4;
+  const prevIdx = t < 29 ? 0 : t < 34.4 ? 0 : 1;
+  const sw = t < 29 ? 1 : t < 34.4 ? easeOut(prog(t, 29, 29.4)) : easeOut(prog(t, 34.4, 34.8));
+  $('#navhl').style.top = (prevIdx + (navIdx - prevIdx) * sw) * 44 + 'px';
+  document.querySelectorAll('#nav a').forEach((a) => a.classList.toggle('on', +a.dataset.i === navIdx));
+
+  // 컨테이너 시작
+  const dev = $('#row-dev');
+  const ds = t < 19.62 ? 'off' : t < 20.35 ? 'wait' : 'run';
+  if (dev.dataset.s !== ds) {
+    dev.dataset.s = ds;
+    dev.querySelector('.stc').innerHTML = ds === 'wait' ? '<span class="st wait"><span class="spinner"></span>시작 중</span>' : `<span class="st ${ds}">${stLabel[ds]}</span>`;
+    dev.querySelector('.pbtn').innerHTML = svg(ds === 'off' ? 'play' : 'square', 15);
+    dev.querySelector('.cpuc').textContent = ds === 'run' ? '0.1%' : '';
+  }
+  const running = ds === 'run';
+  $('#runCnt').textContent = running ? 5 : 4;
+  $('#segRun').textContent = `실행 중 ${running ? 5 : 4}`;
+  $('#segOff').textContent = `정지 ${running ? 1 : 2}`;
+  $('#cpuAll').textContent = (4.2 + 0.3 * Math.sin(t * 2.1) + (running ? 0.1 : 0)).toFixed(1);
+  $('#memAll').textContent = Math.round(612 + 6 * Math.sin(t * 1.3) + (running ? 9 : 0));
+  dev.classList.toggle('hover', t > 19.0 && t < 21.0);
+  $('#row-web').classList.toggle('hover', t > 21.8 && t < 23);
+
+  // 로그와 차트
+  const nLog = Math.floor(clamp((t - 23.5) * 6, 0, logs.length));
+  $('#logs').innerHTML = logHead + logs.slice(Math.max(0, nLog - 22), nLog).join('');
+  const cp = prog(t, 23.6, 28.6);
+  $('#chCpu').innerHTML = chartSvg(charts.cpu, cp, '#2f6955');
+  $('#chMem').innerHTML = chartSvg(charts.mem, cp, '#5b8fb0');
+  $('#chNet').innerHTML = chartSvg(charts.net, cp, '#c48a3a');
+  const ci = Math.max(1, Math.floor(40 * cp)) - 1;
+  $('#vCpu').textContent = (charts.cpu[ci] / 10).toFixed(1);
+  $('#vMem').textContent = Math.round(charts.mem[ci] * 1.2);
+  $('#vNet').textContent = Math.round(charts.net[ci] * 3.1);
+
+  // 이미지 가져오기
+  const done = layers.every(([, , end]) => t >= end);
+  $('#pull').innerHTML = `<div class="hd">${done ? `<span style="color:var(--accent)">${svg('circle-check', 18)}</span>postgres:17 가져오기 완료` : `<span class="spinner" style="width:16px;height:16px;border-width:2.5px;color:var(--accent);animation:none;transform:rotate(${t * 450}deg)"></span>postgres:17 가져오는 중`}<span style="margin-left:auto;font-size:12.5px;color:var(--muted);font-weight:500">5개 레이어</span></div>` +
+    layers.map(([id, , end], i) => {
+      const p = easeInOut(prog(t, L0 + i * 0.12, end));
+      const sz = layerSize[i];
+      return `<div class="layer"><span class="mono">${id}</span><div class="bar"><i style="width:${p * 100}%;${p >= 1 ? 'background:#6aa887' : ''}"></i></div><span class="mono" style="text-align:right">${p >= 1 ? 'Pull complete' : (sz * p).toFixed(1) + ' / ' + sz + ' MB'}</span></div>`;
+    }).join('');
+  const pg = $('#pgRow');
+  pg.style.background = t > 32.4 && t < 33.6 ? '#eef6e5' : '';
+  vul.forEach(([, n], i) => {
+    const p = easeOut(prog(t, 30.4 + i * 0.15, 31.6 + i * 0.15));
+    $('#vb' + i).style.width = (n / 15) * 100 * p + '%';
+    $('#vn' + i).textContent = Math.round(n * p);
+  });
+  $('#fixable').textContent = Math.round(9 * easeOut(prog(t, 31.6, 32.4)));
+
+  // YAML 입력과 적용
+  const nCh = Math.floor(yaml.length * prog(t, 34.9, 35.9));
+  $('#yaml').innerHTML = hlYaml(esc(yaml.slice(0, nCh))).split('\n').map((l) => `<div>${l || '&nbsp;'}</div>`).join('').replace(/<\/div>$/, (t % 1 < 0.55 || nCh < yaml.length) ? '<span class="caret"></span></div>' : '</div>');
+  const ab = $('#applyBtn');
+  ab.style.transform = t > 36.2 && t < 36.4 ? 'scale(.94)' : '';
+  ab.style.background = t > 36.25 ? '#2f6955' : '';
+  pods.forEach(([, , isNew, tr], i) => {
+    const row = $('#pod' + i);
+    if (isNew) {
+      const a = 36.5 + (i - 2) * 0.15;
+      const p = easeOut(prog(t, a, a + 0.5));
+      row.style.opacity = p;
+      row.style.transform = `translateY(${(1 - p) * 16}px)`;
+    }
+    const run = !isNew || t >= tr;
+    const s = run ? 'run' : 'wait';
+    if (row.dataset.s !== s) {
+      row.dataset.s = s;
+      row.querySelector('.pst').innerHTML = run ? '<span class="st run">Running</span>' : '<span class="st wait"><span class="spinner"></span>ContainerCreating</span>';
+      row.querySelector('.prd').textContent = run ? '1/1' : '0/1';
+    }
+  });
+  const fp = easeOut(prog(t, 38.6, 39.2));
+  $('#fwd').style.opacity = fp;
+  $('#fwd').style.transform = `translateY(${(1 - fp) * 20}px)`;
+
+  // 터미널
+  let html = '';
+  for (const c of term) {
+    if (t < c.t0 - 0.4) break;
+    const n = Math.floor(c.cmd.length * prog(t, c.t0, c.t1));
+    html += `<span class="ps">PS C:\\Users\\dev&gt;</span> <span class="c-cmd">${esc(c.cmd.slice(0, n))}</span>`;
+    if (t < c.out) { html += t % 0.9 < 0.5 || n < c.cmd.length ? '<span class="caret"></span>' : ''; break; }
+    html += '\n' + esc(c.o) + '\n\n';
+  }
+  if (t >= term[term.length - 1].out) html += `<span class="ps">PS C:\\Users\\dev&gt;</span> ${t % 0.9 < 0.5 ? '<span class="caret"></span>' : ''}`;
+  $('#tbody').innerHTML = html;
+
+  // 커서
+  const c = cursorAt(t);
+  const cur = $('#cursor'), rip = $('#ripple');
+  if (c) {
+    const vis = Math.min(prog(t, cursorKeys[0][0], cursorKeys[0][0] + 0.3), 1 - prog(t, 36.9, 37.2), t > 22.6 && t < 34.6 ? 0 : 1);
+    cur.style.opacity = vis;
+    let press = 0, rp = -1;
+    for (const k of cursorKeys) if (k[2]) { const d = t - k[0]; if (d >= -0.08 && d < 0.12) press = 1; if (d >= 0 && d < 0.5) rp = d / 0.5; }
+    cur.style.transform = `translate(${c[0] - 5}px, ${c[1] - 3}px) scale(${press ? 0.85 : 1})`;
+    rip.style.left = c[0] + 'px';
+    rip.style.top = c[1] + 'px';
+    rip.style.opacity = rp >= 0 ? (1 - rp) * vis : 0;
+    rip.style.transform = `scale(${0.4 + rp * 1.2})`;
+  } else { cur.style.opacity = 0; rip.style.opacity = 0; }
+}
+
+// 시간 이동: CSS 애니메이션과 동적 요소를 같은 시각으로 맞춘다.
+// 커서 좌표가 현재 시각의 배치를 읽도록 애니메이션을 먼저 맞추고, 새로 생긴 요소까지 한 번 더 맞춘다.
+function syncAnimations(t) {
+  for (const a of document.getAnimations()) { a.pause(); a.currentTime = t * 1000; }
+}
+function seek(t) {
+  syncAnimations(t);
+  dynamic(t);
+  syncAnimations(t);
+  $('#hud').textContent = t.toFixed(2) + 's / ' + DURATION + 's';
+}
+window.seek = seek;
+window.DURATION = DURATION;
+
+function fit() {
+  scale = Math.min(innerWidth / 1920, innerHeight / 1080);
+  stageEl.style.transform = `translate(${(innerWidth - 1920 * scale) / 2}px, ${(innerHeight - 1080 * scale) / 2}px) scale(${scale})`;
+}
+const params = new URLSearchParams(location.search);
+if (params.has('render')) {
+  document.body.classList.add('render');
+  seek(0);
+} else {
+  addEventListener('resize', fit);
+  fit();
+  let start = performance.now() - (parseFloat(params.get('t')) || 0) * 1000;
+  let paused = false, pausedAt = 0;
+  addEventListener('keydown', (e) => {
+    if (e.code === 'Space') { paused = !paused; if (paused) pausedAt = (performance.now() - start) / 1000; else start = performance.now() - pausedAt * 1000; }
+    if (e.code === 'ArrowRight') start -= 2000;
+    if (e.code === 'ArrowLeft') start += 2000;
+  });
+  const loop = () => {
+    if (!paused) seek(((performance.now() - start) / 1000) % DURATION);
+    requestAnimationFrame(loop);
+  };
+  loop();
+}
+</script>
+</body>
+</html>
