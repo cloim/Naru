@@ -369,7 +369,9 @@ export function DataGrid({
     return sum + GRID_BORDER_WIDTH;
   }, [columnDefs, gridProps.rowSelection, gridProps.selectionColumnDef]);
 
-  const suppressHorizontalScroll = gridProps.suppressHorizontalScroll ?? true;
+  // 터치 기기는 가로 스크롤도 그리드 본문이 맡는다. 바깥 래퍼가 가로로 넘기면 세로 스크롤바가 넓은 본문의 맨 오른쪽에 붙어 화면에서 보이지 않는다.
+  const coarsePointer = useMemo(() => window.matchMedia('(pointer: coarse)').matches, []);
+  const suppressHorizontalScroll = gridProps.suppressHorizontalScroll ?? !coarsePointer;
   const effectiveMinWidth = suppressHorizontalScroll
     ? Math.max(initialMinWidth, userResizedWidth)
     : 0;

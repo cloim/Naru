@@ -220,10 +220,21 @@
   text-align: left;
 }
 
-/* 터치 기기에서 AG Grid는 보이지 않는 세로 스크롤 막대를 표 오른쪽 끝에 겹쳐 둔다. 가로 스크롤 끝에서 이 막대가
-   행과 작업 버튼을 덮으므로 숨기고, 세로 스크롤은 본문 영역의 기본 스크롤이 맡는다. */
-.data-grid .ag-body-vertical-scroll.ag-scrollbar-invisible {
+/* 터치 기기에서 AG Grid는 본문의 기본 스크롤바를 숨기고 자체 막대를 내용 위에 겹쳐 그린다. 이 막대가 행과 작업 버튼을
+   덮으므로 숨기고, 본문의 기본 스크롤바를 되살려 스크롤하는 동안 브라우저가 얇은 막대를 보여 주게 한다. */
+.data-grid .ag-body-vertical-scroll.ag-scrollbar-invisible,
+.data-grid .ag-body-horizontal-scroll.ag-scrollbar-invisible {
   display: none;
+}
+
+@media (pointer: coarse) {
+  .data-grid .ag-grid-viewport {
+    scrollbar-width: thin !important;
+  }
+
+  .data-grid .ag-grid-viewport::-webkit-scrollbar {
+    display: block !important;
+  }
 }
 
 /* 작업 버튼 칸은 여백을 줄여 버튼이 칸 안에 모두 들어가게 한다. 칸 너비는 버튼 수에 맞춰 각 화면이 정한다. */
