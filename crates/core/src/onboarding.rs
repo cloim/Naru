@@ -40,14 +40,67 @@ async fn wsl_state() -> Value {
     }
 }
 
+/// The hypervisor under Windows, read from CPUID: its vendor and whether Windows is its root partition.
+/// WSL 2 needs the Windows hypervisor running as root; any other vendor means Windows itself is a guest
+/// (VirtualBox, VMware and the like), which `HypervisorPresent` cannot tell apart.
+fn hypervisor() -> (Option<String>, bool) {
+    #[cfg(target_arch = "x86_64")]
+    #[allow(unused_unsafe)]
+    unsafe {
+        use std::arch::x86_64::__cpuid;
+        if __cpuid(1).ecx & (1 << 31) == 0 {
+            return (None, false);
+        }
+        let leaf = __cpuid(0x4000_0000);
+        let bytes: Vec<u8> = [leaf.ebx, leaf.ecx, leaf.edx].iter().flat_map(|r| r.to_le_bytes()).collect();
+        let vendor = String::from_utf8_lossy(&bytes).trim_end_matches('\0').trim().to_string();
+        // HV_PARTITION_PRIVILEGE_MASK bit 0 (CreatePartitions) is granted only to the root partition.
+        let root = vendor == "Microsoft Hv" && leaf.eax >= 0x4000_0003 && __cpuid(0x4000_0003).ebx & 1 == 1;
+        (Some(vendor), root)
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    (None, false)
+}
+
+fn vm_name(vendor: &str) -> String {
+    match vendor {
+        "VBoxVBoxVBox" => "VirtualBox",
+        "VMwareVMware" => "VMware",
+        "Microsoft Hv" => "Hyper-V",
+        "KVMKVMKVM" => "KVM",
+        "TCGTCGTCGTCG" => "QEMU",
+        "prl hyperv" => "Parallels",
+        "XenVMMXenVMM" => "Xen",
+        other => other,
+    }
+    .to_string()
+}
+
+/// A feature change (the Virtual Machine Platform, say) waits for the next restart.
+async fn reboot_pending() -> bool {
+    let key = r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending";
+    run("reg.exe", &args(["query", key]), Opts::timeout(10)).await.is_ok_and(|o| o.code == Some(0))
+}
+
+/// `state` is ready, restart (a pending restart turns the hypervisor on), platform (the CPU can do it but the
+/// Windows hypervisor is off) or firmware (virtualization is off in the BIOS or the VM settings).
 async fn virtualization() -> Value {
-    let script = "$c=Get-CimInstance Win32_ComputerSystem;$p=Get-CimInstance Win32_Processor|Select-Object -First 1;\
-                  [pscustomobject]@{hypervisor=[bool]$c.HypervisorPresent;firmware=[bool]$p.VirtualizationFirmwareEnabled}|ConvertTo-Json -Compress";
+    let (vendor, root) = hypervisor();
+    let vm = vendor.as_deref().filter(|_| !root).map(vm_name);
+    if root {
+        return json!({ "ready": true, "state": "ready", "vm": Value::Null });
+    }
+    if reboot_pending().await {
+        return json!({ "ready": false, "state": "restart", "vm": vm });
+    }
+    // Without the Windows hypervisor the processor flags are visible and tell whether it could start.
+    let script = "$p=Get-CimInstance Win32_Processor|Select-Object -First 1;\
+                  [pscustomobject]@{firmware=[bool]$p.VirtualizationFirmwareEnabled;slat=[bool]$p.SecondLevelAddressTranslationExtensions}|ConvertTo-Json -Compress";
     let out = command("powershell.exe", &args(["-NoProfile", "-NonInteractive", "-Command", script]), Opts::timeout(30)).await;
     let v: Value = out.ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or(Value::Null);
-    // A running hypervisor hides the firmware flag, so either one means WSL 2 can start.
-    let ready = v["hypervisor"] == true || v["firmware"] == true;
-    json!({ "ready": ready, "hypervisor": v["hypervisor"], "firmware": v["firmware"] })
+    let capable = v["firmware"] == true && v["slat"] == true;
+    let state = if capable || v.is_null() { "platform" } else { "firmware" };
+    json!({ "ready": false, "state": state, "vm": vm })
 }
 
 fn free_space(dir: &Path) -> Option<u64> {
@@ -199,7 +252,9 @@ async fn install_wsl() -> ApiResult {
         .map_err(|e| anyhow!("WSL 설치를 시작하지 못했습니다. 관리자 승인 창을 확인해 주세요. ({e})"))?;
     let code: i64 = out.trim().parse().unwrap_or(-1);
     let wsl = wsl_state().await;
-    Ok(Json(json!({ "exitCode": code, "wsl": wsl, "restartRequired": wsl["installed"] != true || code == 3010 })))
+    // Run again on an installed WSL, the same command turns on the Virtual Machine Platform, which also needs a restart.
+    let restart = wsl["installed"] != true || code == 3010 || reboot_pending().await;
+    Ok(Json(json!({ "exitCode": code, "wsl": wsl, "restartRequired": restart })))
 }
 
 async fn mark_onboarded() -> Result<()> {
@@ -278,4 +333,17 @@ pub fn routes<S: Clone + Send + Sync + 'static>() -> Router<S> {
         .route("/api/onboarding", get(status).put(save))
         .route("/api/onboarding/wsl", post(install_wsl))
         .route("/api/onboarding/complete", post(complete))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn root_partition_is_always_the_windows_hypervisor() {
+        let (vendor, root) = hypervisor();
+        println!("hypervisor {vendor:?} root {root}");
+        assert!(!root || vendor.as_deref() == Some("Microsoft Hv"));
+        assert_eq!(vm_name("VBoxVBoxVBox"), "VirtualBox");
+    }
 }

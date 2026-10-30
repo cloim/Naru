@@ -217,7 +217,19 @@ pub async fn command(exe: &str, args: &[String], opts: Opts) -> Result<String> {
     } else {
         format!("명령 실패 ({}): {exe}", output.code.map_or("signal".into(), |c| c.to_string()))
     };
+    if exe == "wsl.exe" && no_hypervisor(&message) {
+        bail!(
+            "Windows 하이퍼바이저가 실행되지 않아 WSL 2 엔진을 시작할 수 없습니다. \
+             가상 머신 플랫폼 기능과 BIOS(또는 가상 머신 설정)의 가상화를 켠 뒤 PC를 다시 시작해 주세요. \
+             VirtualBox 가상 머신에서는 WSL 2가 동작하지 않을 수 있으니 Hyper-V나 VMware를 권장합니다.\n\n{message}"
+        );
+    }
     bail!(message)
+}
+
+/// WSL errors that mean the Windows hypervisor is missing; the text is localized, the codes are not.
+fn no_hypervisor(message: &str) -> bool {
+    ["HCS_E_HYPERV_NOT_INSTALLED", "0x80370102", "WSL_E_VM_MODE_INVALID_STATE"].iter().any(|code| message.contains(code))
 }
 
 pub fn args<I: IntoIterator<Item = S>, S: Into<String>>(items: I) -> Vec<String> {

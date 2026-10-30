@@ -129,9 +129,11 @@ export default function Onboarding({ onDone }) {
   // 단계가 바뀌면 화면 읽기 프로그램과 키보드 사용자가 새 제목에서 시작하도록 초점을 옮긴다.
   useEffect(() => heading.current?.focus(), [step]);
 
-  const ready = s && s.wsl?.installed && s.virtualization?.ready;
-  // WSL은 있는데 가상화를 쓸 수 없으면 이 PC에서는 더 진행할 수 없다.
-  const blocked = s && s.wsl?.installed && !s.virtualization?.ready;
+  const virt = s?.virtualization;
+  const ready = s && s.wsl?.installed && virt?.ready;
+  // 펌웨어 가상화가 꺼져 있거나, WSL까지 있는데 하이퍼바이저가 돌지 않으면 사용자 조치 없이는 진행할 수 없다.
+  const blocked =
+    s && !virt.ready && (virt.state === 'firmware' || (virt.state === 'platform' && s.wsl.installed));
   const key = STEPS[step][0];
 
   async function quitApp() {
@@ -343,18 +345,48 @@ export default function Onboarding({ onDone }) {
                           ? t('설치됨, 버전 {0}', [s.wsl.version || '-'])
                           : t('설치가 필요하며, 관리자 승인 뒤 설치하고 PC를 다시 시작해야 합니다')}
                       </CheckRow>
-                      {/* WSL 설치 전에는 하이퍼바이저가 꺼져 있어 가상화를 판정할 수 없다. */}
+                      {/* WSL 설치 전에는 하이퍼바이저가 꺼져 있어 펌웨어 설정만 판정할 수 있다. */}
                       <CheckRow
-                        state={s.virtualization.ready ? 'ok' : s.wsl.installed ? 'error' : 'wait'}
+                        state={
+                          virt.ready
+                            ? 'ok'
+                            : virt.state === 'restart'
+                              ? 'warn'
+                              : blocked
+                                ? 'error'
+                                : 'wait'
+                        }
                         title={t('하드웨어 가상화')}
+                        action={
+                          virt.state === 'platform' &&
+                          s.wsl.installed && (
+                            <Button
+                              primary
+                              compact
+                              icon={ShieldCheck}
+                              disabled={working}
+                              onClick={installWsl}
+                            >
+                              {t('가상 머신 플랫폼 켜기')}
+                            </Button>
+                          )
+                        }
                       >
-                        {s.virtualization.ready
+                        {virt.ready
                           ? t('사용할 수 있습니다')
-                          : s.wsl.installed
-                            ? t(
-                                'BIOS 또는 UEFI 설정에서 가상화(Intel VT-x, AMD-V)를 켠 뒤 다시 확인해 주세요',
-                              )
-                            : t('WSL을 설치한 뒤 확인합니다')}
+                          : virt.state === 'restart'
+                            ? t('PC를 다시 시작하면 Windows 하이퍼바이저가 켜지고 그 뒤 이어서 확인합니다')
+                            : virt.state === 'firmware'
+                              ? virt.vm
+                                ? t('{0} 가상 머신 설정에서 중첩 가상화(VT-x, AMD-V)를 켠 뒤 다시 확인해 주세요', [virt.vm])
+                                : t('BIOS 또는 UEFI 설정에서 가상화(Intel VT-x, AMD-V)를 켠 뒤 다시 확인해 주세요')
+                              : !s.wsl.installed
+                                ? t('WSL을 설치한 뒤 확인합니다')
+                                : virt.vm === 'VirtualBox'
+                                  ? t('VirtualBox 가상 머신에서는 Windows 하이퍼바이저가 시작되지 않아 WSL 2를 쓸 수 없으니 Hyper-V나 VMware 가상 머신에서 중첩 가상화를 켜고 설치해 주세요')
+                                  : virt.vm
+                                    ? t('{0} 가상 머신 안에서 Windows 하이퍼바이저가 시작되지 않았으니 중첩 가상화를 켜고 가상 머신 플랫폼을 켠 뒤 PC를 다시 시작해 주세요', [virt.vm])
+                                    : t('Windows 하이퍼바이저가 꺼져 있으니 가상 머신 플랫폼을 켠 뒤 PC를 다시 시작해 주세요')}
                       </CheckRow>
                       <CheckRow
                         state={s.freeBytes == null || s.freeBytes >= MIN_FREE ? 'ok' : 'warn'}
@@ -438,7 +470,7 @@ export default function Onboarding({ onDone }) {
                       onChange={(e) => set({ launchAtLogin: e.target.checked })}
                     />
                     <span>
-                      {t('Windows에 로그인하면 Naru를 백그라운드로 시작')}
+                      {t('Windows에 로그인하면 창 없이 알림 영역(트레이)에서 Naru 시작')}
                       {!s.packaged && (
                         <small className="ml-2 text-[11px] text-muted">
                           {t('설치된 앱에서 설정할 수 있습니다')}
@@ -551,7 +583,7 @@ export default function Onboarding({ onDone }) {
         </div>
 
         {key !== 'install' && (
-          <footer className="flex flex-none items-center gap-2.25 border-t border-line bg-paper px-10 py-4 max-tablet:px-4">
+          <footer className="flex flex-none flex-wrap items-center gap-2.25 border-t border-line bg-paper px-10 py-4 max-tablet:px-4">
             {key === 'check' && (
               <Button
                 icon={RefreshCw}
@@ -561,7 +593,7 @@ export default function Onboarding({ onDone }) {
                 {t('다시 확인')}
               </Button>
             )}
-            <div className="ml-auto flex gap-2.25">
+            <div className="ml-auto flex flex-wrap justify-end gap-2.25">
               {key === 'check' && blocked && (
                 <Button icon={Power} onClick={quitApp}>
                   {t('Naru 종료')}
