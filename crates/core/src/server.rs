@@ -461,6 +461,39 @@ async fn job(State(app): Shared, Path(id): Path<String>) -> ApiResult {
     Ok(Json(json!({ "job": read_json::<Value>(&file, None).await?, "log": log })))
 }
 
+// Returns the vulnerabilities of a finished image scan, most severe first. Only the fields the screen shows are kept.
+async fn scan_report(Path(id): Path<String>) -> ApiResult {
+    if uuid::Uuid::parse_str(&id).is_err() {
+        return Err(invalid("작업 id 형식을 확인해 주세요.").into());
+    }
+    let record: Value = read_json(&crate::jobs::jobs_dir().join(format!("{id}.json")), None).await?;
+    if record["type"] != "scanImage" || job_scope(&record) != engine_key() {
+        return Err(invalid("이미지 분석 작업을 확인해 주세요.").into());
+    }
+    let report: Value = read_json(&data().join("scans").join(format!("{id}.json")), None).await?;
+    Ok(Json(json!({ "vulnerabilities": scan_rows(&report) })))
+}
+
+fn scan_rows(report: &Value) -> Vec<Value> {
+    let rank = |s: &str| ["CRITICAL", "HIGH", "MEDIUM", "LOW"].iter().position(|x| *x == s).unwrap_or(4);
+    let mut rows: Vec<Value> = report["Results"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .flat_map(|r| {
+            r["Vulnerabilities"].as_array().into_iter().flatten().map(move |v| {
+                json!({
+                    "id": v["VulnerabilityID"], "severity": v["Severity"], "package": v["PkgName"],
+                    "installed": v["InstalledVersion"], "fixed": v["FixedVersion"],
+                    "title": v["Title"], "url": v["PrimaryURL"], "target": r["Target"],
+                })
+            })
+        })
+        .collect();
+    rows.sort_by_key(|v| rank(v["severity"].as_str().unwrap_or_default()));
+    rows
+}
+
 async fn create_job(State(app): Shared, Json(body): Json<Value>) -> Result<Response, AppError> {
     let known = body.as_object().is_some_and(|o| o.keys().all(|k| k == "type" || k == "payload"));
     let kind = body["type"].as_str().filter(|_| known).ok_or_else(|| invalid("작업 요청을 확인해 주세요."))?;
@@ -811,6 +844,7 @@ fn routes(app: Arc<App>) -> Router {
         .route("/api/networks/ping", post(network_check))
         .route("/api/jobs", get(jobs).post(create_job))
         .route("/api/jobs/{id}", get(job))
+        .route("/api/scans/{id}", get(scan_report))
         .route("/api/kubernetes/state", get(kubernetes_state))
         .route("/api/kubernetes", get(kubernetes))
         .route("/api/kubernetes/logs", get(kubernetes_logs))
@@ -932,6 +966,23 @@ pub async fn run(port: u16) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scan_rows_flatten_targets_and_sort_by_severity() {
+        let report = json!({ "Results": [
+            { "Target": "app", "Vulnerabilities": [{ "VulnerabilityID": "CVE-1", "Severity": "LOW", "PkgName": "a" }] },
+            { "Target": "os", "Vulnerabilities": [
+                { "VulnerabilityID": "CVE-2", "Severity": "UNKNOWN", "PkgName": "b" },
+                { "VulnerabilityID": "CVE-3", "Severity": "CRITICAL", "PkgName": "c", "FixedVersion": "2.0" }
+            ] },
+            { "Target": "empty" }
+        ] });
+        let rows = scan_rows(&report);
+        let ids: Vec<_> = rows.iter().map(|r| r["id"].as_str().unwrap()).collect();
+        assert_eq!(ids, ["CVE-3", "CVE-1", "CVE-2"]);
+        assert_eq!(rows[0]["target"], "os");
+        assert_eq!(rows[0]["fixed"], "2.0");
+    }
 
     #[test]
     fn listings_parse_long_iso_and_busybox_formats() {
