@@ -1,81 +1,43 @@
 # Naru
 
-Windows에서 컨테이너와 로컬 Kubernetes 환경을 관리하는 웹앱입니다. 전용 WSL 2 배포판에서 Moby 또는 containerd 엔진을 실행하고, 브라우저와 Windows CLI로 같은 환경을 사용해요.
+Windows에서 컨테이너와 로컬 Kubernetes 환경을 관리하는 데스크톱 앱입니다. 전용 WSL 2 배포판에서 Moby 또는 containerd 엔진을 실행하고, Naru 창과 Windows CLI로 같은 환경을 사용해요.
 
 컨테이너 실행부터 Compose 프로젝트 관리, 로그와 터미널, 이미지 빌드, 볼륨 백업, 네트워크 진단과 스냅샷까지 한곳에서 처리합니다.
 
-## 빠른 시작
+## 설치
 
 ### 준비 사항
 
-- WSL 2를 사용할 수 있는 Windows 환경
-- Node.js 24 이상과 npm
-- 런타임과 도구를 다운로드할 인터넷 연결, 이미지와 데이터를 저장할 디스크 공간
+- Windows 10 2004(빌드 19041) 이상 또는 Windows 11, x64
+- BIOS 또는 UEFI에서 켠 하드웨어 가상화. 가상 머신에서는 중첩 가상화가 필요합니다
+- 런타임과 도구를 다운로드할 인터넷 연결, 이미지와 데이터를 저장할 디스크 공간(20GB 이상 권장)
 
-### 설치와 실행
+### 설치와 첫 실행
 
-프로젝트 폴더에서 아래 순서로 실행합니다.
+설치 파일(`Naru_<버전>_x64-setup.exe`)을 실행하면 현재 사용자 계정에 설치됩니다. 관리자 권한은 필요하지 않아요.
 
-```powershell
-# 의존성 설치
-.\scripts\install.cmd
+처음 실행하면 대화형 온보딩이 다음 순서로 진행됩니다.
 
-# 화면 빌드와 단위 테스트
-.\scripts\check.cmd
+1. 화면 언어 선택
+2. 환경 점검: WSL 2, 하드웨어 가상화와 디스크 여유 공간을 확인하고, WSL이 없으면 설치합니다. 설치 후 PC를 다시 시작하면 Naru가 자동으로 열려 이어서 진행해요
+3. 데이터 위치와 화면 포트 선택
+4. 엔진, Kubernetes, Windows CLI 설치 여부와 프록시 선택
+5. 공식 배포물을 내려받아 검증한 뒤 엔진 설치와 시작
 
-# 서버 실행
-.\scripts\serve.cmd
-```
+진행할 수 없는 조건이면 화면에 조치 방법을 안내하고 Naru를 종료할 수 있습니다. 창을 닫아도 Naru는 트레이에서 계속 실행되어 포트 전달과 Docker pipe가 유지되며, 완전히 끝낼 때는 트레이 메뉴의 **종료**를 사용해 주세요.
 
-브라우저에서 [Naru 열기](http://127.0.0.1:49170)로 접속해 주세요. 처음에는 **Settings > Engine**에서 런타임을 설치하고 시작합니다. 설치 과정에서 WSL rootfs의 SHA256을 검증하고 `naru` 배포판을 생성해요.
-
-기본 화면 언어는 영어입니다. **Settings > Display > Language**에서 한국어로 바꿀 수 있어요. 언어 선택은 브라우저에 즉시 저장됩니다.
-
-실행 로그와 종료코드는 `.local/`에 저장합니다.
-
-| 단계 | 로그 | 종료코드 |
-| --- | --- | --- |
-| 의존성 설치 | `.local/install.log` | `.local/install.exit` |
-| 빌드 | `.local/build.log` | `.local/build.exit` |
-| 단위 테스트 | `.local/test.log` | `.local/test.exit` |
-| 서버 | `.local/server.log` | `.local/server.exit` |
-
-종료코드는 프로세스가 끝난 뒤 기록되며, `0`이면 성공입니다. 서버 실행 중에는 `server.log`에서 접속 주소와 오류를 확인해 주세요.
-
-<details>
-<summary>콘솔 창 없이 실행하기</summary>
-
-프로젝트 폴더의 PowerShell에서 다음 명령을 실행합니다. 설치나 빌드도 같은 방식으로 실행하려면 `serve.cmd`를 `install.cmd` 또는 `check.cmd`로 바꾸면 돼요. 앞 단계의 종료코드를 확인한 뒤 다음 단계를 실행해 주세요.
-
-```powershell
-$naruRoot = (Get-Location).Path
-$naruScript = Join-Path $naruRoot 'scripts\serve.cmd'
-$naruStartup = New-CimInstance -CimClass (Get-CimClass Win32_ProcessStartup) -Property @{
-  ShowWindow = [uint16]0
-} -ClientOnly
-Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
-  CommandLine = 'cmd.exe /d /s /c ""{0}""' -f $naruScript
-  CurrentDirectory = $naruRoot
-  ProcessStartupInformation = $naruStartup
-}
-```
-
-프로세스 관리자로 서비스를 등록한 환경에서는 해당 관리 도구에서 시작하고 종료합니다.
-
-</details>
-
-### 데스크톱 앱 (Rust, Tauri)
-
-설치형 앱은 Rust 백엔드와 Tauri 창이 한 프로세스로 동작합니다. 처음 실행하면 대화형 온보딩이 WSL 점검, 데이터 위치, 엔진 구성과 설치를 차례로 진행해요. 창을 닫아도 트레이에서 계속 실행되어 포트 전달과 Docker pipe가 유지됩니다.
+## 개발
 
 | 작업 | 명령 |
 | --- | --- |
+| 의존성 설치 | `npm install` |
+| 화면 빌드 | `npm run build` |
 | 개발용 서버(창 없음) | `cargo run -p naru -- --serve` |
 | 개발용 앱 | `cargo run -p naru` |
-| 테스트 | `cargo test -p naru-core` |
+| 테스트 | `cargo test -p naru-core`, `npm test` |
 | 설치 파일(NSIS) | `npm run build:desktop` |
 
-엔진 에이전트는 Linux 정적 바이너리라 `rustup target add x86_64-unknown-linux-musl`이 필요합니다. 설치 파일 빌드는 에이전트와 화면을 먼저 빌드해요.
+백엔드는 Rust(`crates/core`)이고, Tauri 셸(`src-tauri`)이 같은 프로세스에서 서버와 창을 함께 실행합니다. 개발용 서버는 [Naru 열기](http://127.0.0.1:49170)로 브라우저에서 확인할 수 있어요. 엔진 에이전트(`crates/agent`)는 Linux 정적 바이너리라 `rustup target add x86_64-unknown-linux-musl`이 필요하며, 설치 파일 빌드는 에이전트와 화면을 먼저 빌드합니다.
 
 ## 기본 사용 흐름
 
@@ -210,9 +172,11 @@ tailscale serve --bg --https=<포트> http://127.0.0.1:<Naru 화면 포트>
 | `~/.config/Naru` | `app.json`(데이터 폴더, 화면 포트, 로그인 시 시작), `settings.json`(엔진, Kubernetes, 프록시, 화면), `engines.json`(원격 엔진), `remote.json`(원격 접속) |
 | 데이터 폴더 | WSL 디스크, 작업 기록, Compose 파일, 확장, CLI 도구, 다운로드 캐시와 스냅샷 |
 | WSL의 `/var/lib/naru` | 엔진 데이터 |
-| `server/` | 로컬 API, 런타임 제어, 작업 프로세스와 연결 계층 |
+| `crates/core` | 로컬 API, 런타임 제어, 작업 프로세스와 연결 계층 |
+| `crates/agent` | 엔진 네트워크 네임스페이스 안의 포트 전달, DNS와 host.docker.internal 에이전트 |
+| `src-tauri/` | 데스크톱 창, 트레이와 실행 전 점검 |
 | `src/` | React 화면과 공용 컴포넌트 |
-| `scripts/` | 설치, 실행과 검증 스크립트 |
+| `scripts/` | 엔진 부팅과 네트워크 스크립트, 검증 스크립트 |
 | `tests/` | 단위 테스트와 통합 테스트 |
 | `.local/` | 개발 환경의 실행 로그와 임시 파일 |
 
@@ -220,11 +184,10 @@ tailscale serve --bg --https=<포트> http://127.0.0.1:<Naru 화면 포트>
 
 ## 검증과 사용 시 참고사항
 
-`scripts/check.cmd`는 화면 빌드와 단위 테스트를 실행합니다. 통합 테스트 코드는 `tests/`에 있으며, 결과를 저장하려면 먼저 로컬 `evidence/` 폴더를 준비해 주세요. 통합 테스트는 실제 엔진과 시험용 컨테이너를 변경하며, 일부 테스트에는 스냅샷 복원이 포함됩니다. 데이터가 있는 환경에서는 테스트 내용을 확인하고 백업한 뒤 실행해 주세요.
+`scripts/check.cmd`는 화면 빌드와 화면 단위 테스트를 실행하고, 백엔드 테스트는 `cargo test -p naru-core`로 실행합니다. 통합 테스트 코드는 `tests/`에 있으며, 결과를 저장하려면 먼저 로컬 `evidence/` 폴더를 준비해 주세요. 통합 테스트는 실제 엔진과 시험용 컨테이너를 변경하며, 일부 테스트에는 스냅샷 복원이 포함됩니다. 데이터가 있는 환경에서는 테스트 내용을 확인하고 백업한 뒤 실행해 주세요.
 
 현재 사용 시 고려할 범위는 다음과 같습니다.
 
-- Windows named pipe에서 표준 입력을 전달하는 `docker exec -i ... < file`과 `docker run -i`는 종료 대기가 길어질 수 있어요. 파일 입력이 필요한 작업에는 WSL 내부의 Docker CLI를 사용합니다.
 - 파일 탐색기의 개별 파일 업로드와 다운로드는 텍스트를 처리합니다. 볼륨 전체 데이터는 아카이브 백업과 복원을 사용해 주세요.
 - 이미지 TAR는 실행 패키지를 보관합니다. DB 파일과 업로드 데이터는 볼륨 등 실제 저장 위치에서 별도로 백업해 주세요.
 - Trivy 취약점 DB 다운로드와 전체 확장 SDK 호환성은 추가 검증이 필요합니다. 기업 인증서와 VPN, 다른 WSL 배포판 연동, 버전 변경 후 복구도 사용 환경별로 확인해 주세요.

@@ -96,7 +96,7 @@ if [ -e /run/netns/naru-engine ]; then
   # Restart loops; '|| true' keeps set -e from ending a loop when its process exits.
   (while :; do /usr/local/bin/naru-netns /usr/local/bin/naru-agent || true; sleep 1; done) >> /var/log/naru/agent.log 2>&1 &
   agent_pid=$!
-  # Port 29170 matches RELAY_PORT in server/ports.js. Only the Windows host reaches eth0 in NAT mode.
+  # Port 29170 matches RELAY_PORT in crates/core/src/ports.rs. Only the Windows host reaches eth0 in NAT mode.
   relay_ip=$(ip -4 -o addr show eth0 | awk '{split($4, a, "/"); print a[1]}')
   (while :; do socat TCP-LISTEN:29170,bind="$relay_ip",fork,reuseaddr EXEC:/usr/local/bin/naru-port-relay,nofork || true; sleep 1; done) >> /var/log/naru/port-relay.log 2>&1 &
   relay_pid=$!
