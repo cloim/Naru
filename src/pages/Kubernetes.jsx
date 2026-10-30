@@ -1,5 +1,5 @@
 import { t, useLocale, formatDate } from '../i18n.js';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Play,
@@ -74,6 +74,22 @@ export function kubernetesState(kind, r) {
   return status.phase || t('상태 없음');
 }
 
+const YAML_EXAMPLE =
+  'apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: example\ndata:\n  key: value';
+
+// 넓은 화면에서는 YAML 편집기를 목록 옆에 두고, 좁은 화면에서는 상단 버튼의 입력 창을 쓴다.
+function useWide() {
+  const query = '(min-width: 1101px)';
+  const [wide, setWide] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const changed = () => setWide(media.matches);
+    media.addEventListener('change', changed);
+    return () => media.removeEventListener('change', changed);
+  }, []);
+  return wide;
+}
+
 function Kubernetes() {
   const locale = useLocale();
   const { status, job, form, confirm, view, notify, busy } = useActions();
@@ -93,7 +109,9 @@ function Kubernetes() {
   const [kind, setKind] = useState('pods'),
     [search, setSearch] = useState(''),
     [namespace, setNamespace] = useState(''),
-    [logPod, setLogPod] = useState(null);
+    [logPod, setLogPod] = useState(null),
+    [yaml, setYaml] = useState('');
+  const wide = useWide();
   const managed = !!status?.ready && status.managed;
   const state = useData('kube:state', '/kubernetes/state', {
     enabled: managed,
@@ -147,6 +165,30 @@ function Kubernetes() {
         flex: 1,
         filterable: true,
         valueGetter: ({ data: r }) => kubernetesState(kind, r),
+        cellRenderer:
+          kind === 'pods'
+            ? ({ data: r, value }) => (
+                <Badge
+                  tone={
+                    r.metadata.deletionTimestamp
+                      ? 'wait'
+                      : r.status?.phase === 'Running' &&
+                          (r.status.containerStatuses || []).every((c) => c.ready)
+                        ? 'ok'
+                        : ['Failed', 'Unknown'].includes(r.status?.phase) ||
+                            (r.status?.containerStatuses || []).some((c) =>
+                              /Err|BackOff/.test(c.state?.waiting?.reason || ''),
+                            )
+                          ? 'bad'
+                          : r.status?.phase === 'Succeeded'
+                            ? 'off'
+                            : 'wait'
+                  }
+                >
+                  {value}
+                </Badge>
+              )
+            : undefined,
       },
       {
         headerName: t('생성'),
@@ -247,6 +289,7 @@ function Kubernetes() {
       },
       {
         headerName: '',
+        colId: 'actions',
         width: 90,
         sortable: false,
         cellRenderer: ({ data: r }) =>
@@ -301,29 +344,30 @@ function Kubernetes() {
             onClick={() => downloadConfig().catch(notify)}
           />
           {tab === 'resources' ? (
-            <PageAction
-              label={t('YAML 적용')}
-              primary
-              icon={Plus}
-              disabled={busy}
-              onClick={() =>
-                form(
-                  t('리소스 적용'),
-                  [
-                    {
-                      key: 'yaml',
-                      label: 'Kubernetes YAML',
-                      type: 'textarea',
-                      rows: 14,
-                      required: true,
-                      placeholder:
-                        'apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: example\ndata:\n  key: value',
-                    },
-                  ],
-                  (v) => job('kubeApply', v),
-                )
-              }
-            />
+            !wide && (
+              <PageAction
+                label={t('YAML 적용')}
+                primary
+                icon={Plus}
+                disabled={busy}
+                onClick={() =>
+                  form(
+                    t('리소스 적용'),
+                    [
+                      {
+                        key: 'yaml',
+                        label: 'Kubernetes YAML',
+                        type: 'textarea',
+                        rows: 14,
+                        required: true,
+                        placeholder: YAML_EXAMPLE,
+                      },
+                    ],
+                    (v) => job('kubeApply', v),
+                  )
+                }
+              />
+            )
           ) : (
             <PageAction
               label={t('포트 연결')}
@@ -391,86 +435,117 @@ function Kubernetes() {
           </Empty>
         </div>
       ) : (
-        <div className={tw.gridPanel}>
-          <div className={tw.tabs}>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === 'resources'}
-              className={cn(tw.tab, tab === 'resources' && tw.tabSelected)}
-              onClick={() => setTab('resources')}
+        <div className="flex min-h-0 flex-1 gap-4">
+          {wide && (
+            <section
+              aria-label={t('YAML 적용')}
+              className={cn(tw.panel, 'flex w-[400px] flex-none flex-col wide:w-[460px]')}
             >
-              {t('리소스')}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === 'forwards'}
-              className={cn(tw.tab, tab === 'forwards' && tw.tabSelected)}
-              onClick={() => setTab('forwards')}
-            >
-              {t('포트 전달')}
-              {forwards.data?.length > 0 && <span>{forwards.data.length}</span>}
-            </button>
-          </div>
-          {tab === 'resources' ? (
-            <>
-              <div className={cn(tw.actions, 'px-5.5 pt-5')}>
-                <SelectControl
-                  aria-label={t('리소스 종류')}
-                  value={kind}
-                  onChange={(e) => {
-                    setKind(e.target.value);
-                    setNamespace('');
-                  }}
+              <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-2.75">
+                <label htmlFor="kube-yaml" className="text-[13px] font-semibold">
+                  Kubernetes YAML
+                </label>
+                <Button
+                  primary
+                  compact
+                  icon={Play}
+                  disabled={busy || !yaml.trim()}
+                  onClick={() => job('kubeApply', { yaml })}
                 >
-                  {[
-                    ['pods', t('파드')],
-                    ['deployments', t('디플로이먼트')],
-                    ['services', t('서비스')],
-                    ['nodes', t('노드')],
-                    ['namespaces', t('네임스페이스')],
-                    ['configmaps', 'ConfigMap'],
-                    ['persistentvolumeclaims', t('볼륨 클레임')],
-                    ['events', t('이벤트')],
-                  ].map(([key, label]) => (
-                    <option key={key} value={key}>
-                      {label}
-                    </option>
-                  ))}
-                </SelectControl>
-                {namespaces.length > 0 && (
+                  {t('YAML 적용')}
+                </Button>
+              </div>
+              <textarea
+                id="kube-yaml"
+                spellCheck={false}
+                value={yaml}
+                placeholder={YAML_EXAMPLE}
+                onChange={(e) => setYaml(e.target.value)}
+                className="min-h-0 flex-1 resize-none bg-console p-4 font-mono text-[12.5px] leading-[1.75] text-[#d7e8cf] outline-0 placeholder:text-[#6f8d80] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#6aa887]"
+              />
+            </section>
+          )}
+          <div className={tw.gridPanel}>
+            <div className={tw.tabs}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === 'resources'}
+                className={cn(tw.tab, tab === 'resources' && tw.tabSelected)}
+                onClick={() => setTab('resources')}
+              >
+                {t('리소스')}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === 'forwards'}
+                className={cn(tw.tab, tab === 'forwards' && tw.tabSelected)}
+                onClick={() => setTab('forwards')}
+              >
+                {t('포트 전달')}
+                {forwards.data?.length > 0 && <span>{forwards.data.length}</span>}
+              </button>
+            </div>
+            {tab === 'resources' ? (
+              <>
+                <div className={cn(tw.actions, 'px-5.5 pt-5')}>
                   <SelectControl
-                    aria-label={t('네임스페이스 필터')}
-                    value={namespace}
-                    onChange={(e) => setNamespace(e.target.value)}
+                    aria-label={t('리소스 종류')}
+                    value={kind}
+                    onChange={(e) => {
+                      setKind(e.target.value);
+                      setNamespace('');
+                    }}
                   >
-                    <option value="">{t('모든 네임스페이스')}</option>
-                    {namespaces.map((name) => (
-                      <option key={name} value={name}>
-                        {name}
+                    {[
+                      ['pods', t('파드')],
+                      ['deployments', t('디플로이먼트')],
+                      ['services', t('서비스')],
+                      ['nodes', t('노드')],
+                      ['namespaces', t('네임스페이스')],
+                      ['configmaps', 'ConfigMap'],
+                      ['persistentvolumeclaims', t('볼륨 클레임')],
+                      ['events', t('이벤트')],
+                    ].map(([key, label]) => (
+                      <option key={key} value={key}>
+                        {label}
                       </option>
                     ))}
                   </SelectControl>
-                )}
-              </div>
-              <Toolbar search={search} onSearch={setSearch} />
-              <ResourceGrid
-                query={{ ...data, data: rows }}
-                columns={cols}
-                filter={search}
-                onRowClicked={({ data: r, event }) => {
-                  if (event.target.closest('button')) return;
-                  view(t('{0} 구성', [r.metadata.name]), r);
-                }}
-              />
-            </>
-          ) : (
-            <>
-              <Toolbar search={search} onSearch={setSearch} />
-              <ResourceGrid query={forwards} columns={forwardColumns} filter={search} />
-            </>
-          )}
+                  {namespaces.length > 0 && (
+                    <SelectControl
+                      aria-label={t('네임스페이스 필터')}
+                      value={namespace}
+                      onChange={(e) => setNamespace(e.target.value)}
+                    >
+                      <option value="">{t('모든 네임스페이스')}</option>
+                      {namespaces.map((name) => (
+                        <option key={name} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                    </SelectControl>
+                  )}
+                </div>
+                <Toolbar search={search} onSearch={setSearch} />
+                <ResourceGrid
+                  query={{ ...data, data: rows }}
+                  columns={cols}
+                  filter={search}
+                  onRowClicked={({ data: r, event }) => {
+                    if (event.target.closest('button')) return;
+                    view(t('{0} 구성', [r.metadata.name]), r);
+                  }}
+                />
+              </>
+            ) : (
+              <>
+                <Toolbar search={search} onSearch={setSearch} />
+                <ResourceGrid query={forwards} columns={forwardColumns} filter={search} />
+              </>
+            )}
+          </div>
         </div>
       )}
       <Modal
