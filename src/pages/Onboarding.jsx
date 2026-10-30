@@ -21,7 +21,7 @@ import { cn, tw } from '../tw.js';
 const STEPS = [
   ['welcome', '시작'],
   ['check', '환경 점검'],
-  ['storage', '저장 위치'],
+  ['storage', '위치와 포트'],
   ['engine', '엔진 구성'],
   ['install', '설치'],
 ];
@@ -109,6 +109,7 @@ export default function Onboarding({ onDone }) {
   const s = status.data;
   const [plan, setPlan] = useState({
     dataDir: '',
+    port: '',
     launchAtLogin: true,
     engine: 'moby',
     kubernetes: false,
@@ -123,7 +124,7 @@ export default function Onboarding({ onDone }) {
   const set = (patch) => setPlan((p) => ({ ...p, ...patch }));
 
   useEffect(() => {
-    if (s && !plan.dataDir) set({ dataDir: s.dataDir });
+    if (s && !plan.dataDir) set({ dataDir: s.dataDir, port: String(s.port) });
   }, [s]);
   // 단계가 바뀌면 화면 읽기 프로그램과 키보드 사용자가 새 제목에서 시작하도록 초점을 옮긴다.
   useEffect(() => heading.current?.focus(), [step]);
@@ -167,14 +168,14 @@ export default function Onboarding({ onDone }) {
     setWorking(true);
     setNotice(null);
     try {
-      const body = { dataDir: plan.dataDir };
+      const body = { dataDir: plan.dataDir, port: Number(plan.port) };
       if (s.packaged) body.launchAtLogin = plan.launchAtLogin;
       const result = await api('/onboarding', { method: 'PUT', body });
       if (result.restart) {
         setNotice(
           result.manualRestart
-            ? t('새 데이터 폴더를 쓰려면 Naru 서버를 다시 시작해 주세요')
-            : t('새 데이터 폴더로 Naru를 다시 시작합니다'),
+            ? t('바뀐 데이터 폴더나 포트를 쓰려면 Naru 서버를 다시 시작해 주세요')
+            : t('바뀐 설정을 적용하려고 Naru를 다시 시작합니다'),
         );
         return;
       }
@@ -191,7 +192,12 @@ export default function Onboarding({ onDone }) {
     if (key === 'storage') return saveStorage();
     setStep((n) => Math.min(n + 1, STEPS.length - 1));
   };
-  const canNext = key === 'check' ? ready : key === 'storage' ? !!plan.dataDir.trim() : true;
+  const canNext =
+    key === 'check'
+      ? ready
+      : key === 'storage'
+        ? !!plan.dataDir.trim() && /^\d{4,5}$/.test(plan.port)
+        : true;
 
   return (
     <div className="flex h-dvh overflow-hidden bg-canvas max-tablet:flex-col">
@@ -258,7 +264,7 @@ export default function Onboarding({ onDone }) {
                 {
                   welcome: t('Naru에 오신 것을 환영합니다'),
                   check: t('이 PC에서 엔진을 실행할 수 있는지 확인합니다'),
-                  storage: t('데이터를 둘 위치를 정합니다'),
+                  storage: t('데이터 위치와 화면 포트를 정합니다'),
                   engine: t('사용할 엔진을 고릅니다'),
                   install: t('엔진을 설치하고 시작합니다'),
                 }[key]
@@ -396,6 +402,32 @@ export default function Onboarding({ onDone }) {
                       {s.dataDirLocked
                         ? t('런타임이 이미 설치되어 있어 위치를 옮길 수 없습니다')
                         : t('여유 공간이 넉넉한 드라이브를 고르면 좋습니다')}
+                    </small>
+                  </label>
+                  <label className={tw.field}>
+                    <span>{t('Naru 화면 포트')}</span>
+                    <div className="flex gap-2.25">
+                      <input
+                        className="max-w-[180px]"
+                        inputMode="numeric"
+                        value={plan.port}
+                        onChange={(e) =>
+                          set({ port: e.target.value.replace(/\D/g, '').slice(0, 5) })
+                        }
+                      />
+                      <Button
+                        type="button"
+                        disabled={plan.port === String(s.defaultPort)}
+                        onClick={() => set({ port: String(s.defaultPort) })}
+                      >
+                        {t('기본 포트')}
+                      </Button>
+                    </div>
+                    <small className="text-muted">
+                      {t(
+                        '화면은 127.0.0.1:{0}에서 열리고, 확장 화면은 다음 번호 {1}을 함께 씁니다',
+                        [plan.port || '-', plan.port ? Number(plan.port) + 1 : '-'],
+                      )}
                     </small>
                   </label>
                   <label className={cn(tw.checkbox, !s.packaged && 'opacity-60')}>

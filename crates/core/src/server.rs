@@ -7,7 +7,7 @@ use crate::jobs::{job_list, reconcile_jobs, submit, IDENTIFIER, PROJECT_NAME};
 use crate::projects::{find_project, forget_project, label, list_projects, read_project_files, LABEL_PROJECT, LABEL_SERVICE};
 use crate::runner::{args, distributions, hidden, wsl, wsl_sh, Opts};
 use crate::runtime::{self, require_managed, require_ready};
-use crate::security::{access, load_remote, token_matches, Remote, Request as AccessRequest};
+use crate::security::{access, load_remote, parse_remote, token_matches, Remote, Request as AccessRequest};
 use crate::state::{data, read_json, root, save_settings, settings, Settings, DISTRO};
 use crate::web::{invalid, ok, ApiResult, AppError};
 use anyhow::{anyhow, bail, Result};
@@ -30,7 +30,8 @@ use tower_http::services::{ServeDir, ServeFile};
 pub struct App {
     pub port: u16,
     token: String,
-    remote: Option<Remote>,
+    /// Tailscale remote access; replaced in place when the setting is saved.
+    remote: std::sync::RwLock<Option<Remote>>,
     kubernetes: Mutex<Option<KubernetesBridge>>,
     cache: Mutex<HashMap<String, (Instant, Value)>>,
     completed_jobs: Mutex<String>,
@@ -82,7 +83,7 @@ fn forbidden(message: &str) -> Response {
 
 async fn security(State(app): Shared, ConnectInfo(peer): ConnectInfo<SocketAddr>, req: Request, next: Next) -> Response {
     let headers = req.headers();
-    if access(&access_request(headers, Some(peer)), app.port, app.remote.as_ref()).is_none() {
+    if access(&access_request(headers, Some(peer)), app.port, app.remote.read().unwrap().as_ref()).is_none() {
         return forbidden("허용되지 않은 Host 또는 출처입니다.");
     }
     if headers.get("sec-fetch-site").is_some_and(|v| v == "cross-site") {
@@ -112,7 +113,7 @@ async fn security(State(app): Shared, ConnectInfo(peer): ConnectInfo<SocketAddr>
 }
 
 static LOCAL_ONLY: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^/api/(settings|disk|snapshots|kubernetes|kubeconfig|forwards|extensions|diagnostics|onboarding)(/|$)").unwrap());
+    LazyLock::new(|| Regex::new(r"^/api/(settings|disk|snapshots|kubernetes|kubeconfig|forwards|extensions|diagnostics|onboarding|remote-access)(/|$)").unwrap());
 static VOLUME_FILES: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^/api/volumes/[^/]+/(files|export|import)(/|$)").unwrap());
 
 /// Every request resolves its engine once; in-flight requests keep this immutable snapshot.
@@ -611,7 +612,7 @@ async fn terminal_ticket(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> ApiResult {
-    let scheme = if access(&access_request(&headers, Some(peer)), app.port, app.remote.as_ref()) == Some("https") { "wss" } else { "ws" };
+    let scheme = if access(&access_request(&headers, Some(peer)), app.port, app.remote.read().unwrap().as_ref()) == Some("https") { "wss" } else { "ws" };
     let host = headers.get(header::HOST).and_then(|h| h.to_str().ok()).unwrap_or_default();
     crate::terminal::create_ticket(&id, &body, host, scheme).await
 }
@@ -621,6 +622,55 @@ async fn terminal_socket(ws: WebSocketUpgrade, Query(q): Query<HashMap<String, S
         Some(ticket) => ws.max_message_size(65536).on_upgrade(move |socket| crate::terminal::serve(socket, ticket)),
         None => StatusCode::FORBIDDEN.into_response(),
     }
+}
+
+// ---------- remote access ----------
+
+fn remote_file() -> std::path::PathBuf {
+    crate::state::config_dir().join("remote.json")
+}
+
+fn sorted_users(remote: &Remote) -> Vec<String> {
+    let mut users: Vec<String> = remote.users.iter().cloned().collect();
+    users.sort();
+    users
+}
+
+async fn get_remote(State(app): Shared) -> ApiResult {
+    let remote = app.remote.read().unwrap().clone();
+    Ok(Json(json!({
+        "enabled": remote.is_some(),
+        "host": remote.as_ref().map(|r| r.host.clone()).unwrap_or_default(),
+        "users": remote.as_ref().map(sorted_users).unwrap_or_default(),
+        "port": app.port,
+    })))
+}
+
+/// Saving applies at once. Only someone at this PC may change who can connect from elsewhere.
+async fn put_remote(
+    State(app): Shared,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> ApiResult {
+    if access(&access_request(&headers, Some(peer)), app.port, None) != Some("http") {
+        return Err(anyhow!("원격 접속 설정은 이 PC에서만 바꿀 수 있습니다.").into());
+    }
+    let host = body["host"].as_str().unwrap_or_default();
+    let users: Vec<String> = body["users"].as_array().into_iter().flatten().filter_map(|u| u.as_str().map(String::from)).collect();
+    if host.trim().is_empty() && users.iter().all(|u| u.trim().is_empty()) {
+        match tokio::fs::remove_file(remote_file()).await {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e.into()),
+            _ => {}
+        }
+        *app.remote.write().unwrap() = None;
+        return ok();
+    }
+    let remote = parse_remote(host, &users)
+        .ok_or_else(|| invalid("호스트는 <기기>.<tailnet>.ts.net 형식(포트 선택)이고, 허용할 계정이 하나 이상 있어야 합니다."))?;
+    crate::state::atomic_json(&remote_file(), &json!({ "host": remote.host, "users": sorted_users(&remote) })).await?;
+    *app.remote.write().unwrap() = Some(remote);
+    ok()
 }
 
 // ---------- engines ----------
@@ -772,6 +822,7 @@ fn routes(app: Arc<App>) -> Router {
         .route("/api/projects/{name}", delete(forget))
         .route("/api/diagnostics/resources", get(|| async { ApiResult::Ok(Json(crate::diagnostics::resource_sample().await?)) }))
         .route("/api/diagnostics", get(diagnostics))
+        .route("/api/remote-access", get(get_remote).put(put_remote))
         .route("/api/engines", get(engines).post(add_engine))
         .route("/api/engines/test", post(test_engine))
         .route("/api/engines/selection/current", put(select_engine))
@@ -842,13 +893,13 @@ pub async fn run(port: u16) -> Result<()> {
     let app = Arc::new(App {
         port,
         token: hex::encode(rand::random::<[u8; 32]>()),
-        remote: load_remote(&data().join("remote.json")),
+        remote: std::sync::RwLock::new(load_remote(&remote_file())),
         kubernetes: Mutex::new(None),
         cache: Mutex::new(HashMap::new()),
         completed_jobs: Mutex::new(String::new()),
     });
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await?;
-    let remote = app.remote.as_ref().map(|r| format!(" | https://{}", r.host)).unwrap_or_default();
+    let remote = app.remote.read().unwrap().as_ref().map(|r| format!(" | https://{}", r.host)).unwrap_or_default();
     println!("Naru http://127.0.0.1:{port} | {}{remote}", data().display());
     start_docker_bridge();
     start_compat_bridge();
@@ -902,7 +953,7 @@ mod tests {
         let app = Arc::new(App {
             port: 49170,
             token: "t".into(),
-            remote: None,
+            remote: std::sync::RwLock::new(None),
             kubernetes: Mutex::new(None),
             cache: Mutex::new(HashMap::new()),
             completed_jobs: Mutex::new(String::new()),

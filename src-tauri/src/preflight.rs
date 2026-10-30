@@ -27,13 +27,56 @@ pub fn system() -> Option<String> {
     None
 }
 
+fn free_pair(port: u16) -> bool {
+    [port, port + 1].iter().all(|p| std::net::TcpListener::bind(("127.0.0.1", *p)).is_ok())
+}
+
+pub enum PortCheck {
+    Free,
+    /// The user accepted this free pair; the app saves it and starts with it.
+    Switch(u16),
+    Declined(String),
+}
+
 /// Checked after single-instance handling, so a second launch of Naru never reaches it.
-pub fn port(port: u16) -> Option<String> {
-    std::net::TcpListener::bind(("127.0.0.1", port)).err().map(|_| {
-        format!(
-            "다른 프로그램이 Naru가 쓰는 포트 {port}를 사용하고 있습니다.\n\n그 프로그램을 종료하거나, 이전에 실행한 Naru 서버가 남아 있다면 종료한 뒤 다시 실행해 주세요."
-        )
-    })
+/// The next port serves extension screens, so it has to be free as well.
+pub fn port(port: u16) -> PortCheck {
+    if free_pair(port) {
+        return PortCheck::Free;
+    }
+    let kubernetes = std::fs::read_to_string(naru_core::state::settings_file())
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .and_then(|value| naru_core::state::Settings::parse(value).ok())
+        .unwrap_or_default()
+        .kubernetes
+        .port;
+    let candidate = (port.saturating_add(2)..65534)
+        .step_by(2)
+        .chain((49152..port).step_by(2))
+        .find(|p| *p != kubernetes && p + 1 != kubernetes && free_pair(*p));
+    let busy = format!("다른 프로그램이 Naru가 쓰는 포트 {port} 또는 {}를 사용하고 있습니다.", port + 1);
+    let Some(candidate) = candidate else {
+        return PortCheck::Declined(format!("{busy}\n\n사용할 수 있는 다른 포트도 찾지 못했습니다. 포트를 쓰는 프로그램을 종료한 뒤 다시 실행해 주세요."));
+    };
+    if ask(&format!("{busy}\n\n비어 있는 포트 {candidate}로 바꿔서 시작할까요?\n\n아니요를 누르면 Naru를 종료합니다.")) {
+        PortCheck::Switch(candidate)
+    } else {
+        PortCheck::Declined(format!("{busy}\n\n그 프로그램을 종료하거나 이전에 실행한 Naru 서버가 남아 있다면 종료한 뒤 다시 실행해 주세요."))
+    }
+}
+
+#[cfg(windows)]
+fn ask(message: &str) -> bool {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, IDYES, MB_ICONWARNING, MB_YESNO};
+    let wide = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
+    let (text, title) = (wide(message), wide("Naru"));
+    unsafe { MessageBoxW(std::ptr::null_mut(), text.as_ptr(), title.as_ptr(), MB_YESNO | MB_ICONWARNING) == IDYES }
+}
+
+#[cfg(not(windows))]
+fn ask(_message: &str) -> bool {
+    false
 }
 
 pub fn fail(message: &str) -> ! {

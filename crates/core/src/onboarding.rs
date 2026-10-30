@@ -1,7 +1,7 @@
 //! First-run setup the screens walk through: WSL readiness, where data lives and Windows integration.
 //! Everything is stored in app.json and settings.json; nothing depends on environment files.
 use crate::runner::{args, command, run, Opts};
-use crate::state::{app_config, app_file, atomic_json, data, default_data, AppConfig, DISTRO};
+use crate::state::{app_config, app_file, app_port, atomic_json, data, default_data, AppConfig, DEFAULT_PORT, DISTRO};
 use crate::web::{invalid, ok, ApiResult};
 use anyhow::{anyhow, Result};
 use axum::routing::{get, post};
@@ -80,6 +80,8 @@ async fn status() -> ApiResult {
         "launchAtLogin": SHELL.get().is_some() && launch_registered().await,
         "dataDir": current,
         "defaultDataDir": default_data(),
+        "port": app_port(),
+        "defaultPort": DEFAULT_PORT,
         // The WSL disk lives in the data folder, so it can only move before the runtime is installed.
         "dataDirLocked": installed,
         "freeBytes": free_space(&current),
@@ -101,6 +103,26 @@ fn validate_dir(raw: &str) -> Result<PathBuf> {
     Ok(path)
 }
 
+/// The screen port and the next one (extension screens) must be free and clear of the Kubernetes API port.
+async fn validate_port(raw: &Value) -> Result<u16> {
+    let port = raw
+        .as_u64()
+        .filter(|p| (1024..=65534).contains(p))
+        .ok_or_else(|| invalid("포트는 1024부터 65534 사이의 숫자로 입력해 주세요."))? as u16;
+    let kubernetes = crate::state::settings().await?.kubernetes.port;
+    if port == kubernetes || port + 1 == kubernetes {
+        return Err(invalid(format!("Kubernetes API 포트 {kubernetes}와 겹치지 않는 번호를 골라 주세요.")));
+    }
+    if port != app_port() {
+        for p in [port, port + 1] {
+            if std::net::TcpListener::bind(("127.0.0.1", p)).is_err() {
+                return Err(invalid(format!("포트 {p}를 다른 프로그램이 사용하고 있습니다. 다른 번호를 골라 주세요.")));
+            }
+        }
+    }
+    Ok(port)
+}
+
 async fn set_launch(enabled: bool) -> Result<()> {
     let shell = SHELL.get().ok_or_else(|| invalid("설치된 Naru 앱에서만 로그인 시 자동 시작을 설정할 수 있습니다."))?;
     if enabled {
@@ -113,7 +135,7 @@ async fn set_launch(enabled: bool) -> Result<()> {
 }
 
 async fn save(Json(body): Json<Value>) -> ApiResult {
-    let known = body.as_object().is_some_and(|o| o.keys().all(|k| k == "dataDir" || k == "launchAtLogin"));
+    let known = body.as_object().is_some_and(|o| o.keys().all(|k| ["dataDir", "launchAtLogin", "port"].contains(&k.as_str())));
     if !known {
         return Err(invalid("온보딩 설정 항목을 확인해 주세요.").into());
     }
@@ -136,12 +158,20 @@ async fn save(Json(body): Json<Value>) -> ApiResult {
         }
         config.data_dir = (wanted != default_data()).then(|| wanted.to_string_lossy().into_owned());
     }
+    if let Some(raw) = body.get("port").filter(|v| !v.is_null()) {
+        let port = validate_port(raw).await?;
+        // The server listens on the port it started with, so a new one takes effect after a restart.
+        if port != app_port() {
+            restart = true;
+        }
+        config.port = (port != DEFAULT_PORT).then_some(port);
+    }
     if let Some(enabled) = body.get("launchAtLogin").and_then(Value::as_bool) {
         set_launch(enabled).await?;
         config.launch_at_login = enabled;
     }
     atomic_json(&app_file(), &config).await?;
-    // The data folder is fixed for the life of the process. The desktop app restarts itself;
+    // The data folder and port are fixed for the life of the process. The desktop app restarts itself;
     // a development server has to be restarted by hand.
     let automatic = restart && SHELL.get().is_some();
     if automatic {

@@ -10,7 +10,11 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
-const PORT: u16 = 49170;
+/// Read once: the server, the window and the checks all use the port the app started with.
+fn port() -> u16 {
+    static PORT: std::sync::OnceLock<u16> = std::sync::OnceLock::new();
+    *PORT.get_or_init(state::app_port)
+}
 
 /// The folder holding `dist/` and `scripts/`: next to the installed executable,
 /// or the repository when running a development build from target/.
@@ -33,7 +37,7 @@ fn show(app: &AppHandle) {
         let _ = window.set_focus();
         return;
     }
-    let url = format!("http://127.0.0.1:{PORT}").parse().expect("server url");
+    let url = format!("http://127.0.0.1:{}", port()).parse().expect("server url");
     let built = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
         .title("Naru")
         .inner_size(1360.0, 860.0)
@@ -58,7 +62,7 @@ fn show(app: &AppHandle) {
 
 async fn wait_for_server() {
     for _ in 0..100 {
-        if tokio::net::TcpStream::connect(("127.0.0.1", PORT)).await.is_ok() {
+        if tokio::net::TcpStream::connect(("127.0.0.1", port())).await.is_ok() {
             return;
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
@@ -68,6 +72,7 @@ async fn wait_for_server() {
 fn main() {
     let argv: Vec<String> = std::env::args().collect();
     state::init_root(resources());
+    state::migrate_legacy_config();
     match argv.get(1).map(String::as_str) {
         Some("--worker") => {
             let id = argv.get(2).cloned().unwrap_or_default();
@@ -75,7 +80,7 @@ fn main() {
         }
         // A windowless server for development and tests.
         Some("--serve") => {
-            if let Err(e) = runtime().block_on(server::run(PORT)) {
+            if let Err(e) = runtime().block_on(server::run(port())) {
                 eprintln!("{e}");
                 std::process::exit(1);
             }
@@ -92,8 +97,17 @@ fn main() {
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| show(app)))
         .setup(move |app| {
             // Only the first instance gets here; a second launch was handed to it above.
-            if let Some(message) = preflight::port(PORT) {
-                preflight::fail(&message);
+            // This runs before anything reads port(), so an accepted switch applies right away.
+            match preflight::port(state::app_port()) {
+                preflight::PortCheck::Free => {}
+                preflight::PortCheck::Switch(free) => {
+                    let mut config = state::app_config();
+                    config.port = Some(free);
+                    let text = serde_json::to_vec_pretty(&config)?;
+                    std::fs::create_dir_all(state::app_file().parent().unwrap())?;
+                    std::fs::write(state::app_file(), text)?;
+                }
+                preflight::PortCheck::Declined(message) => preflight::fail(&message),
             }
             let handle = app.handle().clone();
             let (restart, quit) = (handle.clone(), handle.clone());
@@ -104,7 +118,7 @@ fn main() {
             });
             let failed = handle.clone();
             tauri::async_runtime::spawn(async move {
-                if let Err(e) = server::run(PORT).await {
+                if let Err(e) = server::run(port()).await {
                     preflight::show_error(&format!("Naru를 시작하지 못했습니다.\n\n{e}"));
                     failed.exit(1);
                 }

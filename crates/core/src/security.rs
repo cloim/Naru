@@ -23,18 +23,19 @@ struct RawRemote {
 /// Remote access is off unless remote.json names the Tailscale serve host and the tailnet logins allowed to use it.
 pub fn load_remote(file: &Path) -> Option<Remote> {
     let raw: RawRemote = serde_json::from_str(&std::fs::read_to_string(file).ok()?).ok()?;
-    static HOST: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[a-z0-9.-]+\.ts\.net(:\d{1,5})?$").unwrap());
-    let host = raw.host.as_str().unwrap_or("").trim().to_lowercase();
-    let users: HashSet<String> = raw
+    let users: Vec<String> = raw
         .users
         .as_array()
-        .map(|list| {
-            list.iter()
-                .map(|u| u.as_str().map(String::from).unwrap_or_else(|| u.to_string()).trim().to_lowercase())
-                .filter(|u| !u.is_empty())
-                .collect()
-        })
+        .map(|list| list.iter().map(|u| u.as_str().map(String::from).unwrap_or_else(|| u.to_string())).collect())
         .unwrap_or_default();
+    parse_remote(raw.host.as_str().unwrap_or(""), &users)
+}
+
+/// A usable remote setting: a Tailscale serve host and at least one allowed tailnet login.
+pub fn parse_remote(host: &str, users: &[String]) -> Option<Remote> {
+    static HOST: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[a-z0-9.-]+\.ts\.net(:\d{1,5})?$").unwrap());
+    let host = host.trim().to_lowercase();
+    let users: HashSet<String> = users.iter().map(|u| u.trim().to_lowercase()).filter(|u| !u.is_empty()).collect();
     (HOST.is_match(&host) && !users.is_empty()).then_some(Remote { host, users })
 }
 
@@ -103,6 +104,15 @@ mod tests {
         r.peer = Some("127.0.0.1".parse().unwrap());
         r.tailscale_user = Some("other@example.com");
         assert_eq!(access(&r, 49170, Some(&remote)), None);
+    }
+
+    #[test]
+    fn remote_setting_needs_tailnet_host_and_users() {
+        let remote = parse_remote(" PC.Tail.ts.net:8461 ", &[" Me@Example.com ".into(), "".into()]).unwrap();
+        assert_eq!(remote.host, "pc.tail.ts.net:8461");
+        assert!(remote.users.contains("me@example.com") && remote.users.len() == 1);
+        assert!(parse_remote("pc.example.com", &["me@example.com".into()]).is_none());
+        assert!(parse_remote("pc.tail.ts.net", &[" ".into()]).is_none());
     }
 
     #[test]

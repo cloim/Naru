@@ -29,17 +29,61 @@ fn local_app_data() -> PathBuf {
         .unwrap_or_default()
 }
 
-/// The fixed per-user app file. It records where the data folder is, so it never moves itself.
+fn home() -> PathBuf {
+    std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")).map(PathBuf::from).unwrap_or_default()
+}
+
+/// Every setting a user chooses lives in ~/.config/Naru; the data folder holds disks, caches and state.
+pub fn config_dir() -> PathBuf {
+    home().join(".config").join("Naru")
+}
+
+/// The fixed app file. It records where the data folder is, so it never moves itself.
 pub fn app_file() -> PathBuf {
-    local_app_data().join("Naru").join("app.json")
+    config_dir().join("app.json")
+}
+
+pub fn settings_file() -> PathBuf {
+    config_dir().join("settings.json")
+}
+
+/// Earlier versions kept settings beside the data. They are copied, not moved, so an older Naru
+/// still running from the same folder keeps working until it is replaced.
+pub fn migrate_legacy_config() {
+    let dir = config_dir();
+    let copy = |from: PathBuf, name: &str| {
+        let to = dir.join(name);
+        if !to.exists() && from.is_file() {
+            let _ = std::fs::create_dir_all(&dir);
+            let _ = std::fs::copy(&from, &to);
+        }
+    };
+    let legacy = local_app_data().join("Naru");
+    // app.json first: it may point the data folder somewhere else.
+    copy(legacy.join("app.json"), "app.json");
+    let data_dir = std::env::var_os("NARU_DATA_DIR")
+        .map(PathBuf::from)
+        .or_else(|| app_config().data_dir.map(PathBuf::from))
+        .unwrap_or(legacy);
+    for name in ["settings.json", "engines.json", "remote.json"] {
+        copy(data_dir.join(name), name);
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AppConfig {
     pub data_dir: Option<String>,
+    /// The screen and API port; the next port serves extension screens.
+    pub port: Option<u16>,
     pub onboarded: bool,
     pub launch_at_login: bool,
+}
+
+pub const DEFAULT_PORT: u16 = 49170;
+
+pub fn app_port() -> u16 {
+    app_config().port.unwrap_or(DEFAULT_PORT)
 }
 
 pub fn app_config() -> AppConfig {
@@ -186,7 +230,7 @@ impl Settings {
 }
 
 pub async fn settings() -> Result<Settings> {
-    let raw = read_json(&data().join("settings.json"), Some(serde_json::json!({}))).await?;
+    let raw = read_json(&settings_file(), Some(serde_json::json!({}))).await?;
     let mut cfg = Settings::parse(raw)?;
     if remote_target() {
         cfg.engine = moby();
@@ -197,7 +241,7 @@ pub async fn settings() -> Result<Settings> {
 
 pub async fn save_settings(input: serde_json::Value) -> Result<Settings> {
     let value = Settings::parse(input)?;
-    atomic_json(&data().join("settings.json"), &value).await?;
+    atomic_json(&settings_file(), &value).await?;
     Ok(value)
 }
 

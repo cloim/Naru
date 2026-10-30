@@ -1,7 +1,7 @@
 //! Remote engine profiles reached over SSH, stored in engines.json.
 use crate::context::{target, Target};
 use crate::runner::{command, Opts};
-use crate::state::{atomic_json, data, read_json};
+use crate::state::{atomic_json, read_json};
 use anyhow::{bail, Result};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -71,7 +71,7 @@ pub struct Connections {
 }
 
 fn file() -> std::path::PathBuf {
-    data().join("engines.json")
+    crate::state::config_dir().join("engines.json")
 }
 
 pub async fn connections() -> Result<Connections> {

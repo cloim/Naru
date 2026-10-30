@@ -560,6 +560,15 @@ export default {
     'Restart the PC to finish installing WSL; Naru opens after sign-in to continue',
   'WSL을 설치한 뒤 확인합니다': 'Checked after WSL is installed',
   'Naru 종료': 'Quit Naru',
+  '위치와 포트': 'Location and port',
+  '데이터 위치와 화면 포트를 정합니다': 'Choose where data lives and the screen port',
+  'Naru 화면 포트': 'Naru screen port',
+  '바뀐 데이터 폴더나 포트를 쓰려면 Naru 서버를 다시 시작해 주세요':
+    'Restart the Naru server to use the new data folder or port',
+  '바뀐 설정을 적용하려고 Naru를 다시 시작합니다': 'Restarting Naru to apply the new settings',
+  '기본 포트': 'Default port',
+  '화면은 127.0.0.1:{0}에서 열리고, 확장 화면은 다음 번호 {1}을 함께 씁니다':
+    'Screens open at 127.0.0.1:{0}; extension screens also use the next port, {1}',
   '{0} 서버에 연결할 수 없습니다': 'Cannot reach the {0} server',
   '설치에 필요한 파일을 내려받을 수 없어 설치를 시작하지 않았습니다. 인터넷 연결을 확인하고, 회사 네트워크라면 프록시 주소를 입력해 주세요':
     'Setup did not start because the files it needs cannot be downloaded. Check the internet connection, and on a company network enter the proxy address',
@@ -630,4 +639,14 @@ export default {
   '저장 위치': 'Storage',
   '엔진 구성': 'Engine',
   설치: 'Install',
+  '원격 접속': 'Remote access',
+  '같은 tailnet의 다른 기기에서 Naru 화면을 열 수 있습니다. 허용한 계정만 접속하며, 이 설정은 이 PC에서만 바꿀 수 있습니다':
+    'Open Naru from other devices on the same tailnet. Only the allowed accounts can connect, and only this PC can change the setting',
+  'Tailscale 호스트': 'Tailscale host',
+  '허용할 tailnet 계정 (한 줄에 하나)': 'Allowed tailnet accounts (one per line)',
+  '이 PC에서 다음 명령으로 Tailscale serve를 켜 주세요': 'Turn on Tailscale serve on this PC with',
+  '원격 접속 저장': 'Save remote access',
+  '원격 접속 끄기': 'Turn off remote access',
+  '원격 접속 설정을 저장했습니다.': 'Remote access saved.',
+  '원격 접속을 껐습니다.': 'Remote access is off.',
 };

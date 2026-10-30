@@ -116,7 +116,7 @@ Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
 
 Compose 프로젝트는 **컨테이너** 화면에서 프로젝트별로 묶어 표시합니다. 프로젝트 관리 창에서 소속 서비스와 연결 관계를 확인하고, 함께 시작하거나 정지, 재시작할 수 있어요. 원본 Compose 파일이 있으면 `up`, `down`, `pull`, `build`와 파일 편집도 지원합니다.
 
-새 Compose 파일은 `%LOCALAPPDATA%\Naru\compose\<이름>\compose.yaml`에 저장합니다. 프로젝트 목록은 `projects.json`에 보관하므로 `down` 이후에도 다시 실행할 수 있어요.
+새 Compose 파일은 데이터 폴더의 `compose\<이름>\compose.yaml`에 저장합니다. 프로젝트 목록은 `projects.json`에 보관하므로 `down` 이후에도 다시 실행할 수 있어요.
 
 HTTP 서비스를 실행한 컨테이너는 `http://<컨테이너이름>.naru.localhost:49170`으로도 접속할 수 있습니다. 이 프록시는 컨테이너의 첫 번째 공개 포트로 요청을 전달하므로, 웹 서비스의 포트를 공개한 뒤 사용해 주세요.
 
@@ -177,7 +177,7 @@ Kubernetes 화면에서 로컬 k3s를 시작하고 리소스를 종류와 네임
 
 ## Windows CLI 연결
 
-**설정 > CLI와 레지스트리**에서 Docker, Compose, Buildx, kubectl, Helm과 자격 증명 도우미를 설치합니다. 도구는 다운로드한 파일을 검증한 뒤 설치해요. Docker가 PATH에 없으면 `%LOCALAPPDATA%\Naru\bin\docker.exe`를 사용할 수 있습니다.
+**설정 > CLI와 레지스트리**에서 Docker, Compose, Buildx, kubectl, Helm과 자격 증명 도우미를 설치합니다. 도구는 다운로드한 파일을 검증한 뒤 데이터 폴더의 `bin`에 설치하고, 이 폴더를 사용자 PATH에 추가해요. 새 터미널에서 `docker`, `kubectl`, `helm`을 바로 쓸 수 있습니다.
 
 Docker context `naru`는 `naru_engine` named pipe로 연결합니다. 기본 `docker_engine` pipe도 사용 가능한 경우 같은 엔진에 연결하므로, 기본 pipe를 사용하는 SDK와 도구에서도 Naru 엔진을 사용할 수 있어요.
 
@@ -193,28 +193,22 @@ Windows의 bind mount 경로는 엔진에 전달할 때 Linux 경로로 변환�
 
 ## 원격 접속
 
-기본 접속 범위는 Naru를 실행 중인 PC입니다. Tailscale을 사용하는 환경에서는 Serve로 로컬 서버를 연결하고, `%LOCALAPPDATA%\Naru\remote.json`에 허용할 호스트와 로그인 계정을 지정해 원격 접속을 설정할 수 있어요.
+기본 접속 범위는 Naru를 실행 중인 PC입니다. Tailscale을 사용하는 환경에서는 Serve로 로컬 서버를 연결하고, **설정 > 원격 접속**에서 Tailscale 호스트와 허용할 tailnet 계정을 저장합니다. 저장하면 바로 적용되고, 이 설정은 Naru를 실행 중인 PC에서만 바꿀 수 있어요.
 
 ```text
-tailscale serve --bg --https=<포트> http://127.0.0.1:49170
+tailscale serve --bg --https=<포트> http://127.0.0.1:<Naru 화면 포트>
 ```
 
-```json
-{
-  "host": "<기기>.<tailnet>.ts.net:<포트>",
-  "users": ["<tailnet 로그인>"]
-}
-```
+서버는 로컬에서 전달된 요청인지 확인하고, Host와 허용 계정, 요청에 포함된 Origin을 검사해요. 확장 UI는 localhost 출처를 사용하므로 실행 중인 PC에서 접속해 주세요.
 
-설정을 저장한 뒤 Naru 서버를 다시 시작합니다. 서버는 로컬에서 전달된 요청인지 확인하고, Host와 허용 계정, 요청에 포함된 Origin을 검사해요. 확장 UI는 localhost 출처를 사용하므로 실행 중인 PC에서 접속해 주세요.
+## 설정, 데이터와 프로젝트 구조
 
-## 데이터와 프로젝트 구조
-
-기본 데이터 폴더는 `%LOCALAPPDATA%\Naru`이며 `NARU_DATA_DIR` 환경 변수로 변경합니다. WSL 배포판 이름은 `naru`로 고정되어 있어, 데이터 폴더를 바꿔도 별도의 배포판 인스턴스가 생성되는 것은 아니에요.
+사용자가 고르는 설정은 모두 `~/.config/Naru`(`%USERPROFILE%\.config\Naru`)에 저장합니다. 데이터 폴더와 화면 포트는 첫 실행 온보딩에서 정하며, 기본값은 `%LOCALAPPDATA%\Naru`와 `49170`이에요. 이전 버전이 데이터 폴더에 둔 설정 파일은 처음 실행할 때 설정 폴더로 복사합니다. WSL 배포판 이름은 `naru`로 고정되어 있어, 데이터 폴더를 바꿔도 별도의 배포판 인스턴스가 생성되는 것은 아니에요.
 
 | 위치 | 내용 |
 | --- | --- |
-| `%LOCALAPPDATA%\Naru` | 설정, 작업 기록, Compose 파일, 확장, 다운로드 캐시와 스냅샷 |
+| `~/.config/Naru` | `app.json`(데이터 폴더, 화면 포트, 로그인 시 시작), `settings.json`(엔진, Kubernetes, 프록시, 화면), `engines.json`(원격 엔진), `remote.json`(원격 접속) |
+| 데이터 폴더 | WSL 디스크, 작업 기록, Compose 파일, 확장, CLI 도구, 다운로드 캐시와 스냅샷 |
 | WSL의 `/var/lib/naru` | 엔진 데이터 |
 | `server/` | 로컬 API, 런타임 제어, 작업 프로세스와 연결 계층 |
 | `src/` | React 화면과 공용 컴포넌트 |
