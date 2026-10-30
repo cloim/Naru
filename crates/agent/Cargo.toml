@@ -1,0 +1,13 @@
+[package]
+name = "naru-agent"
+description = "Runs inside the Naru engine network namespace: port discovery, host.docker.internal and DNS"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde_json.workspace = true
+regex.workspace = true
+tokio = { version = "1", features = ["rt", "net", "io-util", "time", "macros", "sync"] }
+libc = "0.2"

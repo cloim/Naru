@@ -1,2 +1,13 @@
 <!doctype html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><meta name="theme-color" content="#163d35"/><title>Naru</title><link rel="icon" type="image/png" sizes="32x32" href="/brand/naru-icon-32.png?v=20261021"/><link rel="icon" type="image/png" sizes="64x64" href="/brand/naru-icon-64.png?v=20261021"/><link rel="apple-touch-icon" href="/brand/naru-mark.png?v=20261017c"/></head><body><div id="root"></div><script type="module" src="/src/main.jsx"></script></body></html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><meta name="theme-color" content="#163d35"/><title>Naru</title><link rel="icon" type="image/png" sizes="32x32" href="/brand/naru-icon-32.png?v=20261021"/><link rel="icon" type="image/png" sizes="64x64" href="/brand/naru-icon-64.png?v=20261021"/><link rel="apple-touch-icon" href="/brand/naru-mark.png?v=20261017c"/>
+<!-- 화면 스크립트를 내려받고 첫 상태를 확인하는 동안 보이는 준비 화면: 데스크톱 앱의 시작 화면과 같은 모습이다. -->
+<style>
+#boot{position:fixed;inset:0;display:grid;place-items:center;background:#163d35;color:#c7d6ce;font-family:Bahnschrift,"Segoe UI",sans-serif}
+#boot .box{display:flex;flex-direction:column;align-items:center;gap:20px}
+#boot .mark{font-size:44px;letter-spacing:.02em;color:#eef8e4}
+#boot .bar{width:160px;height:3px;border-radius:3px;background:#ffffff1f;overflow:hidden}
+#boot .bar::after{content:"";display:block;width:40%;height:100%;border-radius:3px;background:#d4efae;animation:boot-run 1.2s ease-in-out infinite}
+#boot .text{font-size:13px}
+@keyframes boot-run{from{transform:translateX(-100%)}to{transform:translateX(250%)}}
+@media (prefers-reduced-motion:reduce){#boot .bar::after{animation:none;width:100%;opacity:.6}}
+</style></head><body><div id="root"><div id="boot" role="status" aria-label="Naru"><div class="box"><div class="mark">Naru</div><div class="bar"></div><div class="text">Naru를 준비하는 중</div></div></div></div><script type="module" src="/src/main.jsx"></script></body></html>

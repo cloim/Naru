@@ -1,0 +1,24 @@
+//! Naru backend library. The Tauri app hosts it; job workers run it as separate processes.
+pub mod bridge;
+pub mod connections;
+pub mod context;
+pub mod diagnostics;
+pub mod disk;
+pub mod engine;
+pub mod extensions;
+pub mod forwarding;
+pub mod jobs;
+pub mod onboarding;
+pub mod paths;
+pub mod ports;
+pub mod projects;
+pub mod registry;
+pub mod runner;
+pub mod runtime;
+pub mod security;
+pub mod server;
+pub mod state;
+pub mod terminal;
+pub mod tools;
+pub mod web;
+pub mod worker;

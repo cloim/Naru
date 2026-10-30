@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Naru",
+  "version": "0.1.0",
+  "identifier": "dev.naru.app",
+  "build": {
+    "beforeBuildCommand": "npm run build:agent && npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
+    "resources": {
+      "../dist/": "dist/",
+      "../scripts/naru-boot.sh": "scripts/naru-boot.sh",
+      "../scripts/naru-gpu.sh": "scripts/naru-gpu.sh",
+      "../scripts/naru-k3s.sh": "scripts/naru-k3s.sh",
+      "../scripts/naru-netns.sh": "scripts/naru-netns.sh",
+      "../scripts/naru-port-relay.sh": "scripts/naru-port-relay.sh",
+      "../scripts/naru-forward.sh": "scripts/naru-forward.sh",
+      "../scripts/extension-file-dialog.ps1": "scripts/extension-file-dialog.ps1",
+      "../scripts/naru-agent": "scripts/naru-agent"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["Korean", "English"],
+        "displayLanguageSelector": true
+      }
+    }
+  }
+}

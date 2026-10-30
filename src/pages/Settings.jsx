@@ -62,6 +62,7 @@ const SETTING_TABS = [
   ['proxy', '프록시'],
   ['screen', '화면'],
   ['cli', 'CLI와 레지스트리'],
+  ['remote', '원격 접속'],
 ];
 const fieldset = 'm-0 min-w-0 border-0 p-0 disabled:opacity-65';
 function Settings() {
@@ -104,14 +105,13 @@ function Settings() {
           }}
         />
       </PageActions>
-      {locked &&
-        ['engine', 'kubernetes', 'proxy'].includes(tab) && (
-          <p className={cn(tw.panel, tw.groupText, 'px-5 py-3.5')}>
-            {t(
-              '엔진, Kubernetes와 프록시 설정은 엔진을 정상 종료한 뒤 바꿀 수 있습니다. 서버 시작 시 엔진 자동 시작과 화면 설정은 바로 저장됩니다.',
-            )}
-          </p>
-        )}
+      {locked && ['engine', 'kubernetes', 'proxy'].includes(tab) && (
+        <p className={cn(tw.panel, tw.groupText, 'px-5 py-3.5')}>
+          {t(
+            '엔진, Kubernetes와 프록시 설정은 엔진을 정상 종료한 뒤 바꿀 수 있습니다. 서버 시작 시 엔진 자동 시작과 화면 설정은 바로 저장됩니다.',
+          )}
+        </p>
+      )}
       <div className={cn(tw.panel, 'flex flex-col')}>
         <div className={tw.tabs} role="tablist" aria-label={t('설정 분류')}>
           {SETTING_TABS.map(([key, label]) => (
@@ -212,10 +212,7 @@ function Settings() {
                   />
                 </label>
               </fieldset>
-              <fieldset
-                disabled={saving}
-                className={fieldset}
-              >
+              <fieldset disabled={saving} className={fieldset}>
                 <label className={tw.checkbox}>
                   <input
                     type="checkbox"
@@ -337,6 +334,7 @@ function Settings() {
             </fieldset>
           )}
           {tab === 'cli' && <ConnectionTools />}
+          {tab === 'remote' && <RemoteAccess />}
         </div>
       </div>
     </section>
@@ -469,4 +467,85 @@ function ConnectionTools() {
     </section>
   );
 }
+// Tailscale serve로 다른 기기에서 접속할 때의 허용 대상. 저장하면 서버를 다시 시작하지 않아도 바로 적용된다.
+function RemoteAccess() {
+  useLocale();
+  const { notify } = useActions();
+  const data = useData('remote-access', '/remote-access');
+  const [value, setValue] = useState(null);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    if (data.data && !value) setValue({ host: data.data.host, users: data.data.users.join('\n') });
+  }, [data.data, value]);
+  if (data.error) return <ErrorState error={data.error} />;
+  if (!value) return <Skeleton />;
+  const save = async (body) => {
+    setSaving(true);
+    try {
+      await api('/remote-access', { method: 'PUT', body });
+      await data.refetch();
+      setValue(null);
+      notify(body.host ? t('원격 접속 설정을 저장했습니다.') : t('원격 접속을 껐습니다.'));
+    } catch (e) {
+      notify(e);
+    } finally {
+      setSaving(false);
+    }
+  };
+  const users = value.users
+    .split(/\r?\n/)
+    .map((u) => u.trim())
+    .filter(Boolean);
+  return (
+    <section className="max-w-[760px]">
+      <p className={cn(tw.groupText, 'mb-5 leading-[1.7]')}>
+        {t(
+          '같은 tailnet의 다른 기기에서 Naru 화면을 열 수 있습니다. 허용한 계정만 접속하며, 이 설정은 이 PC에서만 바꿀 수 있습니다',
+        )}
+      </p>
+      <label className={tw.field}>
+        <span>{t('Tailscale 호스트')}</span>
+        <input
+          value={value.host}
+          placeholder="my-pc.tailnet-name.ts.net:8461"
+          spellCheck={false}
+          onChange={(e) => setValue({ ...value, host: e.target.value })}
+        />
+      </label>
+      <label className={tw.field}>
+        <span>{t('허용할 tailnet 계정 (한 줄에 하나)')}</span>
+        <textarea
+          rows={4}
+          value={value.users}
+          spellCheck={false}
+          placeholder="me@example.com"
+          onChange={(e) => setValue({ ...value, users: e.target.value })}
+        />
+      </label>
+      <p className={cn(tw.groupText, 'mt-4 mb-5')}>
+        {t('이 PC에서 다음 명령으로 Tailscale serve를 켜 주세요')}
+        <code className="mt-2 block rounded-[7px] bg-[#f3f6ef] px-3 py-2.5 font-mono text-[12px] text-ink">
+          tailscale serve --bg --https={value.host.split(':')[1] || '443'} http://127.0.0.1:
+          {data.data.port}
+        </code>
+      </p>
+      <div className={tw.actions}>
+        <Button
+          primary
+          icon={Check}
+          disabled={saving || !value.host.trim() || !users.length}
+          onClick={() => save({ host: value.host, users })}
+        >
+          {t('원격 접속 저장')}
+        </Button>
+        {data.data.enabled && (
+          <Button disabled={saving} onClick={() => save({ host: '', users: [] })}>
+            {t('원격 접속 끄기')}
+          </Button>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export default Settings;
