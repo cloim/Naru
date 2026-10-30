@@ -187,6 +187,21 @@ async fn set_launch(enabled: bool) -> Result<()> {
     Ok(())
 }
 
+/// Login start after setup, from the settings screen: only the installed app has an executable to register.
+async fn get_launch() -> ApiResult {
+    let packaged = SHELL.get().is_some();
+    Ok(Json(json!({ "packaged": packaged, "enabled": packaged && launch_registered().await })))
+}
+
+async fn put_launch(Json(body): Json<Value>) -> ApiResult {
+    let enabled = body["enabled"].as_bool().ok_or_else(|| invalid("로그인 시 시작 여부를 확인해 주세요."))?;
+    set_launch(enabled).await?;
+    let mut config = app_config();
+    config.launch_at_login = enabled;
+    atomic_json(&app_file(), &config).await?;
+    ok()
+}
+
 async fn save(Json(body): Json<Value>) -> ApiResult {
     let known = body.as_object().is_some_and(|o| o.keys().all(|k| ["dataDir", "launchAtLogin", "port"].contains(&k.as_str())));
     if !known {
@@ -330,6 +345,7 @@ pub fn routes<S: Clone + Send + Sync + 'static>() -> Router<S> {
         .route("/api/onboarding/state", get(state))
         .route("/api/onboarding/network", post(network))
         .route("/api/app/quit", post(quit))
+        .route("/api/app/launch-at-login", get(get_launch).put(put_launch))
         .route("/api/onboarding", get(status).put(save))
         .route("/api/onboarding/wsl", post(install_wsl))
         .route("/api/onboarding/complete", post(complete))

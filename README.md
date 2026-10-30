@@ -129,7 +129,7 @@ Kubernetes 화면에서 로컬 k3s를 시작하고 리소스를 종류와 네임
 
 | 탭 | 설정 내용 |
 | --- | --- |
-| 엔진 | Moby 또는 containerd 선택, containerd 네임스페이스, 런타임 설치와 시작 및 종료, 엔진 자동 시작과 디스크 압축 |
+| 엔진 | Moby 또는 containerd 선택, containerd 네임스페이스, 런타임 설치와 시작 및 종료, 엔진 자동 시작, Windows 로그인 시 시작과 디스크 압축 |
 | Kubernetes | 자동 시작, k3s 버전, API 포트와 Traefik Ingress |
 | 프록시 | `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` |
 | 화면 | 한국어와 영어, 자동 갱신 간격 |

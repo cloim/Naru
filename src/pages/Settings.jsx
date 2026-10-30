@@ -222,6 +222,7 @@ function Settings() {
                   {t('Naru 서버 시작 시 엔진도 시작')}{' '}
                 </label>
               </fieldset>
+              <LaunchAtLogin />
             </>
           )}
           {tab === 'kubernetes' && (
@@ -468,6 +469,45 @@ function ConnectionTools() {
   );
 }
 // Tailscale serve로 다른 기기에서 접속할 때의 허용 대상. 저장하면 서버를 다시 시작하지 않아도 바로 적용된다.
+// 설정 저장 버튼과 따로, 바꾸는 즉시 Windows 시작 프로그램에 반영한다.
+// 알림은 확인 창이라 성공 때는 띄우지 않고, 바뀐 체크 상태로 결과를 보여 준다.
+function LaunchAtLogin() {
+  useLocale();
+  const { notify } = useActions();
+  const data = useData('launch-at-login', '/app/launch-at-login');
+  const [saving, setSaving] = useState(false);
+  if (!data.data) return null;
+  const { packaged, enabled } = data.data;
+  const change = async (next) => {
+    setSaving(true);
+    try {
+      await api('/app/launch-at-login', { method: 'PUT', body: { enabled: next } });
+      await data.refetch();
+    } catch (e) {
+      notify(e);
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <label className={cn(tw.checkbox, !packaged && 'opacity-60')}>
+      <input
+        type="checkbox"
+        checked={enabled}
+        disabled={!packaged || saving}
+        onChange={(e) => change(e.target.checked)}
+      />{' '}
+      <span>
+        {t('Windows에 로그인하면 창 없이 알림 영역(트레이)에서 Naru 시작')}
+        {!packaged && (
+          <small className="ml-2 text-[11px] text-muted">
+            {t('설치된 앱에서 설정할 수 있습니다')}
+          </small>
+        )}
+      </span>
+    </label>
+  );
+}
 function RemoteAccess() {
   useLocale();
   const { notify } = useActions();

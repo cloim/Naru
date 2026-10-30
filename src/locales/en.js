@@ -649,11 +649,16 @@ export default {
   '원격 접속 끄기': 'Turn off remote access',
   '원격 접속 설정을 저장했습니다.': 'Remote access saved.',
   '원격 접속을 껐습니다.': 'Remote access is off.',
-  "가상 머신 플랫폼 켜기": "Turn on Virtual Machine Platform",
-  "PC를 다시 시작하면 Windows 하이퍼바이저가 켜지고 그 뒤 이어서 확인합니다": "Restart the PC to turn on the Windows hypervisor, and the check continues afterwards",
-  "{0} 가상 머신 설정에서 중첩 가상화(VT-x, AMD-V)를 켠 뒤 다시 확인해 주세요": "Turn on nested virtualization (VT-x, AMD-V) in the {0} VM settings, then check again",
-  "VirtualBox 가상 머신에서는 Windows 하이퍼바이저가 시작되지 않아 WSL 2를 쓸 수 없으니 Hyper-V나 VMware 가상 머신에서 중첩 가상화를 켜고 설치해 주세요": "The Windows hypervisor does not start in a VirtualBox VM, so WSL 2 cannot run here; install in a Hyper-V or VMware VM with nested virtualization on",
-  "{0} 가상 머신 안에서 Windows 하이퍼바이저가 시작되지 않았으니 중첩 가상화를 켜고 가상 머신 플랫폼을 켠 뒤 PC를 다시 시작해 주세요": "The Windows hypervisor did not start inside this {0} VM; turn on nested virtualization and Virtual Machine Platform, then restart the PC",
-  "Windows 하이퍼바이저가 꺼져 있으니 가상 머신 플랫폼을 켠 뒤 PC를 다시 시작해 주세요": "The Windows hypervisor is off; turn on Virtual Machine Platform, then restart the PC",
-  "Naru를 준비하는 중": "Getting Naru ready",
+  '가상 머신 플랫폼 켜기': 'Turn on Virtual Machine Platform',
+  'PC를 다시 시작하면 Windows 하이퍼바이저가 켜지고 그 뒤 이어서 확인합니다':
+    'Restart the PC to turn on the Windows hypervisor, and the check continues afterwards',
+  '{0} 가상 머신 설정에서 중첩 가상화(VT-x, AMD-V)를 켠 뒤 다시 확인해 주세요':
+    'Turn on nested virtualization (VT-x, AMD-V) in the {0} VM settings, then check again',
+  'VirtualBox 가상 머신에서는 Windows 하이퍼바이저가 시작되지 않아 WSL 2를 쓸 수 없으니 Hyper-V나 VMware 가상 머신에서 중첩 가상화를 켜고 설치해 주세요':
+    'The Windows hypervisor does not start in a VirtualBox VM, so WSL 2 cannot run here; install in a Hyper-V or VMware VM with nested virtualization on',
+  '{0} 가상 머신 안에서 Windows 하이퍼바이저가 시작되지 않았으니 중첩 가상화를 켜고 가상 머신 플랫폼을 켠 뒤 PC를 다시 시작해 주세요':
+    'The Windows hypervisor did not start inside this {0} VM; turn on nested virtualization and Virtual Machine Platform, then restart the PC',
+  'Windows 하이퍼바이저가 꺼져 있으니 가상 머신 플랫폼을 켠 뒤 PC를 다시 시작해 주세요':
+    'The Windows hypervisor is off; turn on Virtual Machine Platform, then restart the PC',
+  'Naru를 준비하는 중': 'Getting Naru ready',
 };
