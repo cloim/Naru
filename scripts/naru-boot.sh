@@ -42,6 +42,9 @@ if [ "$(wslinfo --networking-mode 2>/dev/null)" = 'nat' ]; then
   ip -n naru-engine link set eth0 up
   ip -n naru-engine route add default via 198.19.249.1
   ip route add 198.19.249.254/32 via 198.19.249.2
+  # The engine reaches the network through the root namespace, which forwards nothing by default.
+  # Another distribution's Docker may have turned this on already; a fresh PC has only Naru.
+  sysctl -qw net.ipv4.ip_forward=1
   iptables -t nat -C POSTROUTING -s 198.19.249.0/30 ! -o naru0 -j MASQUERADE 2>/dev/null ||
     iptables -t nat -A POSTROUTING -s 198.19.249.0/30 ! -o naru0 -j MASQUERADE
   for dir in -i -o; do
