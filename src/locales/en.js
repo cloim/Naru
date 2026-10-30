@@ -62,6 +62,37 @@ export default {
   'Kubernetes 종료': 'Stop Kubernetes',
   '컨테이너 작업': 'Container operation',
   '컨테이너 실행': 'Run container',
+  '컨테이너 설정 변경': 'Edit container settings',
+  '설정 변경': 'Edit settings',
+  '변경 적용': 'Apply changes',
+  'Compose 프로젝트 {0}의 서비스 정의를 저장하고 이 서비스만 재생성합니다':
+    'Saves the service definition in Compose project {0} and recreates only this service',
+  '기존 컨테이너를 임시 보관한 뒤 새 설정으로 재생성하며, 실패하면 기존 컨테이너를 복구합니다':
+    'Keeps the existing container temporarily, recreates it with the new settings, and restores it if the operation fails',
+  '호스트IP:호스트포트:컨테이너포트 형식이며, IP를 생략하면 127.0.0.1을 사용합니다':
+    'Use host-IP:host-port:container-port format. Omitting the IP uses 127.0.0.1',
+  '호스트 IP 주소를 확인해 주세요: {0}': 'Check the host IP address: {0}',
+  '줄마다 source:target 또는 source:target:ro 형식으로 입력합니다':
+    'Enter one source:target or source:target:ro mount per line',
+  'JSON 배열 또는 공백으로 구분한 인수를 입력합니다':
+    'Enter a JSON array or space-separated arguments',
+  '재시작 정책': 'Restart policy',
+  '사용 안 함': 'Disabled',
+  'CPU 코어 수': 'CPU cores',
+  '이미지 이름을 입력해 주세요.': 'Enter an image name.',
+  '줄마다 KEY=VALUE 형식으로 입력합니다.': 'Enter one KEY=VALUE pair per line.',
+  '볼륨과 마운트': 'Volumes and mounts',
+  '실행 인수': 'Command arguments',
+  '볼륨 마운트 JSON 배열 형식이 아닙니다.': 'The volume mount value is not a JSON array.',
+  '볼륨 마운트 형식(source:target)이 올바르지 않습니다: {0}':
+    'Invalid volume mount format (source:target): {0}',
+  '실행 인수 JSON 배열 형식이 아닙니다.': 'The command arguments value is not a JSON array.',
+  '포트 형식(호스트포트:컨테이너포트)이 올바르지 않습니다: {0}':
+    'Invalid port format (host-port:container-port): {0}',
+  '포트 번호는 정수여야 합니다: {0}': 'Port numbers must be integers: {0}',
+  '포트 프로토콜은 tcp 또는 udp여야 합니다: {0}': 'The port protocol must be tcp or udp: {0}',
+  'CPU 제한은 0에서 256 사이 숫자로 입력해 주세요.': 'Enter a CPU limit between 0 and 256.',
+  '메모리 제한을 MiB 단위의 올바른 숫자로 입력해 주세요.': 'Enter a valid memory limit in MiB.',
   '이미지 가져오기': 'Pull image',
   '이미지 보내기': 'Push image',
   '이미지 빌드': 'Build image',

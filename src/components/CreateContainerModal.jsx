@@ -137,16 +137,28 @@ export function parsePortsInput(text) {
     .map((x) => x.trim())
     .filter(Boolean)
     .map((x) => {
-      const parts = x.split(':');
-      if (parts.length !== 2) {
+      const [mapping, protocol = 'tcp'] = x.split('/');
+      const parts = mapping.split(':');
+      if (![2, 3].includes(parts.length)) {
         throw new Error(t('포트 형식(호스트포트:컨테이너포트)이 올바르지 않습니다: {0}', [x]));
       }
-      const host = Number(parts[0]);
-      const container = Number(parts[1]);
+      const hostIp = parts.length === 3 ? parts[0] : undefined;
+      const host = Number(parts.at(-2));
+      const container = Number(parts.at(-1));
       if (!Number.isInteger(host) || !Number.isInteger(container)) {
         throw new Error(t('포트 번호는 정수여야 합니다: {0}', [x]));
       }
-      return { host, container, protocol: 'tcp' };
+      if (
+        hostIp &&
+        (!/^(?:\d{1,3}\.){3}\d{1,3}$/.test(hostIp) ||
+          hostIp.split('.').some((part) => Number(part) > 255))
+      ) {
+        throw new Error(t('호스트 IP 주소를 확인해 주세요: {0}', [x]));
+      }
+      if (!['tcp', 'udp'].includes(protocol)) {
+        throw new Error(t('포트 프로토콜은 tcp 또는 udp여야 합니다: {0}', [x]));
+      }
+      return { host, container, protocol, ...(hostIp ? { hostIp } : {}) };
     });
 }
 

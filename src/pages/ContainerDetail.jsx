@@ -1,7 +1,16 @@
 import { t, useLocale, formatDate } from '../i18n.js';
 import React, { lazy, Suspense, useEffect, useRef, useState, useMemo } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
-import { RotateCw, Pause, Search, X, ArrowDown, TriangleAlert, Download } from 'lucide-react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import {
+  RotateCw,
+  Pause,
+  Search,
+  X,
+  ArrowDown,
+  TriangleAlert,
+  Download,
+  Settings2,
+} from 'lucide-react';
 import {
   useActions,
   useData,
@@ -17,6 +26,7 @@ import {
 } from '../ui.jsx';
 import { cn, tw } from '../tw.js';
 import { ContainerFileExplorer } from '../components/ContainerFileExplorer.jsx';
+import { EditContainerModal } from '../components/EditContainerModal.jsx';
 import ResourceChart from '../components/ResourceChart.jsx';
 const TerminalPanel = lazy(() => import('../components/TerminalPanel.jsx'));
 
@@ -182,6 +192,7 @@ export function resourceUsage(stats) {
 
 function ContainerDetail() {
   useLocale();
+  const navigate = useNavigate();
   const { id } = useParams(),
     { job, busy } = useActions();
   const [searchParams] = useSearchParams();
@@ -189,7 +200,8 @@ function ContainerDetail() {
       ['logs', 'resources'].includes(searchParams.get('tab')) ? 'logs' : 'general',
     ),
     [logSearch, setLogSearch] = useState(''),
-    [autoScroll, setAutoScroll] = useState(true);
+    [autoScroll, setAutoScroll] = useState(true),
+    [editing, setEditing] = useState(false);
   const logEndRef = useRef(null),
     logPreRef = useRef(null);
   const detail = useData('inspect:' + id, `/containers/${id}/inspect`);
@@ -250,6 +262,12 @@ function ContainerDetail() {
     <section className={cn(tw.page, 'h-full')}>
       <PageActions>
         <PageAction
+          label={t('설정 변경')}
+          icon={Settings2}
+          disabled={busy || detail.isLoading || !!detail.error || !inspect}
+          onClick={() => setEditing(true)}
+        />
+        <PageAction
           label={t('상세 정보 다운로드 (JSON)')}
           icon={Download}
           disabled={detail.isLoading || !!detail.error || !inspect}
@@ -283,6 +301,20 @@ function ContainerDetail() {
           }
         />
       </PageActions>
+
+      {inspect && (
+        <EditContainerModal
+          inspect={inspect}
+          isOpen={editing}
+          busy={busy}
+          onClose={() => setEditing(false)}
+          onSubmit={async (payload) => {
+            const result = await job('updateContainer', { id, ...payload });
+            if (result) navigate('/containers');
+            return result;
+          }}
+        />
+      )}
 
       <div className={cn(tw.panel, 'flex min-h-0 flex-1 flex-col')}>
         <div className={tw.tabs}>

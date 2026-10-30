@@ -99,6 +99,7 @@ export const jobNames = {
   stopKubernetes: 'Kubernetes 종료',
   containerAction: '컨테이너 작업',
   createContainer: '컨테이너 실행',
+  updateContainer: '컨테이너 설정 변경',
   pullImage: '이미지 가져오기',
   pushImage: '이미지 보내기',
   buildImage: '이미지 빌드',
