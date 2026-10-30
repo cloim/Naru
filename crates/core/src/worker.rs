@@ -4,7 +4,7 @@ use crate::engine::{self, cli, close_remote_connections};
 use crate::extensions::{install_extension, uninstall_extension};
 use crate::forwarding::{create_forward, remove_forward, stop_forward};
 use crate::jobs::{assert_job_target, jobs_dir, now, validate_job};
-use crate::projects::{self, find_project, save_managed_project, LABEL_PROJECT};
+use crate::projects::{self, find_project, save_managed_project, LABEL_PROJECT, LABEL_SERVICE};
 use crate::registry::ensure_credential_helper;
 use crate::runner::{args, command, wsl, Log, Opts};
 use crate::runtime::{self, download, kubectl, require_ready, sha256};
@@ -29,7 +29,11 @@ pub async fn run_worker(id: &str) -> i32 {
     let dir = jobs_dir();
     let file = dir.join(format!("{id}.json"));
     let input_file = dir.join(format!("{id}.input.json.private"));
-    let log_file = match std::fs::OpenOptions::new().create(true).append(true).open(dir.join(format!("{id}.log"))) {
+    let log_file = match std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dir.join(format!("{id}.log")))
+    {
         Ok(f) => Arc::new(Mutex::new(f)),
         Err(e) => {
             eprintln!("{e}");
@@ -129,7 +133,17 @@ async fn execute(id: &str, kind: &str, p: &Value, log: &Log) -> Result<()> {
         "registryLogin" => {
             ensure_credential_helper(log).await?;
             let opts = Opts::timeout(60).log(log).input(s(p, "password"));
-            cli(&args(["login", s(p, "server"), "--username", s(p, "username"), "--password-stdin"]), opts).await?;
+            cli(
+                &args([
+                    "login",
+                    s(p, "server"),
+                    "--username",
+                    s(p, "username"),
+                    "--password-stdin",
+                ]),
+                opts,
+            )
+            .await?;
         }
         "registryLogout" => {
             cli(&args(["logout", s(p, "server")]), Opts::default().log(log)).await?;
@@ -140,7 +154,11 @@ async fn execute(id: &str, kind: &str, p: &Value, log: &Log) -> Result<()> {
                 bail!("대상 파일이 이미 있습니다. 새 파일 이름을 지정해 주세요.");
             }
             tokio::fs::create_dir_all(file.parent().unwrap()).await?;
-            cli(&args(["save", "-o", &wslpath(s(p, "file")).await?, s(p, "image")]), long()).await?;
+            cli(
+                &args(["save", "-o", &wslpath(s(p, "file")).await?, s(p, "image")]),
+                long(),
+            )
+            .await?;
             log(&format!("이미지 저장 완료: {}\n", s(p, "file")));
         }
         "importImage" => {
@@ -162,19 +180,39 @@ async fn execute(id: &str, kind: &str, p: &Value, log: &Log) -> Result<()> {
             cli(&args(["image", "rm", s(p, "id")]), Opts::default().log(log)).await?;
         }
         "tagImage" => {
-            cli(&args(["tag", s(p, "id"), s(p, "target")]), Opts::default().log(log)).await?;
+            cli(
+                &args(["tag", s(p, "id"), s(p, "target")]),
+                Opts::default().log(log),
+            )
+            .await?;
         }
         "createVolume" => {
-            cli(&args(["volume", "create", s(p, "name")]), Opts::default().log(log)).await?;
+            cli(
+                &args(["volume", "create", s(p, "name")]),
+                Opts::default().log(log),
+            )
+            .await?;
         }
         "removeVolume" => {
-            cli(&args(["volume", "rm", s(p, "name")]), Opts::default().log(log)).await?;
+            cli(
+                &args(["volume", "rm", s(p, "name")]),
+                Opts::default().log(log),
+            )
+            .await?;
         }
         "createNetwork" => {
-            cli(&args(["network", "create", s(p, "name")]), Opts::default().log(log)).await?;
+            cli(
+                &args(["network", "create", s(p, "name")]),
+                Opts::default().log(log),
+            )
+            .await?;
         }
         "removeNetwork" => {
-            cli(&args(["network", "rm", s(p, "id")]), Opts::default().log(log)).await?;
+            cli(
+                &args(["network", "rm", s(p, "id")]),
+                Opts::default().log(log),
+            )
+            .await?;
         }
         "pruneResources" => {
             let mut a = args(["system", "prune", "-f"]);
@@ -200,6 +238,7 @@ async fn execute(id: &str, kind: &str, p: &Value, log: &Log) -> Result<()> {
             log("미사용 네트워크 정리 완료.\n");
         }
         "createContainer" => create_container(p, log).await?,
+        "updateContainer" => update_container(id, p, log).await?,
         "buildImage" => {
             let context = std::path::absolute(s(p, "context"))?;
             if !tokio::fs::metadata(&context).await?.is_dir() {
@@ -207,7 +246,11 @@ async fn execute(id: &str, kind: &str, p: &Value, log: &Log) -> Result<()> {
             }
             let target = wslpath(&context.to_string_lossy()).await?;
             let dockerfile = format!("{target}/{}", s(p, "dockerfile"));
-            cli(&args(["build", "-f", &dockerfile, "-t", s(p, "tag"), &target]), Opts::timeout(30 * 60).log(log)).await?;
+            cli(
+                &args(["build", "-f", &dockerfile, "-t", s(p, "tag"), &target]),
+                Opts::timeout(30 * 60).log(log),
+            )
+            .await?;
         }
         "compose" => {
             let value: serde_yaml::Value = serde_yaml::from_str(s(p, "yaml"))?;
@@ -218,7 +261,12 @@ async fn execute(id: &str, kind: &str, p: &Value, log: &Log) -> Result<()> {
             log("compose.yaml을 저장했습니다.\n");
             if p["action"] == "up" {
                 let containers = engine::list("containers").await?;
-                projects::compose(&find_project(s(p, "name"), &containers).await?, &args(["up", "--detach"]), log).await?;
+                projects::compose(
+                    &find_project(s(p, "name"), &containers).await?,
+                    &args(["up", "--detach"]),
+                    log,
+                )
+                .await?;
             }
         }
         "project" => {
@@ -239,8 +287,14 @@ async fn execute(id: &str, kind: &str, p: &Value, log: &Log) -> Result<()> {
             } else if ["start", "stop", "restart"].contains(&action) {
                 // Without the compose file only the existing containers can be driven.
                 log("compose 파일이 없어 컨테이너를 직접 제어합니다.\n");
-                for c in containers.as_array().into_iter().flatten().filter(|c| projects::label(c, LABEL_PROJECT) == Some(name)) {
-                    engine::container_action(c["Id"].as_str().unwrap_or_default(), action, log).await?;
+                for c in containers
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter(|c| projects::label(c, LABEL_PROJECT) == Some(name))
+                {
+                    engine::container_action(c["Id"].as_str().unwrap_or_default(), action, log)
+                        .await?;
                 }
             } else {
                 bail!("compose 파일을 찾을 수 없어 이 작업을 실행할 수 없습니다.");
@@ -252,11 +306,22 @@ async fn execute(id: &str, kind: &str, p: &Value, log: &Log) -> Result<()> {
                 serde_yaml::Value::deserialize(document)?;
             }
             require_ready().await?;
-            wsl(&kubectl(&["apply", "-f", "-"]), Opts::timeout(120).log(log).input(s(p, "yaml"))).await?;
+            wsl(
+                &kubectl(&["apply", "-f", "-"]),
+                Opts::timeout(120).log(log).input(s(p, "yaml")),
+            )
+            .await?;
         }
         "kubeDelete" => {
             require_ready().await?;
-            let cmd = kubectl(&["-n", s(p, "namespace"), "delete", s(p, "kind"), s(p, "name"), "--timeout=60s"]);
+            let cmd = kubectl(&[
+                "-n",
+                s(p, "namespace"),
+                "delete",
+                s(p, "kind"),
+                s(p, "name"),
+                "--timeout=60s",
+            ]);
             wsl(&cmd, Opts::timeout(90).log(log)).await?;
         }
         "snapshot" => runtime::snapshot(s(p, "name"), log).await?,
@@ -272,12 +337,38 @@ async fn execute(id: &str, kind: &str, p: &Value, log: &Log) -> Result<()> {
 }
 
 async fn create_container(p: &Value, log: &Log) -> Result<()> {
-    let mut a = args(["run", "-d", "--restart", s(p, "restart")]);
+    let mut a = container_create_args(p).await?;
+    a[0] = "run".into();
+    a.insert(1, "-d".into());
+    cli(&a, Opts::timeout(15 * 60).log(log)).await?;
+    Ok(())
+}
+
+async fn container_create_args(p: &Value) -> Result<Vec<String>> {
+    let mut a = args(["create", "--restart", s(p, "restart")]);
     if let Some(name) = p["name"].as_str() {
         a.extend(["--name".into(), name.into()]);
     }
+    if let Some(nano_cpus) = p["nanoCpus"].as_i64().filter(|value| *value > 0) {
+        a.extend([
+            "--cpus".into(),
+            format!("{}", nano_cpus as f64 / 1_000_000_000.0),
+        ]);
+    }
+    if let Some(memory) = p["memory"].as_i64().filter(|value| *value > 0) {
+        a.extend(["--memory".into(), memory.to_string()]);
+    }
     for port in p["ports"].as_array().into_iter().flatten() {
-        a.extend(["-p".into(), format!("127.0.0.1:{}:{}/{}", port["host"], port["container"], s(port, "protocol"))]);
+        let host_ip = port["hostIp"].as_str().unwrap_or("127.0.0.1");
+        a.extend([
+            "-p".into(),
+            format!(
+                "{host_ip}:{}:{}/{}",
+                port["host"],
+                port["container"],
+                s(port, "protocol")
+            ),
+        ]);
     }
     for env in p["env"].as_array().into_iter().flatten() {
         a.extend(["-e".into(), env.as_str().unwrap_or_default().into()]);
@@ -290,20 +381,233 @@ async fn create_container(p: &Value, log: &Log) -> Result<()> {
         if remote_target() && windows_path(source) {
             bail!("원격 엔진의 Linux 마운트 경로를 입력해 주세요.");
         }
-        let source = if !source.starts_with('/') && windows_path(source) { wslpath(source).await? } else { source.to_string() };
-        let kind = if source.starts_with('/') || windows_path(&source) { "bind" } else { "volume" };
-        let readonly = if m["readOnly"] == true { ",readonly" } else { "" };
-        a.extend(["--mount".into(), format!("type={kind},source={source},target={target}{readonly}")]);
+        let source = if !source.starts_with('/') && windows_path(source) {
+            wslpath(source).await?
+        } else {
+            source.to_string()
+        };
+        let kind = if source.starts_with('/') || windows_path(&source) {
+            "bind"
+        } else {
+            "volume"
+        };
+        let readonly = if m["readOnly"] == true {
+            ",readonly"
+        } else {
+            ""
+        };
+        a.extend([
+            "--mount".into(),
+            format!("type={kind},source={source},target={target}{readonly}"),
+        ]);
     }
     a.push(s(p, "image").into());
-    a.extend(p["command"].as_array().into_iter().flatten().map(|c| c.as_str().unwrap_or_default().to_string()));
-    cli(&a, Opts::timeout(15 * 60).log(log)).await?;
+    a.extend(
+        p["command"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|c| c.as_str().unwrap_or_default().to_string()),
+    );
+    Ok(a)
+}
+
+async fn update_container(job_id: &str, p: &Value, log: &Log) -> Result<()> {
+    let inspected = engine::inspect("containers", s(p, "id")).await?;
+    let inspect = inspected
+        .as_array()
+        .and_then(|items| items.first())
+        .unwrap_or(&inspected);
+    let labels = inspect["Config"]["Labels"].as_object();
+    if let (Some(project_name), Some(service_name)) = (
+        labels
+            .and_then(|labels| labels.get(LABEL_PROJECT))
+            .and_then(Value::as_str),
+        labels
+            .and_then(|labels| labels.get(LABEL_SERVICE))
+            .and_then(Value::as_str),
+    ) {
+        let containers = engine::list("containers").await?;
+        let project = find_project(project_name, &containers).await?;
+        if !project.files_found {
+            bail!("Compose 원본 파일을 찾을 수 없어 설정을 변경할 수 없습니다.");
+        }
+        projects::update_service(&project, service_name, p, log).await?;
+        log("Compose 서비스 설정 변경 완료.\n");
+        return Ok(());
+    }
+
+    let host = &inspect["HostConfig"];
+    let config = &inspect["Config"];
+    let mut unsupported = vec![];
+    for (key, label) in [
+        ("Privileged", "privileged"),
+        ("ReadonlyRootfs", "읽기 전용 루트 파일시스템"),
+        ("AutoRemove", "자동 삭제"),
+    ] {
+        if host[key] == true {
+            unsupported.push(label);
+        }
+    }
+    for (key, label) in [
+        ("CapAdd", "추가 capability"),
+        ("CapDrop", "제거 capability"),
+        ("Devices", "장치 연결"),
+        ("DeviceRequests", "GPU 또는 장치 요청"),
+        ("SecurityOpt", "보안 옵션"),
+        ("Ulimits", "ulimit"),
+        ("ExtraHosts", "추가 호스트"),
+        ("Links", "컨테이너 링크"),
+    ] {
+        if host[key].as_array().is_some_and(|items| !items.is_empty()) {
+            unsupported.push(label);
+        }
+    }
+    if host["Tmpfs"]
+        .as_object()
+        .is_some_and(|items| !items.is_empty())
+    {
+        unsupported.push("tmpfs");
+    }
+    if config["Tty"] == true || config["OpenStdin"] == true {
+        unsupported.push("대화형 입출력");
+    }
+    if inspect["NetworkSettings"]["Networks"]
+        .as_object()
+        .is_some_and(|networks| networks.len() > 1)
+    {
+        unsupported.push("다중 네트워크 연결");
+    }
+    if !unsupported.is_empty() {
+        bail!(
+            "이 컨테이너는 편집 화면에서 보존할 수 없는 고급 설정을 사용합니다: {}. Compose 파일이나 Docker CLI에서 변경해 주세요.",
+            unsupported.join(", ")
+        );
+    }
+
+    let original_name = inspect["Name"]
+        .as_str()
+        .unwrap_or_default()
+        .trim_start_matches('/');
+    if original_name.is_empty() {
+        bail!("기존 컨테이너 이름을 확인할 수 없습니다.");
+    }
+    let requested_name = p["name"]
+        .as_str()
+        .filter(|name| !name.is_empty())
+        .unwrap_or(original_name);
+    let backup_name = format!(
+        "{original_name}.naru-backup-{}",
+        job_id.chars().take(8).collect::<String>()
+    );
+    let was_running = inspect["State"]["Running"].as_bool().unwrap_or(false);
+    let was_paused = inspect["State"]["Paused"].as_bool().unwrap_or(false);
+
+    if was_paused {
+        cli(&args(["unpause", s(p, "id")]), Opts::timeout(60).log(log)).await?;
+    }
+    if was_running {
+        log("기존 컨테이너를 중지합니다.\n");
+        cli(
+            &args(["stop", "--time", "10", s(p, "id")]),
+            Opts::timeout(60).log(log),
+        )
+        .await?;
+    }
+    cli(
+        &args(["rename", s(p, "id"), &backup_name]),
+        Opts::timeout(60).log(log),
+    )
+    .await?;
+    log(&format!("기존 컨테이너 임시 보관: {backup_name}\n"));
+
+    let mut create_input = p.clone();
+    create_input["name"] = requested_name.into();
+    let mut create_args = container_create_args(&create_input).await?;
+    if let Some(workdir) = inspect["Config"]["WorkingDir"]
+        .as_str()
+        .filter(|value| !value.is_empty())
+    {
+        create_args.splice(1..1, ["--workdir".into(), workdir.into()]);
+    }
+    if let Some(user) = inspect["Config"]["User"]
+        .as_str()
+        .filter(|value| !value.is_empty())
+    {
+        create_args.splice(1..1, ["--user".into(), user.into()]);
+    }
+    if let Some(entrypoint) = inspect["Config"]["Entrypoint"]
+        .as_array()
+        .and_then(|value| value.first())
+        .and_then(Value::as_str)
+    {
+        create_args.splice(1..1, ["--entrypoint".into(), entrypoint.into()]);
+    }
+    if let Some(hostname) = inspect["Config"]["Hostname"]
+        .as_str()
+        .filter(|value| !value.is_empty())
+    {
+        create_args.splice(1..1, ["--hostname".into(), hostname.into()]);
+    }
+    if let Some(network) = inspect["HostConfig"]["NetworkMode"]
+        .as_str()
+        .filter(|value| !value.is_empty() && *value != "default")
+    {
+        create_args.splice(1..1, ["--network".into(), network.into()]);
+    }
+    if let Some(labels) = labels {
+        for (key, value) in labels {
+            if let Some(value) = value.as_str() {
+                create_args.splice(1..1, ["--label".into(), format!("{key}={value}")]);
+            }
+        }
+    }
+
+    let apply = async {
+        cli(&create_args, Opts::timeout(15 * 60).log(log)).await?;
+        if was_running {
+            cli(&args(["start", requested_name]), Opts::timeout(60).log(log)).await?;
+            if was_paused {
+                cli(&args(["pause", requested_name]), Opts::timeout(60).log(log)).await?;
+            }
+        }
+        anyhow::Ok(())
+    }
+    .await;
+    if let Err(error) = apply {
+        log("새 설정 적용 실패, 기존 컨테이너를 복구합니다.\n");
+        let _ = cli(
+            &args(["rm", "-f", requested_name]),
+            Opts::timeout(60).log(log),
+        )
+        .await;
+        cli(
+            &args(["rename", &backup_name, original_name]),
+            Opts::timeout(60).log(log),
+        )
+        .await?;
+        if was_running {
+            cli(&args(["start", original_name]), Opts::timeout(60).log(log)).await?;
+            if was_paused {
+                cli(&args(["pause", original_name]), Opts::timeout(60).log(log)).await?;
+            }
+        }
+        bail!("설정 적용에 실패하여 기존 컨테이너를 복구했습니다: {error}");
+    }
+    cli(&args(["rm", &backup_name]), Opts::timeout(60).log(log)).await?;
+    log("컨테이너 설정 변경 완료.\n");
     Ok(())
 }
 
 async fn scan_image(id: &str, image: &str, log: &Log) -> Result<()> {
     require_ready().await?;
-    if wsl(&args(["test", "-x", "/usr/local/bin/trivy"]), Opts::default()).await.is_err() {
+    if wsl(
+        &args(["test", "-x", "/usr/local/bin/trivy"]),
+        Opts::default(),
+    )
+    .await
+    .is_err()
+    {
         let tar = data().join("cache").join("trivy_0.72.0_Linux-64bit.tar.gz");
         if !tar.exists() {
             download(TRIVY_URL, &tar, Some(log)).await?;
@@ -312,17 +616,36 @@ async fn scan_image(id: &str, image: &str, log: &Log) -> Result<()> {
             bail!("Trivy SHA256 검증 실패.");
         }
         let linux = wslpath(&tar.to_string_lossy()).await?;
-        wsl(&args(["tar", "-xzf", &linux, "-C", "/usr/local/bin", "trivy"]), Opts::default()).await?;
+        wsl(
+            &args(["tar", "-xzf", &linux, "-C", "/usr/local/bin", "trivy"]),
+            Opts::default(),
+        )
+        .await?;
     }
     let input = format!("/var/lib/naru/scan-{id}.tar");
-    cli(&args(["save", "-o", &input, image]), Opts::timeout(15 * 60).log(log)).await?;
+    cli(
+        &args(["save", "-o", &input, image]),
+        Opts::timeout(15 * 60).log(log),
+    )
+    .await?;
     let result = async {
         let scans = data().join("scans");
         tokio::fs::create_dir_all(&scans).await?;
         let report_file = scans.join(format!("{id}.json"));
         let output = wslpath(&report_file.to_string_lossy()).await?;
         wsl(
-            &args(["/usr/local/bin/trivy", "image", "--input", &input, "--scanners", "vuln", "--format", "json", "--output", &output]),
+            &args([
+                "/usr/local/bin/trivy",
+                "image",
+                "--input",
+                &input,
+                "--scanners",
+                "vuln",
+                "--format",
+                "json",
+                "--output",
+                &output,
+            ]),
             Opts::timeout(15 * 60).log(log),
         )
         .await?;
@@ -335,7 +658,9 @@ async fn scan_image(id: &str, image: &str, log: &Log) -> Result<()> {
                 counts.insert(severity, n.into());
             }
         }
-        log(&serde_json::to_string_pretty(&json!({ "image": image, "severityCounts": counts, "report": report_file }))?);
+        log(&serde_json::to_string_pretty(
+            &json!({ "image": image, "severityCounts": counts, "report": report_file }),
+        )?);
         anyhow::Ok(())
     }
     .await;
@@ -355,13 +680,17 @@ async fn install_cli(log: &Log) -> Result<()> {
     let plugins = bin.join("cli-plugins").to_string_lossy().into_owned();
     let config_dir = data().join("docker");
     tokio::fs::create_dir_all(&config_dir).await?;
-    let mut naru_config: Value = read_json(&config_dir.join("config.json"), Some(json!({}))).await?;
+    let mut naru_config: Value =
+        read_json(&config_dir.join("config.json"), Some(json!({}))).await?;
     naru_config["cliPluginsExtraDirs"] = json!([plugins]);
     naru_config["credsStore"] = "wincred".into();
     atomic_json(&config_dir.join("config.json"), &naru_config).await?;
     let user_dir = user_docker_config();
     let mut user: Value = read_json(&user_dir.join("config.json"), Some(json!({}))).await?;
-    let mut dirs: Vec<Value> = user["cliPluginsExtraDirs"].as_array().cloned().unwrap_or_default();
+    let mut dirs: Vec<Value> = user["cliPluginsExtraDirs"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
     if !dirs.iter().any(|d| d.as_str() == Some(plugins.as_str())) {
         dirs.push(plugins.clone().into());
     }
@@ -371,18 +700,53 @@ async fn install_cli(log: &Log) -> Result<()> {
     let docker = bin.join("docker.exe").to_string_lossy().into_owned();
     let config = user_dir.to_string_lossy().into_owned();
     let (context, host) = ("naru", "host=npipe:////./pipe/naru_engine");
-    let listed = command(&docker, &args(["--config", &config, "context", "ls", "--format", "{{json .}}"]), Opts::default()).await?;
+    let listed = command(
+        &docker,
+        &args([
+            "--config",
+            &config,
+            "context",
+            "ls",
+            "--format",
+            "{{json .}}",
+        ]),
+        Opts::default(),
+    )
+    .await?;
     if !engine::lines(&listed)?.iter().any(|c| c["Name"] == context) {
-        command(&docker, &args(["--config", &config, "context", "create", context, "--docker", host]), Opts::default().log(log)).await?;
+        command(
+            &docker,
+            &args([
+                "--config", &config, "context", "create", context, "--docker", host,
+            ]),
+            Opts::default().log(log),
+        )
+        .await?;
     }
-    command(&docker, &args(["--config", &config, "context", "update", context, "--docker", host]), Opts::default().log(log)).await?;
-    command(&docker, &args(["--config", &config, "context", "use", context]), Opts::default().log(log)).await?;
+    command(
+        &docker,
+        &args([
+            "--config", &config, "context", "update", context, "--docker", host,
+        ]),
+        Opts::default().log(log),
+    )
+    .await?;
+    command(
+        &docker,
+        &args(["--config", &config, "context", "use", context]),
+        Opts::default().log(log),
+    )
+    .await?;
     let _ = tokio::fs::remove_file(bin.join("naru.cmd")).await;
     crate::tools::ensure_user_path(&bin, log).await?;
     let kubeconfig = data().join("kubeconfig.yaml");
     for tool in ["kubectl", "helm"] {
         let exe = bin.join(format!("{tool}.exe"));
-        let script = format!("@echo off\r\n\"{}\" --kubeconfig \"{}\" %*\r\n", exe.display(), kubeconfig.display());
+        let script = format!(
+            "@echo off\r\n\"{}\" --kubeconfig \"{}\" %*\r\n",
+            exe.display(),
+            kubeconfig.display()
+        );
         tokio::fs::write(bin.join(format!("naru-{tool}.cmd")), script).await?;
     }
     log(&format!("Windows CLI 설치 완료: {}\nDocker 기본 context: {context}\ndocker ps\ndocker compose version\n", bin.display()));
@@ -400,19 +764,56 @@ async fn restore_snapshot(id: &str, log: &Log) -> Result<()> {
     let stamp = chrono::Utc::now().timestamp_millis();
     let backup = dir.join(format!("pre-restore-{stamp}.tar"));
     let location = data().join("wsl").to_string_lossy().into_owned();
-    command("wsl.exe", &args(["--export", DISTRO, &backup.to_string_lossy()]), Opts::timeout(15 * 60).log(log)).await?;
-    command("wsl.exe", &args(["--unregister", DISTRO]), Opts::timeout(60).log(log)).await?;
+    command(
+        "wsl.exe",
+        &args(["--export", DISTRO, &backup.to_string_lossy()]),
+        Opts::timeout(15 * 60).log(log),
+    )
+    .await?;
+    command(
+        "wsl.exe",
+        &args(["--unregister", DISTRO]),
+        Opts::timeout(60).log(log),
+    )
+    .await?;
     let restored = async {
-        command("wsl.exe", &args(["--import", DISTRO, &location, &tar.to_string_lossy(), "--version", "2"]), Opts::timeout(15 * 60).log(log)).await?;
+        command(
+            "wsl.exe",
+            &args([
+                "--import",
+                DISTRO,
+                &location,
+                &tar.to_string_lossy(),
+                "--version",
+                "2",
+            ]),
+            Opts::timeout(15 * 60).log(log),
+        )
+        .await?;
         save_settings(meta["settings"].clone()).await?;
         anyhow::Ok(())
     }
     .await;
     if let Err(e) = restored {
         log("복원 실패, 변경 전 배포판 복구를 시도합니다.\n");
-        command("wsl.exe", &args(["--import", DISTRO, &location, &backup.to_string_lossy(), "--version", "2"]), Opts::timeout(15 * 60).log(log)).await?;
+        command(
+            "wsl.exe",
+            &args([
+                "--import",
+                DISTRO,
+                &location,
+                &backup.to_string_lossy(),
+                "--version",
+                "2",
+            ]),
+            Opts::timeout(15 * 60).log(log),
+        )
+        .await?;
         return Err(e);
     }
-    log(&format!("스냅샷 복원 완료. 변경 전 백업: {}\n", backup.display()));
+    log(&format!(
+        "스냅샷 복원 완료. 변경 전 백업: {}\n",
+        backup.display()
+    ));
     Ok(())
 }
