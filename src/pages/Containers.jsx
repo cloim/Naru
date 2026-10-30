@@ -33,9 +33,12 @@ import {
   IconButton,
   CopyButton,
   Badge,
+  RowMenu,
+  StatCards,
   Skeleton,
   ErrorState,
   containerName,
+  bytes,
   RuntimeEmpty,
   useResource,
   ResourceGrid,
@@ -84,7 +87,8 @@ const ProjectContext = createContext(null);
 
 function ProjectRow({ data: g }) {
   useLocale();
-  const { job, confirm, busy, toggle, collapsed, openLogs, openManage } = useContext(ProjectContext);
+  const { job, confirm, busy, toggle, collapsed, openLogs, openManage } =
+    useContext(ProjectContext);
   const open = !collapsed.has(g.__group);
   const named = g.__group !== NO_PROJECT;
   const run = (action) => job('project', { name: g.__group, action });
@@ -98,7 +102,12 @@ function ProjectRow({ data: g }) {
         className={cn('flex-none text-[#7a857c] transition-transform', open && 'rotate-90')}
         aria-hidden
       />
-      <Boxes size={19} className="flex-none text-[#4f7750]" aria-hidden />
+      {/* 프로젝트 묶음은 여러 상자 아이콘, 프로젝트에 속하지 않은 컨테이너 묶음은 상자 하나로 구분한다. */}
+      {named ? (
+        <Boxes size={19} className="flex-none text-[#4f7750]" aria-hidden />
+      ) : (
+        <Box size={19} className="flex-none text-[#8c978e]" aria-hidden />
+      )}
       <div className="flex min-w-0 flex-col leading-[1.5] max-tablet:flex-1">
         <strong className="truncate text-[13px] text-ink">
           {g.virtual ? 'coolify-util' : named ? g.__group : t('프로젝트 없음')}
@@ -111,26 +120,26 @@ function ProjectRow({ data: g }) {
               : t('Compose로 만들지 않은 컨테이너')}
         </small>
       </div>
-      <Badge state={g.running > 0 ? 'running' : 'exited'}>{`${g.running}/${g.total}`}</Badge>
+      <Badge state={g.running > 0 ? 'running' : 'exited'} marker={false}>
+        {`${g.running}/${g.total}`}
+      </Badge>
       {named && !g.virtual && (
         <div className={cn(tw.rowActions, 'ml-auto')} onClick={(e) => e.stopPropagation()}>
-          {g.total === 0 && (
+          {g.total === 0 ? (
             <IconButton
               icon={Play}
               label={t('{0} 프로젝트 up', [g.__group])}
               disabled={busy || !g.info?.filesFound}
               onClick={() => run('up')}
             />
-          )}
-          {g.total > 0 && g.running < g.total && (
+          ) : g.running < g.total ? (
             <IconButton
               icon={Play}
               label={t('{0} 프로젝트 시작', [g.__group])}
               disabled={busy}
               onClick={() => run('start')}
             />
-          )}
-          {g.running > 0 && (
+          ) : (
             <IconButton
               icon={Square}
               label={t('{0} 프로젝트 정지', [g.__group])}
@@ -138,40 +147,43 @@ function ProjectRow({ data: g }) {
               onClick={() => run('stop')}
             />
           )}
-          {g.total > 0 && (
-            <IconButton
-              className="max-tablet:hidden"
-              icon={RotateCw}
-              label={t('{0} 프로젝트 재시작', [g.__group])}
-              disabled={busy}
-              onClick={() => run('restart')}
-            />
-          )}
-          {g.total > 0 && (
-            <IconButton
-              className="max-tablet:hidden"
-              icon={Terminal}
-              label={t('{0} 프로젝트 로그 보기', [g.__group])}
-              onClick={() => openLogs(g.__group)}
-            />
-          )}
-          <IconButton
-            icon={Settings2}
-            label={t('{0} 프로젝트 관리', [g.__group])}
-            onClick={() => openManage(g)}
-          />
-          <IconButton
-            icon={Trash2}
-            label={t('{0} 프로젝트 삭제', [g.__group])}
-            danger="row"
-            disabled={busy}
-            onClick={() =>
-              confirm(
-                t('프로젝트 삭제'),
-                t('{0} 프로젝트를 삭제합니다. 소속된 컨테이너도 모두 함께 삭제됩니다.', [g.__group]),
-                () => job('deleteProject', { name: g.__group }),
-              )
-            }
+          <RowMenu
+            label={t('{0} 프로젝트 작업 더 보기', [g.__group])}
+            items={[
+              g.running > 0 &&
+                g.running < g.total && {
+                  icon: Square,
+                  label: t('정지'),
+                  disabled: busy,
+                  onClick: () => run('stop'),
+                },
+              g.total > 0 && {
+                icon: RotateCw,
+                label: t('재시작'),
+                disabled: busy,
+                onClick: () => run('restart'),
+              },
+              g.total > 0 && {
+                icon: Terminal,
+                label: t('로그 보기'),
+                onClick: () => openLogs(g.__group),
+              },
+              { icon: Settings2, label: t('프로젝트 관리'), onClick: () => openManage(g) },
+              {
+                icon: Trash2,
+                label: t('프로젝트 삭제'),
+                danger: true,
+                disabled: busy,
+                onClick: () =>
+                  confirm(
+                    t('프로젝트 삭제'),
+                    t('{0} 프로젝트를 삭제합니다. 소속된 컨테이너도 모두 함께 삭제됩니다.', [
+                      g.__group,
+                    ]),
+                    () => job('deleteProject', { name: g.__group }),
+                  ),
+              },
+            ]}
           />
         </div>
       )}
@@ -253,7 +265,7 @@ function ProjectLogs({ name, onClose }) {
   );
 }
 
-function ProjectManage({ group, onClose, onLogs, containers = [] }) {
+function ProjectManage({ group, onClose, containers = [] }) {
   useLocale();
   const { job, confirm, notify, busy } = useActions(),
     qc = useQueryClient(),
@@ -282,25 +294,6 @@ function ProjectManage({ group, onClose, onLogs, containers = [] }) {
       size="xl"
       footer={
         <div className="flex w-full flex-wrap items-center gap-2.25">
-          {group?.total > 0 && (
-            // 좁은 화면의 머리 행에는 재시작과 로그 버튼을 두지 않으므로 여기서 제공한다.
-            <div className="flex gap-2.25 tablet:hidden">
-              <Button icon={RotateCw} disabled={busy} onClick={() => run('restart')}>
-                {' '}
-                {t('재시작')}{' '}
-              </Button>
-              <Button
-                icon={Terminal}
-                onClick={() => {
-                  close();
-                  onLogs(name);
-                }}
-              >
-                {' '}
-                {t('로그')}{' '}
-              </Button>
-            </div>
-          )}
           <Button
             icon={Trash2}
             disabled={busy}
@@ -588,13 +581,24 @@ function ProjectManage({ group, onClose, onLogs, containers = [] }) {
 
 function Containers() {
   const locale = useLocale();
-  const { status, job, form, confirm, busy } = useActions(),
+  const { status, job, form, confirm, notify, busy } = useActions(),
     data = useResource('containers'),
     navigate = useNavigate();
   const projects = useData('projects', '/projects', {
     enabled: !!status?.ready,
     refetchInterval: (status?.pollSeconds || 5) * 1000,
   });
+  // 사용량은 로컬 엔진의 진단 수집값을 쓴다. 원격 엔진에서는 요약 카드와 열을 비워 둔다.
+  const remote = isRemoteEngine();
+  const usage = useData('diagnostic-resources', '/diagnostics/resources', {
+    enabled: !!status?.ready && !remote,
+    refetchInterval: (status?.pollSeconds || 5) * 1000,
+    retry: false,
+  });
+  const cpuById = useMemo(
+    () => new Map((usage.data?.containers || []).map((c) => [c.id.slice(0, 12), c])),
+    [usage.data],
+  );
   const [search, setSearch] = useState(''),
     [tab, setTab] = useState('all'),
     [showSystem, setShowSystem] = useState(false),
@@ -655,10 +659,27 @@ function Containers() {
         total: members.length,
         running: members.filter((r) => r.State === 'running').length,
       });
-      for (const r of shown) if (projectOf(r) === key) result.push({ ...r, __groupKey: key });
+      for (const r of shown)
+        if (projectOf(r) === key)
+          result.push({ ...r, __groupKey: key, __cpu: cpuById.get(r.Id?.slice(0, 12))?.cpu });
     }
     return result;
-  }, [candidates, visible, projects.data, tab, search]);
+  }, [candidates, visible, projects.data, tab, search, cpuById]);
+  const summary = useMemo(() => {
+    const live = candidates.filter((r) => r.State === 'running');
+    const projectNames = new Set([
+      ...(projects.data || []).map((p) => p.name),
+      ...candidates.map((r) => r.Labels?.[PROJECT_LABEL]).filter(Boolean),
+    ]);
+    const used = candidates.map((r) => cpuById.get(r.Id?.slice(0, 12))).filter(Boolean);
+    return {
+      running: live.length,
+      total: candidates.length,
+      projects: projectNames.size,
+      cpu: used.length ? used.reduce((sum, c) => sum + (c.cpu || 0), 0) : null,
+      memory: used.length ? used.reduce((sum, c) => sum + (c.memory || 0), 0) : null,
+    };
+  }, [candidates, projects.data, cpuById]);
   const collapsed = useMemo(() => {
     const set = new Set();
     for (const r of rows) {
@@ -846,11 +867,24 @@ function Containers() {
           );
         },
       },
+      ...(remote
+        ? []
+        : [
+            {
+              headerName: 'CPU',
+              field: '__cpu',
+              width: 90,
+              minWidth: 80,
+              type: 'rightAligned',
+              valueFormatter: ({ value }) =>
+                Number.isFinite(value) ? `${value.toFixed(1)}%` : '-',
+            },
+          ]),
       {
         headerName: '',
         colId: 'actions',
-        width: 175,
-        minWidth: 175,
+        width: 136,
+        minWidth: 136,
         sortable: false,
         cellRenderer: ({ data: r }) => (
           <div className={tw.rowActions} onClick={(e) => e.stopPropagation()}>
@@ -870,67 +904,70 @@ function Containers() {
               label={t('{0} 로그 보기', [containerName(r)])}
               onClick={() => navigate('/containers/' + r.Id + '?tab=logs')}
             />
-            <IconButton
-              icon={Copy}
-              label={t('{0} 설정 복제', [containerName(r)])}
-              disabled={busy}
-              onClick={async () => {
-                try {
-                  const inspect = await api('/containers/' + r.Id + '/inspect');
-                  const data = Array.isArray(inspect) ? inspect[0] : inspect;
-                  const cfg = data.Config || {};
-                  const hostConfig = data.HostConfig || {};
-                  const portBindings = hostConfig.PortBindings || {};
-                  const portsStr = Object.entries(portBindings)
-                    .map(([cPort, bindings]) => {
-                      const p = bindings?.[0]?.HostPort;
-                      const target = cPort.split('/')[0];
-                      const nextPort = Number(p) ? Number(p) + 1 : p;
-                      return p ? `${nextPort}:${target}` : '';
-                    })
-                    .filter(Boolean)
-                    .join(', ');
-                  const mountsStr = (data.Mounts || [])
-                    .map(
-                      (m) => `${m.Source || m.Name}:${m.Destination}${m.RW === false ? ':ro' : ''}`,
-                    )
-                    .join('\n');
-                  const envStr = (cfg.Env || []).filter((e) => !e.startsWith('PATH=')).join('\n');
-                  const cmdStr = Array.isArray(cfg.Cmd) ? cfg.Cmd.join(' ') : cfg.Cmd || '';
-
-                  setCloneTarget({
-                    image: cfg.Image || r.Image,
-                    name: `${containerName(r)}-clone`,
-                    ports: portsStr,
-                    env: envStr,
-                    mounts: mountsStr,
-                    command: cmdStr,
-                  });
-                  setCreateModal(true);
-                } catch (e) {
-                  notify(e);
-                }
-              }}
-            />
-            <IconButton
-              icon={Trash2}
-              label={t('{0} 삭제', [containerName(r)])}
-              danger="row"
-              disabled={busy}
-              onClick={() =>
-                confirm(
-                  t('컨테이너 삭제'),
-                  t('{0} 컨테이너를 삭제합니다. 연결된 볼륨은 보존됩니다.', [containerName(r)]),
-                  () => job('containerAction', { id: r.Id, action: 'remove' }),
-                )
-              }
+            <RowMenu
+              label={t('{0} 작업 더 보기', [containerName(r)])}
+              items={[
+                {
+                  icon: Copy,
+                  label: t('설정 복제'),
+                  disabled: busy,
+                  onClick: () => cloneContainer(r),
+                },
+                {
+                  icon: Trash2,
+                  label: t('삭제'),
+                  danger: true,
+                  disabled: busy,
+                  onClick: () =>
+                    confirm(
+                      t('컨테이너 삭제'),
+                      t('{0} 컨테이너를 삭제합니다. 연결된 볼륨은 보존됩니다.', [containerName(r)]),
+                      () => job('containerAction', { id: r.Id, action: 'remove' }),
+                    ),
+                },
+              ]}
             />
           </div>
         ),
       },
     ],
-    [locale, busy, job, confirm, navigate, selectedIds, candidates],
+    [locale, busy, job, confirm, navigate, selectedIds, candidates, remote],
   );
+  const cloneContainer = async (r) => {
+    try {
+      const inspect = await api('/containers/' + r.Id + '/inspect');
+      const data = Array.isArray(inspect) ? inspect[0] : inspect;
+      const cfg = data.Config || {};
+      const hostConfig = data.HostConfig || {};
+      const portBindings = hostConfig.PortBindings || {};
+      const portsStr = Object.entries(portBindings)
+        .map(([cPort, bindings]) => {
+          const p = bindings?.[0]?.HostPort;
+          const target = cPort.split('/')[0];
+          const nextPort = Number(p) ? Number(p) + 1 : p;
+          return p ? `${nextPort}:${target}` : '';
+        })
+        .filter(Boolean)
+        .join(', ');
+      const mountsStr = (data.Mounts || [])
+        .map((m) => `${m.Source || m.Name}:${m.Destination}${m.RW === false ? ':ro' : ''}`)
+        .join('\n');
+      const envStr = (cfg.Env || []).filter((e) => !e.startsWith('PATH=')).join('\n');
+      const cmdStr = Array.isArray(cfg.Cmd) ? cfg.Cmd.join(' ') : cfg.Cmd || '';
+
+      setCloneTarget({
+        image: cfg.Image || r.Image,
+        name: `${containerName(r)}-clone`,
+        ports: portsStr,
+        env: envStr,
+        mounts: mountsStr,
+        command: cmdStr,
+      });
+      setCreateModal(true);
+    } catch (e) {
+      notify(e);
+    }
+  };
   if (!status?.ready) return status ? <RuntimeEmpty /> : <Skeleton />;
   return (
     <section className={tw.page}>
@@ -986,6 +1023,21 @@ function Containers() {
           onClick={() => setCreateModal(true)}
         />
       </PageActions>
+      <StatCards
+        items={[
+          [t('실행 중'), summary.running, `/ ${summary.total}`],
+          [t('Compose 프로젝트'), summary.projects],
+          ...(remote
+            ? []
+            : [
+                [t('CPU 사용량'), summary.cpu === null ? '-' : summary.cpu.toFixed(1), '%'],
+                [
+                  t('메모리'),
+                  ...(summary.memory === null ? ['-'] : bytes(summary.memory).split(' ')),
+                ],
+              ]),
+        ]}
+      />
       <div className={tw.gridPanel}>
         <div className="flex items-center justify-between border-b border-line px-5 max-tablet:px-3">
           <div className="flex gap-5.5 overflow-x-auto">
@@ -1145,7 +1197,6 @@ function Containers() {
         <ProjectManage
           group={manageGroup}
           onClose={() => setManageGroup(null)}
-          onLogs={setLogProject}
           containers={candidates}
         />
       )}
