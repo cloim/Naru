@@ -13,7 +13,7 @@ naru-core = { path = "../crates/core" }
 anyhow.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
-tauri = { version = "2", features = ["tray-icon"] }
+tauri = { version = "2", features = ["tray-icon", "webview-data-url"] }
 tauri-plugin-single-instance = "2"
 
 [target.'cfg(windows)'.dependencies]

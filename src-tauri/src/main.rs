@@ -30,6 +30,18 @@ fn runtime() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new_multi_thread().enable_all().build().expect("tokio runtime")
 }
 
+/// Shown the moment the window opens, while WebView2 starts and the server comes up; index.html repeats it
+/// until the screens load, so the window never sits blank.
+const SPLASH: &str = include_str!("splash.html");
+
+fn splash_url() -> tauri::Url {
+    let encoded: String = SPLASH
+        .bytes()
+        .map(|b| if b.is_ascii_alphanumeric() { (b as char).to_string() } else { format!("%{b:02X}") })
+        .collect();
+    format!("data:text/html;charset=utf-8,{encoded}").parse().expect("splash url")
+}
+
 fn show(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
@@ -37,13 +49,34 @@ fn show(app: &AppHandle) {
         let _ = window.set_focus();
         return;
     }
-    let url = format!("http://127.0.0.1:{}", port()).parse().expect("server url");
-    let built = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
+    // Setup opens maximized so every step has room; afterwards the window opens centered.
+    let setup = !state::app_config().onboarded;
+    let built = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(splash_url()))
         .title("Naru")
         .inner_size(1360.0, 860.0)
         .min_inner_size(960.0, 600.0)
+        .center()
+        .maximized(setup)
+        .background_color(tauri::window::Color(22, 61, 53, 255))
         .build();
-    if let Ok(window) = built {
+    // Without a window there is nothing to show the user, so say why and end instead of idling in the tray.
+    let window = match built {
+        Ok(window) => window,
+        Err(e) => {
+            preflight::show_error(&format!("Naru 창을 열지 못했습니다.
+
+{e}"));
+            app.exit(1);
+            return;
+        }
+    };
+    {
+        let target = window.clone();
+        tauri::async_runtime::spawn(async move {
+            wait_for_server().await;
+            let url = format!("http://127.0.0.1:{}", port()).parse().expect("server url");
+            let _ = target.navigate(url);
+        });
         let hide = window.clone();
         window.on_window_event(move |event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
@@ -61,7 +94,7 @@ fn show(app: &AppHandle) {
 }
 
 async fn wait_for_server() {
-    for _ in 0..100 {
+    for _ in 0..600 {
         if tokio::net::TcpStream::connect(("127.0.0.1", port())).await.is_ok() {
             return;
         }
@@ -143,11 +176,7 @@ fn main() {
                 })
                 .build(app)?;
             if !background {
-                tauri::async_runtime::spawn(async move {
-                    wait_for_server().await;
-                    let app = handle.clone();
-                    let _ = handle.run_on_main_thread(move || show(&app));
-                });
+                show(&handle);
             }
             Ok(())
         })

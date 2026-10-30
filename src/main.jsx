@@ -466,16 +466,34 @@ function EngineBootstrap() {
   if (state.error) return <p className={tw.page}>{state.error.message}</p>;
   return state.data ? <Shell /> : <Skeleton />;
 }
+// index.html의 준비 화면과 같은 모습: 첫 상태 확인과 온보딩 화면을 내려받는 동안 이어서 보인다.
+function BootSplash() {
+  return (
+    <div
+      role="status"
+      aria-label={t('Naru를 준비하는 중')}
+      className="fixed inset-0 grid place-items-center bg-brand font-display text-[#c7d6ce]"
+    >
+      <div className="flex flex-col items-center gap-5">
+        <div className="text-[44px] tracking-[0.02em] text-[#eef8e4]">Naru</div>
+        <div className="h-0.75 w-40 overflow-hidden rounded-full bg-[#ffffff1f]">
+          <div className="h-full w-2/5 animate-pulse rounded-full bg-lime" />
+        </div>
+        <div className="text-[13px]">{t('Naru를 준비하는 중')}</div>
+      </div>
+    </div>
+  );
+}
 // 처음 실행하면 온보딩부터 진행한다. 상태를 알 수 없으면(원격 엔진 선택 등) 기존 화면으로 들어간다.
 function OnboardingGate() {
   const state = useQuery({
     queryKey: ['onboarding-state'],
     queryFn: () => api('/onboarding/state'),
   });
-  if (state.isLoading) return <Skeleton />;
+  if (state.isLoading) return <BootSplash />;
   if (state.data && !state.data.onboarded)
     return (
-      <Suspense fallback={<Skeleton />}>
+      <Suspense fallback={<BootSplash />}>
         <Onboarding onDone={() => state.refetch()} />
       </Suspense>
     );

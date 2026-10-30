@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>Naru</title>
+<style>
+html,body{margin:0;height:100%;background:#163d35;color:#c7d6ce;font-family:Bahnschrift,"Segoe UI",sans-serif}
+body{display:grid;place-items:center}
+.box{display:flex;flex-direction:column;align-items:center;gap:20px}
+.mark{font-size:44px;letter-spacing:.02em;color:#eef8e4}
+.bar{width:160px;height:3px;border-radius:3px;background:#ffffff1f;overflow:hidden}
+.bar::after{content:"";display:block;width:40%;height:100%;border-radius:3px;background:#d4efae;animation:run 1.2s ease-in-out infinite}
+.text{font-size:13px}
+@keyframes run{from{transform:translateX(-100%)}to{transform:translateX(250%)}}
+@media (prefers-reduced-motion:reduce){.bar::after{animation:none;width:100%;opacity:.6}}
+</style>
+</head>
+<body>
+<div class="box" role="status" aria-label="Naru를 준비하는 중">
+<div class="mark">Naru</div>
+<div class="bar"></div>
+<div class="text">Naru를 준비하는 중</div>
+</div>
+</body>
+</html>
