@@ -14,12 +14,15 @@ import {
   XCircle,
   Network as NetworkIcon,
   BrushCleaning,
+  HardDrive,
 } from 'lucide-react';
 import {
   useActions,
   Button,
   IconButton,
   Badge,
+  RowMenu,
+  StatCards,
   Skeleton,
   RuntimeEmpty,
   useResource,
@@ -75,7 +78,13 @@ function VolumeProjectRow({ data: g }) {
           {named ? t('Compose 프로젝트 볼륨') : t('Compose로 만들지 않은 볼륨')}
         </small>
       </div>
-      <Badge state="ready">{t('볼륨 {0}개', [g.total])}</Badge>
+      <Badge tone={g.used > 0 ? 'ok' : 'off'}>
+        {g.used === 0
+          ? t('미사용')
+          : g.used === g.total
+            ? t('모두 사용 중')
+            : t('{0}/{1} 사용 중', [g.used, g.total])}
+      </Badge>
     </div>
   );
 }
@@ -100,6 +109,29 @@ function Resources({ kind }) {
 
   const volume = kind === 'volumes',
     label = volume ? t('볼륨') : t('네트워크');
+  // 컨테이너 목록의 마운트와 네트워크 연결로 각 리소스를 쓰는 컨테이너 수를 센다.
+  const usedBy = useMemo(() => {
+    const counts = new Map();
+    for (const c of containers.data || []) {
+      const names = volume
+        ? (Array.isArray(c.Mounts) ? c.Mounts : [])
+            .filter((m) => m.Type === 'volume' && m.Name)
+            .map((m) => m.Name)
+        : Object.keys(c.NetworkSettings?.Networks || {});
+      for (const name of new Set(names)) counts.set(name, (counts.get(name) || 0) + 1);
+    }
+    return counts;
+  }, [containers.data, volume]);
+  const summary = useMemo(() => {
+    const all = data.data || [];
+    const used = all.filter((r) => usedBy.get(r.Name)).length;
+    return {
+      total: all.length,
+      used,
+      unused: all.length - used,
+      custom: all.filter((r) => !['bridge', 'host', 'none'].includes(r.Name)).length,
+    };
+  }, [data.data, usedBy]);
 
   const runPing = async () => {
     if (!pingSource || !pingTarget) return;
@@ -183,6 +215,7 @@ function Resources({ kind }) {
         Id: 'project:' + key,
         Name: key,
         total: members.length,
+        used: members.filter((r) => usedBy.get(r.Name)).length,
       });
 
       for (const r of members) {
@@ -193,7 +226,7 @@ function Resources({ kind }) {
       }
     }
     return result;
-  }, [data.data, volume, search, locale]);
+  }, [data.data, volume, search, locale, usedBy]);
 
   const cols = useMemo(
     () => [
@@ -204,7 +237,22 @@ function Resources({ kind }) {
         flex: 1.4,
         sort: 'asc',
         cellRenderer: ({ value }) => (
-          <strong className={volume ? 'pl-7 max-tablet:pl-4' : undefined}>{value}</strong>
+          <div className={cn(tw.nameCell, volume && 'pl-7 max-tablet:pl-4')}>
+            {volume ? <HardDrive size={18} /> : <NetworkIcon size={18} />}
+            <strong>{value}</strong>
+          </div>
+        ),
+      },
+      {
+        headerName: t('사용'),
+        colId: 'usage',
+        minWidth: 150,
+        flex: 0.7,
+        valueGetter: ({ data: r }) => usedBy.get(r.Name) || 0,
+        cellRenderer: ({ value }) => (
+          <Badge tone={value ? 'ok' : 'off'}>
+            {value ? t('컨테이너 {0}개', [value]) : t('미사용')}
+          </Badge>
         ),
       },
       { field: 'Driver', headerName: t('드라이버'), minWidth: 140, flex: 0.6, filterable: !volume },
@@ -217,7 +265,7 @@ function Resources({ kind }) {
       {
         headerName: '',
         colId: 'actions',
-        width: volume ? 160 : 130,
+        width: volume ? 136 : 100,
         sortable: false,
         cellRenderer: ({ data: r }) => (
           <div className={tw.rowActions} onClick={(e) => e.stopPropagation()}>
@@ -260,33 +308,37 @@ function Resources({ kind }) {
                 }}
               />
             )}
-            <IconButton
-              icon={Trash2}
-              label={t(volume ? '볼륨 삭제' : '네트워크 삭제')}
-              danger
-              disabled={busy}
-              onClick={() =>
-                confirm(
-                  t(volume ? '볼륨 삭제' : '네트워크 삭제'),
-                  t(
-                    volume
-                      ? '{0}에 저장된 데이터도 함께 삭제됩니다.'
-                      : '{0} 네트워크를 삭제합니다.',
-                    [r.Name],
-                  ),
-                  () =>
-                    job(
-                      volume ? 'removeVolume' : 'removeNetwork',
-                      volume ? { name: r.Name } : { id: r.Id },
+            <RowMenu
+              label={t('{0} 작업 더 보기', [r.Name])}
+              items={[
+                {
+                  icon: Trash2,
+                  label: t(volume ? '볼륨 삭제' : '네트워크 삭제'),
+                  danger: true,
+                  disabled: busy,
+                  onClick: () =>
+                    confirm(
+                      t(volume ? '볼륨 삭제' : '네트워크 삭제'),
+                      t(
+                        volume
+                          ? '{0}에 저장된 데이터도 함께 삭제됩니다.'
+                          : '{0} 네트워크를 삭제합니다.',
+                        [r.Name],
+                      ),
+                      () =>
+                        job(
+                          volume ? 'removeVolume' : 'removeNetwork',
+                          volume ? { name: r.Name } : { id: r.Id },
+                        ),
                     ),
-                )
-              }
+                },
+              ]}
             />
           </div>
         ),
       },
     ],
-    [locale, volume, label, busy, confirm, job, notify],
+    [locale, volume, label, busy, confirm, job, notify, usedBy],
   );
 
   if (!status?.ready) return status ? <RuntimeEmpty /> : <Skeleton />;
@@ -314,6 +366,22 @@ function Resources({ kind }) {
           }
         />
       </PageActions>
+      <StatCards
+        items={
+          volume
+            ? [
+                [t('볼륨'), summary.total],
+                [t('사용 중'), summary.used],
+                [t('미사용'), summary.unused],
+              ]
+            : [
+                [t('네트워크'), summary.total],
+                [t('사용자 정의'), summary.custom],
+                [t('컨테이너 연결'), summary.used],
+                [t('미사용'), summary.unused],
+              ]
+        }
+      />
       <div className={tw.gridPanel}>
         <Toolbar search={search} onSearch={setSearch} />
         {volume ? (
