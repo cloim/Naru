@@ -43,6 +43,7 @@ import {
   Container,
   ShipWheel,
   Tag,
+  Ellipsis,
 } from 'lucide-react';
 import { api } from './api.js';
 import { cn, tw } from './tw.js';
@@ -170,6 +171,122 @@ export function IconButton({ icon: Icon, label, danger, className, ...props }) {
   return label ? <Tooltip content={label}>{button}</Tooltip> : button;
 }
 
+// 행에서 자주 쓰지 않는 작업을 모은다. 메뉴는 포털로 띄워 표 셀에 잘리지 않게 하고, 아래 공간이 부족하면 위로 연다.
+export function RowMenu({ label, items }) {
+  useLocale();
+  const [anchor, setAnchor] = useState(null);
+  const buttonRef = useRef(null),
+    menuRef = useRef(null),
+    restoreFocus = useRef(false);
+  const [place, setPlace] = useState(null);
+  const shown = items.filter(Boolean);
+  const close = useCallback((focus) => {
+    restoreFocus.current = !!focus;
+    setAnchor(null);
+    setPlace(null);
+  }, []);
+  // 툴팁 감싸기가 다시 생기면서 버튼이 새로 그려지므로, 닫힌 뒤의 버튼에 포커스를 돌려준다.
+  useEffect(() => {
+    if (anchor || !restoreFocus.current) return;
+    restoreFocus.current = false;
+    buttonRef.current?.focus();
+  }, [anchor]);
+  useEffect(() => {
+    if (!anchor) return;
+    const menu = menuRef.current;
+    const height = menu.offsetHeight,
+      width = menu.offsetWidth;
+    const below = anchor.bottom + 4 + height <= window.innerHeight - 8;
+    setPlace({
+      top: below ? anchor.bottom + 4 : Math.max(8, anchor.top - 4 - height),
+      left: Math.max(8, Math.min(anchor.right - width, window.innerWidth - width - 8)),
+    });
+    menu.querySelector('[role="menuitem"]:not(:disabled)')?.focus();
+    const outside = (e) => {
+      if (!menu.contains(e.target) && !buttonRef.current?.contains(e.target)) close();
+    };
+    const dismiss = () => close();
+    document.addEventListener('pointerdown', outside);
+    window.addEventListener('resize', dismiss);
+    window.addEventListener('scroll', dismiss, true);
+    return () => {
+      document.removeEventListener('pointerdown', outside);
+      window.removeEventListener('resize', dismiss);
+      window.removeEventListener('scroll', dismiss, true);
+    };
+  }, [anchor, close]);
+  const keydown = (e) => {
+    const options = [...menuRef.current.querySelectorAll('[role="menuitem"]:not(:disabled)')];
+    const index = options.indexOf(document.activeElement);
+    if (e.key === 'Escape' || e.key === 'Tab') {
+      e.preventDefault();
+      close(true);
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const step = e.key === 'ArrowDown' ? 1 : -1;
+      options[(index + step + options.length) % options.length]?.focus();
+    }
+  };
+  return (
+    <>
+      <IconButton
+        ref={buttonRef}
+        icon={Ellipsis}
+        // 메뉴가 열려 있는 동안에는 툴팁이 메뉴를 가리지 않게 접근 가능한 이름만 남긴다.
+        label={anchor ? undefined : label}
+        aria-label={label}
+        aria-haspopup="menu"
+        aria-expanded={!!anchor}
+        data-no-row-click="true"
+        onClick={(e) => {
+          e.stopPropagation();
+          window.__naru_no_row_click = Date.now();
+          if (anchor) close();
+          else setAnchor(buttonRef.current.getBoundingClientRect());
+        }}
+      />
+      {anchor &&
+        createPortal(
+          <div
+            ref={menuRef}
+            role="menu"
+            aria-label={label}
+            data-ui-audit-overlay
+            data-no-row-click="true"
+            onKeyDown={keydown}
+            className="fixed z-[1000] min-w-[184px] rounded-[10px] border border-line bg-paper p-1.5 shadow-[0_12px_32px_rgba(20,45,38,0.16)]"
+            style={
+              place || { top: anchor.bottom + 4, left: anchor.right - 184, visibility: 'hidden' }
+            }
+          >
+            {shown.map(({ icon: Icon, label: text, onClick, danger, disabled }) => (
+              <button
+                key={text}
+                type="button"
+                role="menuitem"
+                disabled={disabled}
+                className={cn(
+                  'flex h-9 w-full items-center gap-2.5 rounded-[7px] px-2.75 text-left text-[13px] whitespace-nowrap text-ink enabled:hover:bg-[#f0f5ea] focus-visible:bg-[#f0f5ea] focus-visible:outline-none',
+                  danger && 'text-danger enabled:hover:bg-[#faeeeb] focus-visible:bg-[#faeeeb]',
+                )}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.__naru_no_row_click = Date.now();
+                  close(true);
+                  onClick();
+                }}
+              >
+                <Icon size={15} aria-hidden="true" className={danger ? '' : 'text-[#6b7b72]'} />
+                {text}
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
+    </>
+  );
+}
+
 export function CopyButton({ text, label, className }) {
   useLocale();
   const [copied, setCopied] = useState(false);
@@ -207,22 +324,72 @@ export function CopyButton({ text, label, className }) {
   );
 }
 
-export function Badge({ state, children }) {
+const BADGE_TONE = {
+  ok: ['bg-[#e4f2df] text-accent', 'bg-[#3f9b6b]'],
+  wait: ['bg-[#fbf2dc] text-[#86641f]', ''],
+  bad: ['bg-[#faeeeb] text-[#b24639]', 'bg-danger'],
+  off: ['bg-[#eef0ec] text-[#69736c]', 'bg-[#a9b2ac]'],
+};
+const badgeTone = (state) =>
+  ['running', 'succeeded', 'ready'].includes(state)
+    ? 'ok'
+    : ['queued', 'starting', 'restarting', 'creating'].includes(state)
+      ? 'wait'
+      : ['failed', 'dead'].includes(state)
+        ? 'bad'
+        : 'off';
+
+// 상태는 색 점과 문구를 함께 보여 준다. 진행 중인 상태는 점 대신 회전 표시를 쓴다.
+// 수치만 보여 주는 배지는 marker={false}로 점과 회전 표시를 뺀다.
+export function Badge({ state, tone = badgeTone(state), marker = true, children }) {
   useLocale();
+  const [color, dot] = BADGE_TONE[tone];
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded-[5px] bg-[#f0f2ee] px-2 py-1.25 text-[11px] leading-none font-semibold whitespace-nowrap text-[#7a837c]',
-        ['running', 'succeeded', 'ready'].includes(state) && 'bg-[#eef5e9] text-[#407543]',
-        state === 'failed' && 'bg-[#faeeeb] text-[#b24639]',
+        'inline-flex items-center gap-1.75 rounded-full py-1.25 pr-2.5 pl-2.25 text-[11.5px] leading-none font-semibold whitespace-nowrap',
+        !marker && 'px-2.25 tabular-nums',
+        color,
       )}
     >
+      {!marker ? null : tone === 'wait' ? (
+        <LoaderCircle size={11} className="flex-none animate-spin" aria-hidden="true" />
+      ) : (
+        <span className={cn('h-1.75 w-1.75 flex-none rounded-full', dot)} aria-hidden="true" />
+      )}
       {children ||
         { running: t('실행 중'), exited: t('종료'), created: t('생성됨'), paused: t('일시 정지') }[
           state
         ] ||
         state}
     </span>
+  );
+}
+
+// 목록 위 요약 수치. items는 [이름, 값, 단위] 목록이고, 카드 수에 맞춰 넓은 화면은 한 줄, 좁은 화면은 두 줄로 놓는다.
+export function StatCards({ items }) {
+  return (
+    <div
+      className={cn(
+        'grid flex-none gap-4 max-desktop:grid-cols-2 max-tablet:gap-3',
+        items.length >= 4 ? 'grid-cols-4' : items.length === 3 ? 'grid-cols-3' : 'grid-cols-2',
+      )}
+      data-ui-audit-card-group
+    >
+      {items.map(([label, value, unit]) => (
+        <div
+          key={label}
+          className={cn(tw.panel, 'px-5 py-4 max-tablet:px-4 max-tablet:py-3')}
+          data-ui-audit-card
+        >
+          <div className="text-[12px] text-muted">{label}</div>
+          <div className="mt-1.5 flex items-baseline gap-1.5 font-display text-[27px] leading-none font-semibold text-ink tabular-nums max-tablet:text-[22px]">
+            {value}
+            {unit && <small className="text-[14px] font-medium text-muted">{unit}</small>}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
