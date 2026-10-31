@@ -1,19 +1,3 @@
-import Engines from './pages/Engines.jsx';
-import { EngineSelector } from './components/EngineSelector.jsx';
-import { t, useLocale } from './i18n.js';
-import { Actions, TopBar, Button, PageAction, Skeleton, Empty, useData, jobNames } from './ui.jsx';
-import { FormDialog, JobDialog } from './dialogs.jsx';
-const Extensions = lazy(() => import('./pages/Extensions.jsx'));
-const Containers = lazy(() => import('./pages/Containers.jsx'));
-const ContainerDetail = lazy(() => import('./pages/ContainerDetail.jsx'));
-const Images = lazy(() => import('./pages/Images.jsx'));
-const Resources = lazy(() => import('./pages/Resources.jsx'));
-const Kubernetes = lazy(() => import('./pages/Kubernetes.jsx'));
-const Snapshots = lazy(() => import('./pages/Snapshots.jsx'));
-const Settings = lazy(() => import('./pages/Settings.jsx'));
-const Diagnostics = lazy(() => import('./pages/Diagnostics.jsx'));
-const Jobs = lazy(() => import('./pages/Jobs.jsx'));
-const Onboarding = lazy(() => import('./pages/Onboarding.jsx'));
 import React, {
   createContext,
   useCallback,
@@ -38,6 +22,25 @@ import {
   useParams,
 } from 'react-router-dom';
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
+
+import Engines from './pages/Engines.jsx';
+import { EngineSelector } from './components/EngineSelector.jsx';
+import { t, useLocale } from './i18n.js';
+import { Actions, TopBar, Button, PageAction, Skeleton, Empty, useData, jobNames } from './ui.jsx';
+import { FormDialog, JobDialog } from './dialogs.jsx';
+
+const Extensions = lazy(() => import('./pages/Extensions.jsx'));
+const Containers = lazy(() => import('./pages/Containers.jsx'));
+const ContainerDetail = lazy(() => import('./pages/ContainerDetail.jsx'));
+const Images = lazy(() => import('./pages/Images.jsx'));
+const Resources = lazy(() => import('./pages/Resources.jsx'));
+const Kubernetes = lazy(() => import('./pages/Kubernetes.jsx'));
+const Snapshots = lazy(() => import('./pages/Snapshots.jsx'));
+const Settings = lazy(() => import('./pages/Settings.jsx'));
+const Diagnostics = lazy(() => import('./pages/Diagnostics.jsx'));
+const Jobs = lazy(() => import('./pages/Jobs.jsx'));
+const Onboarding = lazy(() => import('./pages/Onboarding.jsx'));
+
 import {
   Box,
   Layers,

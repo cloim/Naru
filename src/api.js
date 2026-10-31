@@ -7,15 +7,18 @@ export const engineStorageKey = (key) =>
 export async function engineBinding() {
   if (!bindingLoad)
     bindingLoad = (async () => {
+      if (globalThis.__setBootStatus) globalThis.__setBootStatus('엔진 목록 조회 중...');
       const response = await fetch('/api/engines', { headers: { 'X-Naru-Token': token } });
       if (!response.ok) throw new Error('연결 프로필을 조회할 수 없습니다.');
       const cfg = await response.json();
       const id = cfg.selected;
       binding = id === 'local' ? { id, name: '로컬 WSL' } : cfg.profiles.find((p) => p.id === id);
       if (!binding) throw new Error('연결 대상을 다시 선택해 주세요.');
+      if (globalThis.__setBootStatus) globalThis.__setBootStatus(`엔진 선택됨: ${binding.name}`);
       return binding;
     })().catch((e) => {
       bindingLoad = null;
+      if (globalThis.__setBootStatus) globalThis.__setBootStatus(`엔진 조회 오류: ${e.message}`, true);
       throw e;
     });
   return bindingLoad;
@@ -27,8 +30,12 @@ export function engineHeaders() {
   };
 }
 export async function api(route, options = {}, renewed = false) {
-  if (!token) token = (await fetch('/api/session').then((r) => r.json())).token;
+  if (!token) {
+    if (globalThis.__setBootStatus) globalThis.__setBootStatus('세션 토큰 요청 중...');
+    token = (await fetch('/api/session').then((r) => r.json())).token;
+  }
   if (!route.startsWith('/engines')) await engineBinding();
+  if (globalThis.__setBootStatus) globalThis.__setBootStatus(`API 요청: ${route}`);
   const response = await fetch('/api' + route, {
     ...options,
     headers: {
@@ -45,7 +52,11 @@ export async function api(route, options = {}, renewed = false) {
     return api(route, options, true);
   }
   const json = await response.json();
-  if (!response.ok) throw new Error(json.error || `HTTP ${response.status}`);
+  if (!response.ok) {
+    const err = json.error || `HTTP ${response.status}`;
+    if (globalThis.__setBootStatus) globalThis.__setBootStatus(`API 오류 (${route}): ${err}`, true);
+    throw new Error(err);
+  }
   return json;
 }
 export async function downloadConfig() {
