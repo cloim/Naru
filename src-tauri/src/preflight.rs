@@ -99,6 +99,34 @@ pub fn show_error(message: &str) {
     eprintln!("{message}");
 }
 
+#[cfg(windows)]
+pub fn show_info(message: &str) {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONINFORMATION, MB_OK};
+    let wide = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
+    let (text, title) = (wide(message), wide("Naru"));
+    unsafe {
+        MessageBoxW(std::ptr::null_mut(), text.as_ptr(), title.as_ptr(), MB_OK | MB_ICONINFORMATION);
+    }
+}
+
+#[cfg(not(windows))]
+pub fn show_info(message: &str) {
+    println!("{message}");
+}
+
+#[cfg(windows)]
+pub fn ask_yes_no(message: &str, title_str: &str) -> bool {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, IDYES, MB_ICONQUESTION, MB_YESNO};
+    let wide = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
+    let (text, title) = (wide(message), wide(title_str));
+    unsafe { MessageBoxW(std::ptr::null_mut(), text.as_ptr(), title.as_ptr(), MB_YESNO | MB_ICONQUESTION) == IDYES }
+}
+
+#[cfg(not(windows))]
+pub fn ask_yes_no(_message: &str, _title_str: &str) -> bool {
+    false
+}
+
 /// The real build number; GetVersionEx would report an older one to an unmanifested process.
 #[cfg(windows)]
 fn windows_build() -> u32 {

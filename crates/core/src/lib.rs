@@ -20,5 +20,6 @@ pub mod server;
 pub mod state;
 pub mod terminal;
 pub mod tools;
+pub mod updater;
 pub mod web;
 pub mod worker;

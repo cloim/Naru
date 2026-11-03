@@ -6,7 +6,8 @@ mod preflight;
 use naru_core::{onboarding, server, state, worker};
 use std::path::PathBuf;
 use std::time::Duration;
-use tauri::menu::{Menu, MenuItem};
+use std::sync::Arc;
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
@@ -157,15 +158,44 @@ fn main() {
                 }
             });
             let open = MenuItem::with_id(app, "open", "Naru 열기", true, None::<&str>)?;
+            let update = MenuItem::with_id(app, "update", "업데이트 확인", true, None::<&str>)?;
+            let sep = PredefinedMenuItem::separator(app)?;
             let quit = MenuItem::with_id(app, "quit", "종료", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&open, &quit])?;
+            let menu = Menu::with_items(app, &[&open, &update, &sep, &quit])?;
+
+            let update_state: Arc<tokio::sync::Mutex<Option<naru_core::updater::ReleaseInfo>>> =
+                Arc::new(tokio::sync::Mutex::new(None));
+
+            let update_item_bg = update.clone();
+            let update_state_bg = update_state.clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(Duration::from_secs(4)).await;
+                if let Ok(info) = naru_core::updater::check_for_updates().await {
+                    if info.update_available {
+                        let _ = update_item_bg.set_text(format!("새 버전 업데이트 (v{})", info.latest_version));
+                    }
+                    *update_state_bg.lock().await = Some(info);
+                }
+            });
+
+            let update_item_click = update.clone();
+            let update_state_click = update_state.clone();
+
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().cloned().expect("app icon"))
                 .tooltip("Naru")
                 .menu(&menu)
                 .show_menu_on_left_click(false)
-                .on_menu_event(|app, event| match event.id().as_ref() {
+                .on_menu_event(move |app, event| match event.id().as_ref() {
                     "open" => show(app),
+                    "update" => {
+                        let app_handle = app.clone();
+                        let update_item = update_item_click.clone();
+                        let state = update_state_click.clone();
+                        tauri::async_runtime::spawn(async move {
+                            handle_update_event(&app_handle, &update_item, state).await;
+                        });
+                    }
                     "quit" => app.exit(0),
                     _ => {}
                 })
@@ -190,4 +220,76 @@ fn main() {
                 }
             }
         });
+}
+
+
+async fn handle_update_event<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    item: &tauri::menu::MenuItem<R>,
+    state: Arc<tokio::sync::Mutex<Option<naru_core::updater::ReleaseInfo>>>,
+) {
+    let _ = item.set_text("업데이트 확인 중...");
+
+    let info_result = naru_core::updater::check_for_updates().await;
+    let info = match info_result {
+        Ok(info) => {
+            *state.lock().await = Some(info.clone());
+            info
+        }
+        Err(e) => {
+            let _ = item.set_text("업데이트 확인");
+            preflight::show_error(&format!("업데이트 정보를 확인하지 못했습니다.\n\n{e}"));
+            return;
+        }
+    };
+
+    if !info.update_available {
+        let _ = item.set_text("업데이트 확인");
+        preflight::show_info(&format!(
+            "현재 최신 버전(v{})을 사용하고 있습니다.",
+            info.current_version
+        ));
+        return;
+    }
+
+    let menu_title = format!("새 버전 업데이트 (v{})", info.latest_version);
+    let _ = item.set_text(&menu_title);
+
+    let prompt = format!(
+        "Naru v{} 새 버전이 출시되었습니다.\n\n지금 다운로드하여 설치하시겠습니까?\n(확인을 누르면 설치 파일을 다운로드한 뒤 실행하고 Naru를 종료합니다.)",
+        info.latest_version
+    );
+
+    if !preflight::ask_yes_no(&prompt, "Naru 업데이트") {
+        return;
+    }
+
+    let Some(download_url) = &info.download_url else {
+        preflight::show_error("다운로드 가능한 설치 파일 주소를 찾지 못했습니다.");
+        return;
+    };
+
+    let file_name = info.file_name.as_deref().unwrap_or("Naru_setup.exe");
+    let _ = item.set_text("업데이트 다운로드 중...");
+
+    match naru_core::updater::download_update(download_url, file_name).await {
+        Ok(path) => {
+            let _ = item.set_text("업데이트 설치 시작...");
+            if let Err(e) = naru_core::updater::launch_installer(&path) {
+                let _ = item.set_text(&menu_title);
+                preflight::show_error(&format!("설치 파일을 실행하지 못했습니다.\n\n{e}"));
+                return;
+            }
+            app.exit(0);
+        }
+        Err(e) => {
+            let _ = item.set_text(&menu_title);
+            let fail_msg = format!(
+                "설치 파일 다운로드에 실패했습니다.\n\n{e}\n\nGitHub 릴리스 페이지를 브라우저로 여시겠습니까?"
+            );
+            if preflight::ask_yes_no(&fail_msg, "Naru 업데이트") {
+                let _ = naru_core::updater::open_browser(&info.release_url);
+            }
+        }
+    }
 }
