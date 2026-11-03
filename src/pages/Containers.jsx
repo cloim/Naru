@@ -809,6 +809,7 @@ function Containers() {
       { field: 'Image', headerName: t('이미지'), width: 230, minWidth: 180, filterable: true },
       {
         headerName: t('포트'),
+        colId: 'ports',
         minWidth: 220,
         flex: 1,
         valueGetter: ({ data: r }) =>
@@ -820,7 +821,7 @@ function Containers() {
           if (!publicPorts.length) return <span className="text-[#8c978e]">-</span>;
           return (
             <div
-              className="flex flex-wrap items-center gap-2 py-1 leading-normal"
+              className="flex w-full flex-wrap items-center justify-center gap-2 py-1 leading-normal"
               onClick={(e) => e.stopPropagation()}
             >
               {publicPorts.map((p, idx) => {
