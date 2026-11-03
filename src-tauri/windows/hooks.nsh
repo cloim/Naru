@@ -2,8 +2,8 @@
 ; Keep program files apart from the WSL disk and job data: the default moves to %LOCALAPPDATA%\Programs\Naru,
 ; the usual place for per-user apps. A folder the user picks on the directory page is left as chosen.
 !macro NARU_DEFAULT_INSTDIR
-  ${If} $INSTDIR == "$LOCALAPPDATA\${PRODUCTNAME}"
-    StrCpy $INSTDIR "$LOCALAPPDATA\Programs\${PRODUCTNAME}"
+  ${If} $INSTDIR == "$LOCALAPPDATA\Naru"
+    StrCpy $INSTDIR "$LOCALAPPDATA\Programs\Naru"
   ${EndIf}
 !macroend
 
@@ -16,5 +16,6 @@ FunctionEnd
 ; Silent installs skip the GUI callbacks.
 !macro NSIS_HOOK_PREINSTALL
   !insertmacro NARU_DEFAULT_INSTDIR
+  RMDir /r "$INSTDIR\dist"
   SetOutPath $INSTDIR
 !macroend

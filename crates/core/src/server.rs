@@ -883,8 +883,23 @@ fn routes(app: Arc<App>) -> Router {
             if req.uri().path().starts_with("/api/") {
                 return (StatusCode::NOT_FOUND, Json(json!({ "error": "API 경로를 확인해 주세요." }))).into_response();
             }
+            let path = req.uri().path().to_string();
             match tower::ServiceExt::oneshot(screens, req).await {
-                Ok(response) => response.into_response(),
+                Ok(mut response) => {
+                    let headers = response.headers_mut();
+                    if path.starts_with("/assets/") {
+                        headers.insert(
+                            axum::http::header::CACHE_CONTROL,
+                            axum::http::HeaderValue::from_static("public, max-age=31536000, immutable"),
+                        );
+                    } else {
+                        headers.insert(
+                            axum::http::header::CACHE_CONTROL,
+                            axum::http::HeaderValue::from_static("no-cache, no-store, must-revalidate"),
+                        );
+                    }
+                    response.into_response()
+                }
                 Err(never) => match never {},
             }
         }
