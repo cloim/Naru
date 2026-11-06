@@ -280,9 +280,24 @@ export function DataGrid({
     [onSortChange],
   );
 
+  const [userResizedWidth, setUserResizedWidth] = useState(0);
+
+  const syncGridWidth = useCallback((api) => {
+    if (!api) return;
+    const cols = api.getAllDisplayedColumns?.();
+    if (!cols || cols.length === 0) return;
+    const total =
+      cols.reduce((sum, col) => sum + col.getActualWidth(), 0) + GRID_BORDER_WIDTH;
+    if (total > 0) {
+      setUserResizedWidth((prev) => Math.max(prev, total));
+    }
+  }, []);
+
   const onGridReady = useCallback(
     (event) => {
       gridApiRef.current = event.api;
+      syncGridWidth(event.api);
+      window.setTimeout(() => syncGridWidth(event.api), 50);
       if (initialSortState?.colId && initialSortState?.direction) {
         event.api.applyColumnState({
           state: [{ colId: initialSortState.colId, sort: initialSortState.direction }],
@@ -293,7 +308,7 @@ export function DataGrid({
         window.setTimeout(() => event.api.ensureIndexVisible(initialFirstRowIndex, 'top'), 0);
       }
     },
-    [initialFirstRowIndex, initialSortState],
+    [initialFirstRowIndex, initialSortState, syncGridWidth],
   );
 
   // 가로 스크롤은 바깥 래퍼가 맡으므로 본문은 컬럼 너비 합만큼 넓다. 터치 기기의 세로 스크롤 막대는 그 넓은 본문의
@@ -375,7 +390,6 @@ export function DataGrid({
     gridApiRef.current?.refreshHeader();
   }, [columnFilters]);
 
-  const [userResizedWidth, setUserResizedWidth] = useState(0);
   const initialMinWidth = useMemo(() => {
     let sum = 0;
     if (gridProps.rowSelection) {
@@ -440,13 +454,17 @@ export function DataGrid({
             isFullWidthRow={hasGroups ? isFullWidthRow : undefined}
             {...gridProps}
             onGridReady={onGridReady}
+            onFirstDataRendered={(event) => {
+              syncGridWidth(event.api);
+              gridProps.onFirstDataRendered?.(event);
+            }}
+            onGridSizeChanged={(event) => {
+              syncGridWidth(event.api);
+              gridProps.onGridSizeChanged?.(event);
+            }}
             onColumnResized={(event) => {
-              if (event.finished && event.source === 'uiColumnResized') {
-                const total =
-                  event.api
-                    .getAllDisplayedColumns()
-                    .reduce((sum, col) => sum + col.getActualWidth(), 0) + GRID_BORDER_WIDTH;
-                setUserResizedWidth(total);
+              if (event.finished) {
+                syncGridWidth(event.api);
               }
               gridProps.onColumnResized?.(event);
             }}

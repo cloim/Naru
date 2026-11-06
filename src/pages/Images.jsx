@@ -478,7 +478,8 @@ function Images() {
       {
         headerName: t('이미지'),
         colId: 'image',
-        minWidth: 200,
+        width: 220,
+        minWidth: 180,
         flex: 1.6,
         sort: 'asc',
         valueGetter: ({ data: r }) => imageName(r),
@@ -495,25 +496,26 @@ function Images() {
       {
         headerName: t('크기'),
         field: 'Size',
-        width: 100,
+        width: 95,
         minWidth: 80,
         valueFormatter: ({ value }) => bytes(value),
       },
       {
         headerName: t('생성'),
         field: 'Created',
-        minWidth: 140,
+        width: 155,
+        minWidth: 135,
         valueFormatter: ({ value }) =>
           typeof value === 'number' ? formatDate(value * 1000) : value || '—',
       },
       {
         headerName: '',
         colId: 'actions',
-        width: 148,
-        minWidth: 148,
+        width: 152,
+        minWidth: 152,
         sortable: false,
         cellRenderer: ({ data: r }) => (
-          <div className={cn(tw.rowActions, 'pr-1.5')}>
+          <div className={cn(tw.rowActions, 'pr-2')}>
             <IconButton
               label={t('{0} 실행', [imageName(r)])}
               icon={Play}
