@@ -1,6 +1,8 @@
 import { t, useLocale, formatDate } from '../i18n.js';
-import React, { lazy, Suspense, useEffect, useRef, useState, useMemo } from 'react';
+import React, { lazy, Suspense, useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import { api } from '../api.js';
 import {
   RotateCw,
   Pause,
@@ -10,6 +12,8 @@ import {
   TriangleAlert,
   Download,
   Settings2,
+  Lock,
+  Unlock,
 } from 'lucide-react';
 import {
   useActions,
@@ -194,7 +198,8 @@ function ContainerDetail() {
   useLocale();
   const navigate = useNavigate();
   const { id } = useParams(),
-    { job, busy } = useActions();
+    { job, busy, notify } = useActions(),
+    qc = useQueryClient();
   const [searchParams] = useSearchParams();
   const [tab, setTab] = useState(
       ['logs', 'resources'].includes(searchParams.get('tab')) ? 'logs' : 'general',
@@ -205,6 +210,24 @@ function ContainerDetail() {
   const logEndRef = useRef(null),
     logPreRef = useRef(null);
   const detail = useData('inspect:' + id, `/containers/${id}/inspect`);
+  const locksQuery = useData('container-locks', '/containers/locks', {
+    refetchInterval: 5000,
+  });
+  const isLocked = useMemo(
+    () => new Set(locksQuery.data || []).has(id),
+    [locksQuery.data, id],
+  );
+  const toggleLock = useCallback(async () => {
+    try {
+      await api(`/containers/${id}/lock`, {
+        method: 'PUT',
+        body: { locked: !isLocked },
+      });
+      qc.invalidateQueries({ queryKey: ['container-locks'] });
+    } catch (e) {
+      notify?.(e);
+    }
+  }, [id, isLocked, qc, notify]);
   const logs = useData('logs:' + id, `/containers/${id}/logs`, {
     enabled: tab === 'logs',
     refetchInterval: 5000,
@@ -261,6 +284,12 @@ function ContainerDetail() {
   return (
     <section className={cn(tw.page, 'h-full')}>
       <PageActions>
+        <PageAction
+          label={isLocked ? t('정리 잠금 해제') : t('정리 잠금 설정')}
+          icon={isLocked ? Lock : Unlock}
+          disabled={busy || detail.isLoading || !inspect}
+          onClick={toggleLock}
+        />
         <PageAction
           label={t('설정 변경')}
           icon={Settings2}

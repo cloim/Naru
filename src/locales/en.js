@@ -105,6 +105,12 @@ export default {
   '프로젝트 저장': 'Save project',
   '프로젝트 작업': 'Project operation',
   '프로젝트 삭제': 'Delete project',
+  '프로젝트 전체 잠금': 'Lock entire project',
+  '프로젝트 전체 잠금 해제': 'Unlock entire project',
+  '{0} 프로젝트 전체 잠금': 'Lock entire project {0}',
+  '{0} 프로젝트 전체 잠금 해제': 'Unlock entire project {0}',
+  '프로젝트 전체 잠금됨 (정리 시 삭제되지 않습니다)':
+    'Project locked (will not be deleted during prune)',
   '리소스 적용': 'Apply resource',
   '리소스 삭제': 'Delete resource',
   '스냅샷 생성': 'Create snapshot',
@@ -412,6 +418,14 @@ export default {
   '선택한 컨테이너 일괄 삭제': 'Delete selected containers',
   '선택한 {0}개 컨테이너를 삭제합니다. 연결된 볼륨은 보존됩니다.':
     'Delete {0} selected container(s). Associated volumes are preserved.',
+  '정리 잠금 설정': 'Lock against pruning',
+  '정리 잠금 해제': 'Unlock from pruning',
+  '정리 잠금됨 (미사용 리소스 정리 시 삭제되지 않습니다)':
+    'Locked (will not be deleted during prune)',
+  '선택 잠금 ({0})': 'Lock selected ({0})',
+  '선택 잠금 해제 ({0})': 'Unlock selected ({0})',
+  '중지된 컨테이너(잠금 설정 제외), 컨테이너가 없는 프로젝트, 태그 없는 이미지와 미사용 네트워크를 일괄 삭제하여 가상 디스크 용량을 확보합니다. 볼륨 데이터는 유지됩니다.':
+    'Remove stopped containers (except locked ones), empty projects, untagged images, and unused networks to reclaim virtual disk space. Volume data is preserved.',
   '미사용 리소스 정리': 'Prune unused resources',
   '중지된 컨테이너, 태그 없는 이미지와 미사용 네트워크를 일괄 삭제하여 가상 디스크 용량을 확보합니다. 볼륨 데이터는 유지됩니다.':
     'Remove stopped containers, untagged images, and unused networks to reclaim virtual disk space. Volume data is preserved.',

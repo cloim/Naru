@@ -1,4 +1,5 @@
 //! A job worker process: `naru --worker <id>` runs one persisted job and records how it ended.
+use crate::containers::{is_container_locked, load_container_locks};
 use crate::context::{remote_target, with_target, Target};
 use crate::engine::{self, cli, close_remote_connections};
 use crate::extensions::{install_extension, uninstall_extension};
@@ -215,14 +216,98 @@ async fn execute(id: &str, kind: &str, p: &Value, log: &Log) -> Result<()> {
             .await?;
         }
         "pruneResources" => {
-            let mut a = args(["system", "prune", "-f"]);
+            log("미사용 리소스 정리를 시작합니다.\n");
+            // 1. 잠금 설정된 컨테이너 목록 확인
+            let mut locks = load_container_locks().await.unwrap_or_default();
+            if let Some(keep) = p["keepContainers"].as_array() {
+                for k in keep {
+                    if let Some(s) = k.as_str() {
+                        locks.insert(s.to_string());
+                    }
+                }
+            }
+
+            // 2. 현재 컨테이너 목록 조회 및 중지된 컨테이너 정리 (잠금 설정 제외)
+            let containers = engine::list("containers").await?;
+            let mut removed_containers = 0;
+            let mut preserved_containers = 0;
+            if let Some(list) = containers.as_array() {
+                for c in list {
+                    let id = c["Id"].as_str().unwrap_or_default();
+                    let name = c["Names"][0].as_str().unwrap_or(id).trim_start_matches('/');
+                    let running = c["State"] == "running"
+                        || c["Status"].as_str().is_some_and(|s| s.starts_with("Up"));
+                    if !running {
+                        if is_container_locked(&locks, c) {
+                            log(&format!("잠금 설정된 컨테이너 보존: {name}\n"));
+                            preserved_containers += 1;
+                        } else {
+                            log(&format!("중지된 컨테이너 삭제: {name}\n"));
+                            if let Err(e) = engine::container_action(id, "remove", log).await {
+                                log(&format!("컨테이너 삭제 실패 ({name}): {e}\n"));
+                            } else {
+                                removed_containers += 1;
+                            }
+                        }
+                    }
+                }
+            }
+            log(&format!(
+                "컨테이너 정리 완료 (삭제: {removed_containers}개, 잠금 보존: {preserved_containers}개)\n"
+            ));
+
+            // 3. 컨테이너가 없는 프로젝트(소속 컨테이너 0개) 정리
+            let current_containers = engine::list("containers").await?;
+            let project_list = projects::list_projects(&current_containers).await.unwrap_or_default();
+            let mut removed_projects = 0;
+            for proj in project_list {
+                let members = projects::members(&current_containers, &proj.name);
+                if members.is_empty() {
+                    let is_project_locked = locks.contains(&format!("project:{}", proj.name))
+                        || locks.contains(&proj.name);
+                    if is_project_locked {
+                        log(&format!("잠금 설정된 프로젝트 보존: {}\n", proj.name));
+                        continue;
+                    }
+                    log(&format!("컨테이너 없는 프로젝트 정리: {}\n", proj.name));
+                    if let Err(e) = projects::forget_project(&proj.name, &current_containers).await {
+                        log(&format!("프로젝트 정리 실패 ({}): {e}\n", proj.name));
+                    } else {
+                        removed_projects += 1;
+                    }
+                }
+            }
+            if removed_projects > 0 {
+                log(&format!("컨테이너 없는 프로젝트 정리 완료 ({removed_projects}개 삭제)\n"));
+            }
+
+            // 4. 미사용 네트워크 정리
+            if let Err(e) = cli(&args(["network", "prune", "-f"]), long()).await {
+                log(&format!("네트워크 정리 오류: {e}\n"));
+            } else {
+                log("미사용 네트워크 정리 완료.\n");
+            }
+
+            // 5. 미사용 이미지 정리 (all 옵션 적용)
+            let mut img_args = vec!["image".to_string(), "prune".to_string(), "-f".to_string()];
             if p["all"] == true {
-                a.push("--all".into());
+                img_args.push("-a".to_string());
             }
+            if let Err(e) = cli(&args(img_args), long()).await {
+                log(&format!("이미지 정리 오류: {e}\n"));
+            } else {
+                log("미사용 이미지 정리 완료.\n");
+            }
+
+            // 6. 볼륨 정리 (요청된 경우)
             if p["volumes"] == true {
-                a.push("--volumes".into());
+                if let Err(e) = cli(&args(["volume", "prune", "-f"]), long()).await {
+                    log(&format!("볼륨 정리 오류: {e}\n"));
+                } else {
+                    log("미사용 볼륨 정리 완료.\n");
+                }
             }
-            cli(&a, long()).await?;
+
             log("미사용 리소스 정리(Prune) 완료.\n");
         }
         "pruneImages" => {

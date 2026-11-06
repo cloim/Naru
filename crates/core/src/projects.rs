@@ -148,7 +148,7 @@ pub async fn find_project(name: &str, containers: &Value) -> Result<Project> {
         .ok_or_else(|| anyhow!("프로젝트를 찾을 수 없습니다."))
 }
 
-fn members(containers: &Value, name: &str) -> Vec<Value> {
+pub fn members(containers: &Value, name: &str) -> Vec<Value> {
     containers
         .as_array()
         .into_iter()

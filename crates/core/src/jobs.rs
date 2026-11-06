@@ -175,7 +175,12 @@ pub fn validate_job(kind: &str, payload: &Value) -> Result<Value> {
             json!({ "id": id, "confirmation": "REMOVE" })
         }
         "pruneResources" => {
-            json!({ "all": f.boolean("all", true)?, "volumes": f.boolean("volumes", false)? })
+            let mut result = json!({ "all": f.boolean("all", true)?, "volumes": f.boolean("volumes", false)? });
+            let keep = f.array("keepContainers", 500)?;
+            if !keep.is_empty() {
+                result["keepContainers"] = Value::Array(keep);
+            }
+            result
         }
         "createContainer" | "updateContainer" => {
             let id = if kind == "updateContainer" {

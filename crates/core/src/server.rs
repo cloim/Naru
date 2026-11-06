@@ -1,6 +1,7 @@
 //! The local web API and screen server on 127.0.0.1:49170.
 use crate::bridge::{start_compat_bridge, start_docker_bridge, start_kubernetes_bridge, KubernetesBridge};
 use crate::connections::{change_connections, connections, resolve_target, Profile};
+use crate::containers::{batch_set_container_locks, load_container_locks, set_container_lock};
 use crate::context::{engine_key, target, with_target};
 use crate::engine::{self, cli, cli_output, docker, encode};
 use crate::jobs::{job_list, reconcile_jobs, submit, IDENTIFIER, PROJECT_NAME};
@@ -834,6 +835,30 @@ fn routes(app: Arc<App>) -> Router {
         )
         .route("/api/containers/{id}/files", get(container_files).delete(delete_container_file))
         .route("/api/containers/{id}/files/content", get(container_file).put(save_container_file))
+        .route(
+            "/api/containers/locks",
+            get(|| async { ApiResult::Ok(Json(load_container_locks().await?)) })
+                .put(|Json(body): Json<Value>| async move {
+                    let ids: Vec<String> = if let Some(arr) = body["ids"].as_array() {
+                        arr.iter().filter_map(|v| v.as_str().map(String::from)).collect()
+                    } else if let Some(id) = body["id"].as_str() {
+                        vec![id.to_string()]
+                    } else {
+                        vec![]
+                    };
+                    let locked = body["locked"].as_bool().unwrap_or(true);
+                    let locks = batch_set_container_locks(&ids, locked).await?;
+                    ApiResult::Ok(Json(json!({ "locks": locks })))
+                }),
+        )
+        .route(
+            "/api/containers/{id}/lock",
+            put(|Path(id): Path<String>, Json(body): Json<Value>| async move {
+                let locked = body["locked"].as_bool().unwrap_or(true);
+                let locks = set_container_lock(&id, locked).await?;
+                ApiResult::Ok(Json(json!({ "id": id, "locked": locked, "locks": locks })))
+            }),
+        )
         .route("/api/containers/{id}/terminal", post(terminal_ticket))
         .route("/api/terminal", get(terminal_socket))
         .route("/api/volumes/{id}/files", get(volume_files).delete(delete_volume_file))

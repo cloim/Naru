@@ -25,6 +25,8 @@ import {
   X,
   BrushCleaning,
   Copy,
+  Lock,
+  Unlock,
 } from 'lucide-react';
 import {
   useActions,
@@ -63,8 +65,20 @@ const NO_PROJECT = '';
 // Compose 프로젝트명에 사용할 수 없는 구분자로 표시용 그룹의 키를 분리한다.
 const COOLIFY_UTIL = 'group:coolify-util';
 const COLLAPSED_KEY = 'naru.collapsedProjects';
+const LOCKS_STORAGE_KEY = 'naru.containerLocks';
 const composeExample =
   'services:\n  web:\n    image: nginx:alpine\n    ports:\n      - "127.0.0.1:8080:80"\n';
+
+function readLocalLocks() {
+  try {
+    const raw = localStorage.getItem(engineStorageKey(LOCKS_STORAGE_KEY));
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? new Set(parsed) : new Set();
+  } catch {
+    return new Set();
+  }
+}
 
 function readCollapsedState() {
   try {
@@ -87,11 +101,13 @@ const ProjectContext = createContext(null);
 
 function ProjectRow({ data: g }) {
   useLocale();
-  const { job, confirm, busy, toggle, collapsed, openLogs, openManage } =
+  const { job, confirm, busy, toggle, collapsed, openLogs, openManage, locks, toggleProjectLock } =
     useContext(ProjectContext);
   const open = !collapsed.has(g.__group);
   const named = g.__group !== NO_PROJECT;
   const run = (action) => job('project', { name: g.__group, action });
+  const isLocked =
+    named && locks ? locks.has(`project:${g.__group}`) || locks.has(g.__group) : false;
   return (
     <div
       className="flex h-full cursor-pointer items-center gap-3 bg-[#f6f8f2] pr-3 pl-3.5 max-tablet:gap-2 max-tablet:pl-2.5"
@@ -109,9 +125,16 @@ function ProjectRow({ data: g }) {
         <Box size={19} className="flex-none text-[#8c978e]" aria-hidden />
       )}
       <div className="flex min-w-0 flex-col leading-[1.5] max-tablet:flex-1">
-        <strong className="truncate text-[13px] text-ink">
-          {g.virtual ? 'coolify-util' : named ? g.__group : t('프로젝트 없음')}
-        </strong>
+        <div className="flex items-center gap-1.5 truncate">
+          {named && isLocked && (
+            <span title={t('프로젝트 전체 잠금됨 (정리 시 삭제되지 않습니다)')}>
+              <Lock size={14} className="flex-none text-[#d97706]" aria-hidden="true" />
+            </span>
+          )}
+          <strong className="truncate text-[13px] text-ink">
+            {g.virtual ? 'coolify-util' : named ? g.__group : t('프로젝트 없음')}
+          </strong>
+        </div>
         <small className="truncate font-mono text-[10px] text-[#9aa297]">
           {g.virtual
             ? t('Coolify 보조 서비스')
@@ -125,6 +148,17 @@ function ProjectRow({ data: g }) {
       </Badge>
       {named && !g.virtual && (
         <div className={cn(tw.rowActions, 'ml-auto')} onClick={(e) => e.stopPropagation()}>
+          <IconButton
+            icon={isLocked ? Lock : Unlock}
+            label={
+              isLocked
+                ? t('{0} 프로젝트 전체 잠금 해제', [g.__group])
+                : t('{0} 프로젝트 전체 잠금', [g.__group])
+            }
+            className={isLocked ? 'text-[#d97706] enabled:hover:text-[#b45309]' : ''}
+            disabled={busy}
+            onClick={() => toggleProjectLock?.(g.__group)}
+          />
           {g.total === 0 ? (
             <IconButton
               icon={Play}
@@ -150,6 +184,12 @@ function ProjectRow({ data: g }) {
           <RowMenu
             label={t('{0} 프로젝트 작업 더 보기', [g.__group])}
             items={[
+              {
+                icon: isLocked ? Unlock : Lock,
+                label: isLocked ? t('프로젝트 전체 잠금 해제') : t('프로젝트 전체 잠금'),
+                disabled: busy,
+                onClick: () => toggleProjectLock?.(g.__group),
+              },
               g.running > 0 &&
                 g.running < g.total && {
                   icon: Square,
@@ -583,11 +623,76 @@ function Containers() {
   const locale = useLocale();
   const { status, job, form, confirm, notify, busy } = useActions(),
     data = useResource('containers'),
+    qc = useQueryClient(),
     navigate = useNavigate();
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
   const projects = useData('projects', '/projects', {
     enabled: !!status?.ready,
     refetchInterval: (status?.pollSeconds || 5) * 1000,
   });
+  const locksQuery = useData('container-locks', '/containers/locks', {
+    enabled: !!status?.ready,
+    refetchInterval: (status?.pollSeconds || 5) * 1000,
+  });
+  const locks = useMemo(() => {
+    if (Array.isArray(locksQuery.data)) {
+      try {
+        localStorage.setItem(engineStorageKey(LOCKS_STORAGE_KEY), JSON.stringify(locksQuery.data));
+      } catch {}
+      return new Set(locksQuery.data);
+    }
+    return readLocalLocks();
+  }, [locksQuery.data]);
+
+  const saveLocksLocal = useCallback((set) => {
+    try {
+      localStorage.setItem(engineStorageKey(LOCKS_STORAGE_KEY), JSON.stringify(Array.from(set)));
+    } catch {}
+  }, []);
+
+  const toggleLock = useCallback(
+    async (id) => {
+      const next = !locks.has(id);
+      const nextSet = new Set(locks);
+      if (next) nextSet.add(id);
+      else nextSet.delete(id);
+      saveLocksLocal(nextSet);
+      try {
+        await api(`/containers/${id}/lock`, {
+          method: 'PUT',
+          body: { locked: next },
+        });
+        qc.invalidateQueries({ queryKey: ['container-locks'] });
+      } catch (e) {
+        notify?.(e);
+      }
+    },
+    [locks, qc, notify, saveLocksLocal],
+  );
+
+  const batchLock = useCallback(
+    async (idsToUpdate, locked) => {
+      const ids = Array.from(idsToUpdate);
+      if (!ids.length) return;
+      const nextSet = new Set(locks);
+      for (const id of ids) {
+        if (locked) nextSet.add(id);
+        else nextSet.delete(id);
+      }
+      saveLocksLocal(nextSet);
+      try {
+        await api('/containers/locks', {
+          method: 'PUT',
+          body: { ids, locked },
+        });
+        qc.invalidateQueries({ queryKey: ['container-locks'] });
+      } catch (e) {
+        notify?.(e);
+      }
+    },
+    [locks, qc, notify, saveLocksLocal],
+  );
+
   // 사용량은 로컬 엔진의 진단 수집값을 쓴다. 원격 엔진에서는 요약 카드와 열을 비워 둔다.
   const remote = isRemoteEngine();
   const usage = useData('diagnostic-resources', '/diagnostics/resources', {
@@ -606,8 +711,7 @@ function Containers() {
     [logProject, setLogProject] = useState(null),
     [manageGroup, setManageGroup] = useState(null),
     [createModal, setCreateModal] = useState(false),
-    [cloneTarget, setCloneTarget] = useState(null),
-    [selectedIds, setSelectedIds] = useState(() => new Set());
+    [cloneTarget, setCloneTarget] = useState(null);
   // Kubernetes를 쓰지 않으면 숨길 시스템 컨테이너가 없으므로 표시 선택도 보이지 않는다.
   const hasSystem = useMemo(() => (data.data || []).some(isSystemContainer), [data.data]);
   const systemToggle = !!status?.kubernetes?.enabled || hasSystem;
@@ -704,6 +808,25 @@ function Containers() {
       }),
     [collapsed],
   );
+  const toggleProjectLock = useCallback(
+    async (projectName) => {
+      const projectKey = `project:${projectName}`;
+      const projectContainers = candidates.filter(
+        (c) => c.Labels?.[PROJECT_LABEL] === projectName,
+      );
+      const containerIds = projectContainers.map((c) => c.Id).filter(Boolean);
+      const allTargets = [projectKey, ...containerIds];
+
+      const isLocked =
+        locks.has(projectKey) ||
+        (containerIds.length > 0 && containerIds.every((id) => locks.has(id)));
+      const nextLocked = !isLocked;
+
+      await batchLock(allTargets, nextLocked);
+    },
+    [candidates, locks, batchLock],
+  );
+
   const projectContext = useMemo(
     () => ({
       job,
@@ -713,8 +836,10 @@ function Containers() {
       toggle,
       openLogs: setLogProject,
       openManage: setManageGroup,
+      locks,
+      toggleProjectLock,
     }),
-    [job, confirm, busy, collapsed, toggle],
+    [job, confirm, busy, collapsed, toggle, locks, toggleProjectLock],
   );
   const cols = useMemo(
     () => [
@@ -781,6 +906,11 @@ function Containers() {
             <Box size={19} />
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
+                {locks.has(r.Id) && (
+                  <span title={t('정리 잠금됨 (미사용 리소스 정리 시 삭제되지 않습니다)')}>
+                    <Lock size={14} className="flex-none text-[#d97706]" aria-hidden="true" />
+                  </span>
+                )}
                 <strong className="truncate">{containerName(r)}</strong>
                 <CopyButton
                   text={containerName(r)}
@@ -884,55 +1014,71 @@ function Containers() {
       {
         headerName: '',
         colId: 'actions',
-        width: 136,
-        minWidth: 136,
+        pinned: 'right',
+        width: 172,
+        minWidth: 172,
         sortable: false,
-        cellRenderer: ({ data: r }) => (
-          <div className={tw.rowActions} onClick={(e) => e.stopPropagation()}>
-            <IconButton
-              icon={r.State === 'running' ? Square : Play}
-              label={`${containerName(r)} ${r.State === 'running' ? t('중지') : t('시작')}`}
-              disabled={busy}
-              onClick={() =>
-                job('containerAction', {
-                  id: r.Id,
-                  action: r.State === 'running' ? 'stop' : 'start',
-                })
-              }
-            />
-            <IconButton
-              icon={Terminal}
-              label={t('{0} 로그 보기', [containerName(r)])}
-              onClick={() => navigate('/containers/' + r.Id + '?tab=logs')}
-            />
-            <RowMenu
-              label={t('{0} 작업 더 보기', [containerName(r)])}
-              items={[
-                {
-                  icon: Copy,
-                  label: t('설정 복제'),
-                  disabled: busy,
-                  onClick: () => cloneContainer(r),
-                },
-                {
-                  icon: Trash2,
-                  label: t('삭제'),
-                  danger: true,
-                  disabled: busy,
-                  onClick: () =>
-                    confirm(
-                      t('컨테이너 삭제'),
-                      t('{0} 컨테이너를 삭제합니다. 연결된 볼륨은 보존됩니다.', [containerName(r)]),
-                      () => job('containerAction', { id: r.Id, action: 'remove' }),
-                    ),
-                },
-              ]}
-            />
-          </div>
-        ),
+        cellRenderer: ({ data: r }) => {
+          const isLocked = locks.has(r.Id);
+          return (
+            <div className={tw.rowActions} onClick={(e) => e.stopPropagation()}>
+              <IconButton
+                icon={isLocked ? Lock : Unlock}
+                label={isLocked ? t('정리 잠금 해제') : t('정리 잠금 설정')}
+                className={isLocked ? 'text-[#d97706] enabled:hover:text-[#b45309]' : ''}
+                disabled={busy}
+                onClick={() => toggleLock(r.Id)}
+              />
+              <IconButton
+                icon={r.State === 'running' ? Square : Play}
+                label={`${containerName(r)} ${r.State === 'running' ? t('중지') : t('시작')}`}
+                disabled={busy}
+                onClick={() =>
+                  job('containerAction', {
+                    id: r.Id,
+                    action: r.State === 'running' ? 'stop' : 'start',
+                  })
+                }
+              />
+              <IconButton
+                icon={Terminal}
+                label={t('{0} 로그 보기', [containerName(r)])}
+                onClick={() => navigate('/containers/' + r.Id + '?tab=logs')}
+              />
+              <RowMenu
+                label={t('{0} 작업 더 보기', [containerName(r)])}
+                items={[
+                  {
+                    icon: isLocked ? Unlock : Lock,
+                    label: isLocked ? t('정리 잠금 해제') : t('정리 잠금 설정'),
+                    onClick: () => toggleLock(r.Id),
+                  },
+                  {
+                    icon: Copy,
+                    label: t('설정 복제'),
+                    disabled: busy,
+                    onClick: () => cloneContainer(r),
+                  },
+                  {
+                    icon: Trash2,
+                    label: t('삭제'),
+                    danger: true,
+                    disabled: busy,
+                    onClick: () =>
+                      confirm(
+                        t('컨테이너 삭제'),
+                        t('{0} 컨테이너를 삭제합니다. 연결된 볼륨은 보존됩니다.', [containerName(r)]),
+                        () => job('containerAction', { id: r.Id, action: 'remove' }),
+                      ),
+                  },
+                ]}
+              />
+            </div>
+          );
+        },
       },
     ],
-    [locale, busy, job, confirm, navigate, selectedIds, candidates, remote],
+    [locale, busy, job, confirm, navigate, selectedIds, candidates, remote, locks, toggleLock],
   );
   const cloneContainer = async (r) => {
     try {
@@ -969,6 +1115,80 @@ function Containers() {
       notify(e);
     }
   };
+
+  const handlePruneResources = useCallback(async () => {
+    // 1. 보호 대상 판별 함수
+    const isProtected = (c) => {
+      const id = c.Id;
+      const shortId = id?.slice(0, 12);
+      const name = c.Names?.[0]?.replace(/^\//, '');
+      const proj = c.Labels?.[PROJECT_LABEL];
+
+      if (locks.has(id) || (shortId && locks.has(shortId)) || (name && locks.has(name))) {
+        return true;
+      }
+      if (proj && (locks.has(`project:${proj}`) || locks.has(proj))) {
+        return true;
+      }
+      return false;
+    };
+
+    // 2. 현재 컨테이너 목록 중 '중지 상태'이면서 '보호되지 않은' 컨테이너만 선별 삭제
+    try {
+      const currentContainers = (await api('/containers').catch(() => candidates)) || [];
+      const stoppedUnprotected = currentContainers.filter(
+        (c) => c.State !== 'running' && !isProtected(c),
+      );
+
+      if (stoppedUnprotected.length > 0) {
+        await Promise.allSettled(
+          stoppedUnprotected.map((c) =>
+            job('containerAction', { id: c.Id, action: 'remove' }),
+          ),
+        );
+      }
+    } catch (e) {
+      console.warn('Container prune error:', e);
+    }
+
+    // 3. 컨테이너가 0개인 빈 프로젝트 중 미잠금 프로젝트만 일괄 삭제
+    try {
+      const currentProjects = (await api('/projects').catch(() => projects.data)) || [];
+      const refreshedContainers = (await api('/containers').catch(() => candidates)) || [];
+
+      const emptyProjects = currentProjects.filter((p) => {
+        const isProjLocked = locks.has(`project:${p.name}`) || locks.has(p.name);
+        if (isProjLocked) return false;
+        const members = refreshedContainers.filter((c) => c.Labels?.[PROJECT_LABEL] === p.name);
+        return members.length === 0;
+      });
+
+      if (emptyProjects.length > 0) {
+        await Promise.allSettled(
+          emptyProjects.map((p) =>
+            api(`/projects/${encodeURIComponent(p.name)}`, { method: 'DELETE' }),
+          ),
+        );
+      }
+    } catch (e) {
+      console.warn('Empty projects prune error:', e);
+    }
+
+    // 4. 컨테이너를 건드리지 않는 안전한 도커 개별 prune 실행
+    try {
+      await job('pruneImages');
+      await job('pruneNetworks');
+    } catch (e) {
+      console.warn('Image/network prune error:', e);
+    }
+
+    // 5. 화면 쿼리 전체 갱신
+    qc.invalidateQueries({ queryKey: ['containers'] });
+    qc.invalidateQueries({ queryKey: ['projects'] });
+    qc.invalidateQueries({ queryKey: ['images'] });
+    qc.invalidateQueries({ queryKey: ['networks'] });
+  }, [locks, candidates, projects.data, job, qc]);
+
   if (!status?.ready) return status ? <RuntimeEmpty /> : <Skeleton />;
   return (
     <section className={tw.page}>
@@ -981,12 +1201,28 @@ function Containers() {
             confirm(
               t('미사용 리소스 정리'),
               t(
-                '중지된 컨테이너, 태그 없는 이미지와 미사용 네트워크를 일괄 삭제하여 가상 디스크 용량을 확보합니다. 볼륨 데이터는 유지됩니다.',
+                '중지된 컨테이너(잠금 설정 제외), 컨테이너가 없는 프로젝트, 태그 없는 이미지와 미사용 네트워크를 일괄 삭제하여 가상 디스크 용량을 확보합니다. 볼륨 데이터는 유지됩니다.',
               ),
-              () => job('pruneResources', { all: true, volumes: false }),
+              handlePruneResources,
             )
           }
         />
+        {selectedIds.size > 0 && (
+          <>
+            <PageAction
+              label={t('선택 잠금 ({0})', [selectedIds.size])}
+              icon={Lock}
+              disabled={busy}
+              onClick={() => batchLock(selectedIds, true)}
+            />
+            <PageAction
+              label={t('선택 잠금 해제 ({0})', [selectedIds.size])}
+              icon={Unlock}
+              disabled={busy}
+              onClick={() => batchLock(selectedIds, false)}
+            />
+          </>
+        )}
         <PageAction
           label={t('새 Compose 프로젝트')}
           icon={FolderPlus}

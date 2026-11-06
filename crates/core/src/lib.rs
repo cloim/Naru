@@ -1,6 +1,7 @@
 //! Naru backend library. The Tauri app hosts it; job workers run it as separate processes.
 pub mod bridge;
 pub mod connections;
+pub mod containers;
 pub mod context;
 pub mod diagnostics;
 pub mod disk;
