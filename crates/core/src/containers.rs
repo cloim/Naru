@@ -87,6 +87,11 @@ pub fn is_container_locked(locks: &BTreeSet<String>, container: &Value) -> bool 
             }
         }
     }
+    if let Some(proj) = container["Labels"][crate::projects::LABEL_PROJECT].as_str() {
+        if locks.contains(proj) || locks.contains(&format!("project:{proj}")) {
+            return true;
+        }
+    }
     false
 }
 
@@ -119,5 +124,13 @@ mod tests {
             "Names": ["/web-nginx"]
         });
         assert!(is_container_locked(&locks, &c3));
+
+        locks.insert("project:demo".to_string());
+        let c4 = json!({
+            "Id": "88888888888888888",
+            "Names": ["/demo_svc_1"],
+            "Labels": { "com.docker.compose.project": "demo" }
+        });
+        assert!(is_container_locked(&locks, &c4));
     }
 }

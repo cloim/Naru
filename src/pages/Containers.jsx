@@ -1115,79 +1115,6 @@ function Containers() {
     }
   };
 
-  const handlePruneResources = useCallback(async () => {
-    // 1. 보호 대상 판별 함수
-    const isProtected = (c) => {
-      const id = c.Id;
-      const shortId = id?.slice(0, 12);
-      const name = c.Names?.[0]?.replace(/^\//, '');
-      const proj = c.Labels?.[PROJECT_LABEL];
-
-      if (locks.has(id) || (shortId && locks.has(shortId)) || (name && locks.has(name))) {
-        return true;
-      }
-      if (proj && (locks.has(`project:${proj}`) || locks.has(proj))) {
-        return true;
-      }
-      return false;
-    };
-
-    // 2. 현재 컨테이너 목록 중 '중지 상태'이면서 '보호되지 않은' 컨테이너만 선별 삭제
-    try {
-      const currentContainers = (await api('/containers').catch(() => candidates)) || [];
-      const stoppedUnprotected = currentContainers.filter(
-        (c) => c.State !== 'running' && !isProtected(c),
-      );
-
-      if (stoppedUnprotected.length > 0) {
-        await Promise.allSettled(
-          stoppedUnprotected.map((c) =>
-            job('containerAction', { id: c.Id, action: 'remove' }),
-          ),
-        );
-      }
-    } catch (e) {
-      console.warn('Container prune error:', e);
-    }
-
-    // 3. 컨테이너가 0개인 빈 프로젝트 중 미잠금 프로젝트만 일괄 삭제
-    try {
-      const currentProjects = (await api('/projects').catch(() => projects.data)) || [];
-      const refreshedContainers = (await api('/containers').catch(() => candidates)) || [];
-
-      const emptyProjects = currentProjects.filter((p) => {
-        const isProjLocked = locks.has(`project:${p.name}`) || locks.has(p.name);
-        if (isProjLocked) return false;
-        const members = refreshedContainers.filter((c) => c.Labels?.[PROJECT_LABEL] === p.name);
-        return members.length === 0;
-      });
-
-      if (emptyProjects.length > 0) {
-        await Promise.allSettled(
-          emptyProjects.map((p) =>
-            api(`/projects/${encodeURIComponent(p.name)}`, { method: 'DELETE' }),
-          ),
-        );
-      }
-    } catch (e) {
-      console.warn('Empty projects prune error:', e);
-    }
-
-    // 4. 컨테이너를 건드리지 않는 안전한 도커 개별 prune 실행
-    try {
-      await job('pruneImages');
-      await job('pruneNetworks');
-    } catch (e) {
-      console.warn('Image/network prune error:', e);
-    }
-
-    // 5. 화면 쿼리 전체 갱신
-    qc.invalidateQueries({ queryKey: ['containers'] });
-    qc.invalidateQueries({ queryKey: ['projects'] });
-    qc.invalidateQueries({ queryKey: ['images'] });
-    qc.invalidateQueries({ queryKey: ['networks'] });
-  }, [locks, candidates, projects.data, job, qc]);
-
   if (!status?.ready) return status ? <RuntimeEmpty /> : <Skeleton />;
   return (
     <section className={tw.page}>
@@ -1202,7 +1129,12 @@ function Containers() {
               t(
                 '중지된 컨테이너(잠금 설정 제외), 컨테이너가 없는 프로젝트, 태그 없는 이미지와 미사용 네트워크를 일괄 삭제하여 가상 디스크 용량을 확보합니다. 볼륨 데이터는 유지됩니다.',
               ),
-              handlePruneResources,
+              () =>
+                job('pruneResources', {
+                  all: false,
+                  volumes: false,
+                  keepContainers: Array.from(locks),
+                }),
             )
           }
         />
