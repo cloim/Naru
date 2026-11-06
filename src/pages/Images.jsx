@@ -511,11 +511,11 @@ function Images() {
       {
         headerName: '',
         colId: 'actions',
-        width: 152,
-        minWidth: 152,
+        width: 132,
+        minWidth: 132,
         sortable: false,
         cellRenderer: ({ data: r }) => (
-          <div className={cn(tw.rowActions, 'pr-2')}>
+          <div className={tw.rowActions} onClick={(e) => e.stopPropagation()}>
             <IconButton
               label={t('{0} 실행', [imageName(r)])}
               icon={Play}
