@@ -509,7 +509,6 @@ function Images() {
       {
         headerName: '',
         colId: 'actions',
-        pinned: 'right',
         width: 148,
         minWidth: 148,
         sortable: false,

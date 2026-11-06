@@ -1014,7 +1014,6 @@ function Containers() {
       {
         headerName: '',
         colId: 'actions',
-        pinned: 'right',
         width: 172,
         minWidth: 172,
         sortable: false,
