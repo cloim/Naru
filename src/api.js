@@ -96,3 +96,14 @@ export async function downloadConfig() {
   a.click();
   URL.revokeObjectURL(url);
 }
+export async function openExternal(url) {
+  if (!url) return;
+  try {
+    await api('/open-external', {
+      method: 'POST',
+      body: { url },
+    });
+  } catch {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+}

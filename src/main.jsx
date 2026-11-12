@@ -28,6 +28,7 @@ import { EngineSelector } from './components/EngineSelector.jsx';
 import { t, useLocale } from './i18n.js';
 import { Actions, TopBar, Button, PageAction, Skeleton, Empty, useData, jobNames } from './ui.jsx';
 import { FormDialog, JobDialog } from './dialogs.jsx';
+import { openExternal } from './api.js';
 
 const Extensions = lazy(() => import('./pages/Extensions.jsx'));
 const Containers = lazy(() => import('./pages/Containers.jsx'));
@@ -502,6 +503,19 @@ function OnboardingGate() {
     );
   return <EngineBootstrap />;
 }
+// 외부 링크(<a target="_blank">) 클릭 시 Tauri 데스크톱 웹뷰에서 시스템 기본 브라우저로 열리도록 가로챈다.
+document.addEventListener('click', (event) => {
+  const anchor = event.target?.closest?.('a');
+  if (!anchor) return;
+  const target = anchor.getAttribute('target');
+  const href = anchor.getAttribute('href');
+  if (target === '_blank' && href && /^https?:\/\//i.test(href)) {
+    if (href.includes('/api/volumes/') && href.includes('/export')) return;
+    event.preventDefault();
+    openExternal(anchor.href || href);
+  }
+});
+
 createRoot(document.getElementById('root')).render(
   <QueryClientProvider client={client}>
     <BrowserRouter>

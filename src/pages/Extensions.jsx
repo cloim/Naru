@@ -16,7 +16,7 @@ import {
   usePageTitle,
 } from '../ui.jsx';
 import { cn, tw } from '../tw.js';
-import { api } from '../api.js';
+import { api, openExternal } from '../api.js';
 
 export default function Extensions() {
   useLocale();
@@ -53,7 +53,7 @@ export default function Extensions() {
         try {
           const url = new URL(event.data.message);
           if (['https:', 'http:'].includes(url.protocol))
-            window.open(url.href, '_blank', 'noopener,noreferrer');
+            openExternal(url.href);
         } catch {}
         return;
       }

@@ -141,8 +141,8 @@ pub fn open_browser(url: &str) -> Result<()> {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        std::process::Command::new("cmd")
-            .args(["/c", "start", "", url])
+        std::process::Command::new("rundll32")
+            .args(["url.dll,FileProtocolHandler", url])
             .creation_flags(0x00000200 | 0x00000008)
             .spawn()
             .context("브라우저 열기 실패")?;

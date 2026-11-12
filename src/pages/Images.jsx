@@ -67,7 +67,7 @@ import {
   PageAction,
 } from '../ui.jsx';
 import { cn, tw } from '../tw.js';
-import { api, downloadConfig } from '../api.js';
+import { api, downloadConfig, openExternal } from '../api.js';
 import { Modal } from '../components/Modal/Modal.jsx';
 import { PruneConfirmModal } from '../components/PruneConfirmModal.jsx';
 import SelectControl from '../components/SelectControl/SelectControl.tsx';
@@ -416,6 +416,10 @@ function ScanPanel({ scan, image }) {
                           href={v.url}
                           target="_blank"
                           rel="noreferrer"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            openExternal(v.url);
+                          }}
                           className="truncate font-mono text-[12px] font-semibold text-ink hover:underline"
                         >
                           {v.id}

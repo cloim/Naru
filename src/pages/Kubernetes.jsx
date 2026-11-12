@@ -28,7 +28,7 @@ import {
   PageAction,
 } from '../ui.jsx';
 import { cn, tw } from '../tw.js';
-import { downloadConfig } from '../api.js';
+import { downloadConfig, openExternal } from '../api.js';
 import { Modal } from '../components/Modal/Modal.jsx';
 import SelectControl from '../components/SelectControl/SelectControl.tsx';
 
@@ -267,6 +267,11 @@ function Kubernetes() {
                   href={url}
                   target="_blank"
                   rel="noreferrer"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    openExternal(url);
+                  }}
                   className="inline-flex items-center gap-1 font-mono text-[#2c6e49] underline decoration-[#2c6e49]/30 hover:decoration-[#2c6e49]"
                   title={t('{0} 브라우저에서 열기', [url])}
                 >

@@ -619,6 +619,16 @@ async fn forget(State(app): Shared, Path(name): Path<String>) -> ApiResult {
     ok()
 }
 
+async fn open_external_url(Json(body): Json<Value>) -> ApiResult {
+    let url_str = body["url"].as_str().ok_or_else(|| invalid("URL을 입력해 주세요."))?;
+    let parsed = url::Url::parse(url_str).map_err(|_| invalid("유효하지 않은 URL 형식입니다."))?;
+    if parsed.scheme() != "http" && parsed.scheme() != "https" {
+        return Err(invalid("http 또는 https 프로토콜만 열 수 있습니다.").into());
+    }
+    crate::updater::open_browser(url_str)?;
+    ok()
+}
+
 async fn diagnostics() -> ApiResult {
     let state = runtime::status().await?;
     let mut logs = serde_json::Map::new();
@@ -881,6 +891,7 @@ fn routes(app: Arc<App>) -> Router {
         .route("/api/projects/{name}", delete(forget))
         .route("/api/diagnostics/resources", get(|| async { ApiResult::Ok(Json(crate::diagnostics::resource_sample().await?)) }))
         .route("/api/diagnostics", get(diagnostics))
+        .route("/api/open-external", post(open_external_url))
         .route("/api/update/check", get(|| async { ApiResult::Ok(Json(serde_json::to_value(crate::updater::check_for_updates().await?)?)) }))
         .route("/api/remote-access", get(get_remote).put(put_remote))
         .route("/api/engines", get(engines).post(add_engine))
@@ -1058,5 +1069,22 @@ mod tests {
         assert_eq!(normalize_posix("../../etc/passwd"), "/etc/passwd");
         assert_eq!(normalize_posix("/a/./b/../c/"), "/a/c");
         assert_eq!(normalize_posix(""), "/");
+    }
+
+    #[test]
+    fn open_external_url_validation() {
+        let check = |s: &str| -> bool {
+            if let Ok(parsed) = url::Url::parse(s) {
+                parsed.scheme() == "http" || parsed.scheme() == "https"
+            } else {
+                false
+            }
+        };
+        assert!(check("http://localhost:8080"));
+        assert!(check("https://github.com/cloim/Naru"));
+        assert!(check("http://my-container.naru.localhost:49170/?query=1&b=2"));
+        assert!(!check("file:///C:/Windows/notepad.exe"));
+        assert!(!check("javascript:alert(1)"));
+        assert!(!check("not a url"));
     }
 }

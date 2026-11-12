@@ -1,4 +1,4 @@
-import { engineStorageKey, isRemoteEngine } from '../api.js';
+import { engineStorageKey, isRemoteEngine, openExternal } from '../api.js';
 import { t, useLocale } from '../i18n.js';
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -536,6 +536,10 @@ function ProjectManage({ group, onClose, containers = [] }) {
                                       rel="noreferrer"
                                       className="inline-flex items-center gap-0.5 rounded-[4px] border border-[#d2ddd0] bg-white px-1.5 py-0.5 font-mono text-[11px] font-semibold text-brand hover:underline"
                                       title={t('직접 접속')}
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        openExternal(directUrl);
+                                      }}
                                     >
                                       :{p.PublicPort}
                                       <ArrowUpRight size={11} />
@@ -543,9 +547,7 @@ function ProjectManage({ group, onClose, containers = [] }) {
                                     <IconButton
                                       icon={Globe}
                                       label={t('{0} 가상 도메인으로 열기', [vhostUrl])}
-                                      onClick={() =>
-                                        window.open(vhostUrl, '_blank', 'noopener,noreferrer')
-                                      }
+                                      onClick={() => openExternal(vhostUrl)}
                                     />
                                   </div>
                                 );
@@ -972,8 +974,10 @@ function Containers() {
                       rel="noreferrer"
                       data-no-row-click="true"
                       onClick={(e) => {
+                        e.preventDefault();
                         e.stopPropagation();
                         window.__naru_no_row_click = Date.now();
+                        openExternal(url);
                       }}
                       className="inline-flex items-center gap-0.5 font-mono text-[#2c6e49] underline decoration-[#2c6e49]/30 hover:decoration-[#2c6e49]"
                       title={t('{0} 브라우저에서 열기', [url])}
@@ -988,7 +992,7 @@ function Containers() {
                       onClick={(e) => {
                         e.stopPropagation();
                         window.__naru_no_row_click = Date.now();
-                        window.open(virtualUrl, '_blank', 'noopener,noreferrer');
+                        openExternal(virtualUrl);
                       }}
                     />
                   </div>
