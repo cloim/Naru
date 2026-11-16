@@ -99,6 +99,7 @@ pub fn show_error(message: &str) {
     eprintln!("{message}");
 }
 
+#[allow(dead_code)]
 #[cfg(windows)]
 pub fn show_info(message: &str) {
     use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONINFORMATION, MB_OK};
