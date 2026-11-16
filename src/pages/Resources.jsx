@@ -1,6 +1,7 @@
 import { engineStorageKey } from '../api.js';
 import { t, useLocale } from '../i18n.js';
 import React, { createContext, useContext, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Boxes,
   ChevronRight,
@@ -92,6 +93,7 @@ function VolumeProjectRow({ data: g }) {
 function Resources({ kind }) {
   const locale = useLocale();
   const { status, job, form, confirm, busy, notify } = useActions(),
+    qc = useQueryClient(),
     data = useResource(kind);
   const [search, setSearch] = useState(''),
     [inspect, setInspect] = useState(null),
@@ -627,9 +629,22 @@ function Resources({ kind }) {
         onClose={() => setPruneModalOpen(false)}
         kind={kind}
         busy={busy}
-        onConfirm={async () => {
+        onConfirm={async (selectedItems) => {
           setPruneModalOpen(false);
-          await job(volume ? 'pruneVolumes' : 'pruneNetworks');
+          if (!selectedItems || !selectedItems.length) return;
+          try {
+            await Promise.allSettled(
+              selectedItems.map((item) =>
+                job(
+                  volume ? 'removeVolume' : 'removeNetwork',
+                  volume ? { name: item.name } : { id: item.id || item.name },
+                ),
+              ),
+            );
+          } catch (e) {
+            notify?.(e);
+          }
+          qc.invalidateQueries({ queryKey: [kind] });
         }}
       />
     </section>

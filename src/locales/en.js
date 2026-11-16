@@ -441,15 +441,26 @@ export default {
   '미사용 이미지 정리 대상 확인': 'Confirm unused images to prune',
   '미사용 볼륨 정리 대상 확인': 'Confirm unused volumes to prune',
   '미사용 네트워크 정리 대상 확인': 'Confirm unused networks to prune',
+  '미사용 컨테이너 및 프로젝트 정리 대상 확인': 'Confirm unused containers and projects to prune',
   '미사용 정리 대상 확인': 'Confirm unused resources to prune',
   '{0}개 정리 실행': 'Prune {0} items',
   '정리할 미사용 {0}이(가) 없습니다': 'No unused {0} to prune',
+  '중지된 컨테이너가 없거나 모든 리소스가 잠금 설정으로 안전하게 보호됩니다.':
+    'There are no stopped containers or all resources are safely protected by lock settings.',
   '모든 {0}이(가) 현재 실행 중이거나 중지된 컨테이너에 연결되어 있어 안전하게 유지됩니다.':
     'All {0} are currently attached to running or stopped containers.',
+  '중지된 미잠금 컨테이너와 빈 프로젝트만 정리됩니다':
+    'Only stopped, unlocked containers and empty projects will be pruned',
+  '잠금 설정된 리소스는 안전하게 보존되며, 체크된 {0}개 항목만 삭제됩니다.':
+    'Locked resources are safely preserved, and only the {0} checked items will be deleted.',
   '연결된 컨테이너가 없는 미사용 항목만 정리됩니다':
     'Only items with no attached containers will be pruned',
+  '중지된 컨테이너라도 연결되어 있는 리소스는 보존되며, 아래 체크된 {0}개 항목만 영구 삭제됩니다.':
+    'Resources attached to stopped containers are preserved. Only the {0} checked items will be permanently deleted.',
   '중지된 컨테이너라도 연결되어 있는 리소스는 보존되며, 아래 목록의 {0}개 항목만 영구 삭제됩니다.':
     'Resources attached to stopped containers are preserved. Only the {0} items listed below will be permanently deleted.',
+  '선택 {0}개 / 총 {1}개 미사용 항목': 'Selected {0} / Total {1} unused items',
+  '전체 선택': 'Select all',
   '총 {0}개 미사용 항목': 'Total {0} unused items',
   '확보 예상 용량': 'Estimated reclaimed space',
   리소스: 'Resources',

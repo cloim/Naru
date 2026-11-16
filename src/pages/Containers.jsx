@@ -53,6 +53,13 @@ import { api } from '../api.js';
 import { publicPortMappings } from '../container-ports.js';
 import { Modal } from '../components/Modal/Modal.jsx';
 import { CreateContainerModal } from '../components/CreateContainerModal.jsx';
+import { PruneConfirmModal } from '../components/PruneConfirmModal.jsx';
+import {
+  isContainerLocked,
+  getContainerLockTargets,
+  getProjectLockTargets,
+  isProjectLocked,
+} from '../container-locks.js';
 
 export const isSystemContainer = (r) =>
   Boolean(
@@ -106,8 +113,7 @@ function ProjectRow({ data: g }) {
   const open = !collapsed.has(g.__group);
   const named = g.__group !== NO_PROJECT;
   const run = (action) => job('project', { name: g.__group, action });
-  const isLocked =
-    named && locks ? locks.has(`project:${g.__group}`) || locks.has(g.__group) : false;
+  const isLocked = named && locks ? isProjectLocked(locks, g.__group, g.members || []) : false;
   return (
     <div
       className="flex h-full cursor-pointer items-center gap-3 bg-[#f6f8f2] pr-3 pl-3.5 max-tablet:gap-2 max-tablet:pl-2.5"
@@ -653,23 +659,17 @@ function Containers() {
   }, []);
 
   const toggleLock = useCallback(
-    async (id) => {
-      const next = !locks.has(id);
-      const nextSet = new Set(locks);
-      if (next) nextSet.add(id);
-      else nextSet.delete(id);
-      saveLocksLocal(nextSet);
-      try {
-        await api(`/containers/${id}/lock`, {
-          method: 'PUT',
-          body: { locked: next },
-        });
-        qc.invalidateQueries({ queryKey: ['container-locks'] });
-      } catch (e) {
-        notify?.(e);
-      }
+    async (containerOrId) => {
+      const c =
+        typeof containerOrId === 'object' && containerOrId !== null
+          ? containerOrId
+          : candidates.find((item) => item.Id === containerOrId) || { Id: containerOrId };
+      const currentlyLocked = isContainerLocked(locks, c);
+      const next = !currentlyLocked;
+      const targets = getContainerLockTargets(c);
+      await batchLock(targets, next);
     },
-    [locks, qc, notify, saveLocksLocal],
+    [candidates, locks, batchLock],
   );
 
   const batchLock = useCallback(
@@ -713,7 +713,8 @@ function Containers() {
     [logProject, setLogProject] = useState(null),
     [manageGroup, setManageGroup] = useState(null),
     [createModal, setCreateModal] = useState(false),
-    [cloneTarget, setCloneTarget] = useState(null);
+    [cloneTarget, setCloneTarget] = useState(null),
+    [pruneModalOpen, setPruneModalOpen] = useState(false);
   // Kubernetes를 쓰지 않으면 숨길 시스템 컨테이너가 없으므로 표시 선택도 보이지 않는다.
   const hasSystem = useMemo(() => (data.data || []).some(isSystemContainer), [data.data]);
   const systemToggle = !!status?.kubernetes?.enabled || hasSystem;
@@ -764,6 +765,7 @@ function Containers() {
         info: infos.get(key),
         total: members.length,
         running: members.filter((r) => r.State === 'running').length,
+        members,
       });
       for (const r of shown)
         if (projectOf(r) === key)
@@ -812,16 +814,9 @@ function Containers() {
   );
   const toggleProjectLock = useCallback(
     async (projectName) => {
-      const projectKey = `project:${projectName}`;
-      const projectContainers = candidates.filter(
-        (c) => c.Labels?.[PROJECT_LABEL] === projectName,
-      );
-      const containerIds = projectContainers.map((c) => c.Id).filter(Boolean);
-      const allTargets = [projectKey, ...containerIds];
-
-      const isLocked =
-        locks.has(projectKey) ||
-        (containerIds.length > 0 && containerIds.every((id) => locks.has(id)));
+      const projectContainers = candidates.filter((c) => c.Labels?.[PROJECT_LABEL] === projectName);
+      const allTargets = getProjectLockTargets(projectName, projectContainers);
+      const isLocked = isProjectLocked(locks, projectName, projectContainers);
       const nextLocked = !isLocked;
 
       await batchLock(allTargets, nextLocked);
@@ -908,7 +903,7 @@ function Containers() {
             <Box size={19} />
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                {locks.has(r.Id) && (
+                {isContainerLocked(locks, r) && (
                   <span title={t('정리 잠금됨 (미사용 리소스 정리 시 삭제되지 않습니다)')}>
                     <Lock size={14} className="flex-none text-[#d97706]" aria-hidden="true" />
                   </span>
@@ -1022,7 +1017,7 @@ function Containers() {
         minWidth: 172,
         sortable: false,
         cellRenderer: ({ data: r }) => {
-          const isLocked = locks.has(r.Id);
+          const isLocked = isContainerLocked(locks, r);
           return (
             <div className={tw.rowActions} onClick={(e) => e.stopPropagation()}>
               <IconButton
@@ -1030,7 +1025,7 @@ function Containers() {
                 label={isLocked ? t('정리 잠금 해제') : t('정리 잠금 설정')}
                 className={isLocked ? 'text-[#d97706] enabled:hover:text-[#b45309]' : ''}
                 disabled={busy}
-                onClick={() => toggleLock(r.Id)}
+                onClick={() => toggleLock(r)}
               />
               <IconButton
                 icon={r.State === 'running' ? Square : Play}
@@ -1054,7 +1049,7 @@ function Containers() {
                   {
                     icon: isLocked ? Unlock : Lock,
                     label: isLocked ? t('정리 잠금 해제') : t('정리 잠금 설정'),
-                    onClick: () => toggleLock(r.Id),
+                    onClick: () => toggleLock(r),
                   },
                   {
                     icon: Copy,
@@ -1070,7 +1065,9 @@ function Containers() {
                     onClick: () =>
                       confirm(
                         t('컨테이너 삭제'),
-                        t('{0} 컨테이너를 삭제합니다. 연결된 볼륨은 보존됩니다.', [containerName(r)]),
+                        t('{0} 컨테이너를 삭제합니다. 연결된 볼륨은 보존됩니다.', [
+                          containerName(r),
+                        ]),
                         () => job('containerAction', { id: r.Id, action: 'remove' }),
                       ),
                   },
@@ -1119,6 +1116,40 @@ function Containers() {
     }
   };
 
+  const handlePruneContainersConfirmed = useCallback(
+    async (selectedItems) => {
+      setPruneModalOpen(false);
+      if (!selectedItems || !selectedItems.length) return;
+
+      const containersToRemove = selectedItems.filter((i) => i.itemType !== 'project');
+      const projectsToRemove = selectedItems.filter((i) => i.itemType === 'project');
+
+      try {
+        if (containersToRemove.length > 0) {
+          await Promise.allSettled(
+            containersToRemove.map((c) =>
+              job('containerAction', { id: c.fullId || c.id, action: 'remove' }),
+            ),
+          );
+        }
+        if (projectsToRemove.length > 0) {
+          await Promise.allSettled(
+            projectsToRemove.map((p) =>
+              api(`/projects/${encodeURIComponent(p.name)}`, { method: 'DELETE' }),
+            ),
+          );
+        }
+      } catch (e) {
+        notify?.(e);
+      }
+
+      qc.invalidateQueries({ queryKey: ['containers'] });
+      qc.invalidateQueries({ queryKey: ['projects'] });
+      qc.invalidateQueries({ queryKey: ['container-locks'] });
+    },
+    [job, qc, notify],
+  );
+
   if (!status?.ready) return status ? <RuntimeEmpty /> : <Skeleton />;
   return (
     <section className={tw.page}>
@@ -1127,20 +1158,7 @@ function Containers() {
           label={t('미사용 리소스 정리')}
           icon={BrushCleaning}
           disabled={busy}
-          onClick={() =>
-            confirm(
-              t('미사용 리소스 정리'),
-              t(
-                '중지된 컨테이너(잠금 설정 제외), 컨테이너가 없는 프로젝트, 태그 없는 이미지와 미사용 네트워크를 일괄 삭제하여 가상 디스크 용량을 확보합니다. 볼륨 데이터는 유지됩니다.',
-              ),
-              () =>
-                job('pruneResources', {
-                  all: false,
-                  volumes: false,
-                  keepContainers: Array.from(locks),
-                }),
-            )
-          }
+          onClick={() => setPruneModalOpen(true)}
         />
         {selectedIds.size > 0 && (
           <>
@@ -1148,13 +1166,29 @@ function Containers() {
               label={t('선택 잠금 ({0})', [selectedIds.size])}
               icon={Lock}
               disabled={busy}
-              onClick={() => batchLock(selectedIds, true)}
+              onClick={() => {
+                const selectedContainers = candidates.filter((c) => selectedIds.has(c.Id));
+                const targets = new Set();
+                for (const c of selectedContainers) {
+                  for (const t of getContainerLockTargets(c)) targets.add(t);
+                }
+                for (const id of selectedIds) targets.add(id);
+                batchLock(Array.from(targets), true);
+              }}
             />
             <PageAction
               label={t('선택 잠금 해제 ({0})', [selectedIds.size])}
               icon={Unlock}
               disabled={busy}
-              onClick={() => batchLock(selectedIds, false)}
+              onClick={() => {
+                const selectedContainers = candidates.filter((c) => selectedIds.has(c.Id));
+                const targets = new Set();
+                for (const c of selectedContainers) {
+                  for (const t of getContainerLockTargets(c)) targets.add(t);
+                }
+                for (const id of selectedIds) targets.add(id);
+                batchLock(Array.from(targets), false);
+              }}
             />
           </>
         )}
@@ -1385,6 +1419,13 @@ function Containers() {
           setCreateModal(false);
           setCloneTarget(null);
         }}
+      />
+      <PruneConfirmModal
+        isOpen={pruneModalOpen}
+        onClose={() => setPruneModalOpen(false)}
+        kind="containers"
+        onConfirm={handlePruneContainersConfirmed}
+        busy={busy}
       />
     </section>
   );

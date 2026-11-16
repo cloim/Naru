@@ -29,6 +29,7 @@ import {
   usePageTitle,
 } from '../ui.jsx';
 import { cn, tw } from '../tw.js';
+import { isContainerLocked, getContainerLockTargets } from '../container-locks.js';
 import { ContainerFileExplorer } from '../components/ContainerFileExplorer.jsx';
 import { EditContainerModal } from '../components/EditContainerModal.jsx';
 import ResourceChart from '../components/ResourceChart.jsx';
@@ -210,24 +211,29 @@ function ContainerDetail() {
   const logEndRef = useRef(null),
     logPreRef = useRef(null);
   const detail = useData('inspect:' + id, `/containers/${id}/inspect`);
+  const inspect = Array.isArray(detail.data) ? detail.data[0] : detail.data;
+  usePageTitle(inspect?.Name?.replace(/^\//, '') || id.slice(0, 12));
+
   const locksQuery = useData('container-locks', '/containers/locks', {
     refetchInterval: 5000,
   });
+  const locks = useMemo(() => new Set(locksQuery.data || []), [locksQuery.data]);
   const isLocked = useMemo(
-    () => new Set(locksQuery.data || []).has(id),
-    [locksQuery.data, id],
+    () => isContainerLocked(locks, inspect || { Id: id }),
+    [locks, inspect, id],
   );
   const toggleLock = useCallback(async () => {
     try {
-      await api(`/containers/${id}/lock`, {
+      const targets = inspect ? getContainerLockTargets(inspect) : [id];
+      await api('/containers/locks', {
         method: 'PUT',
-        body: { locked: !isLocked },
+        body: { ids: targets, locked: !isLocked },
       });
       qc.invalidateQueries({ queryKey: ['container-locks'] });
     } catch (e) {
       notify?.(e);
     }
-  }, [id, isLocked, qc, notify]);
+  }, [id, inspect, isLocked, qc, notify]);
   const logs = useData('logs:' + id, `/containers/${id}/logs`, {
     enabled: tab === 'logs',
     refetchInterval: 5000,
@@ -239,8 +245,6 @@ function ContainerDetail() {
   // 로그를 보는 동안 최근 5분 사용량을 모아 작은 차트로 보여 준다. 네트워크는 누적값의 차이로 초당 전송량을 계산한다.
   const [history, setHistory] = useState([]);
   useEffect(() => setHistory([]), [id]);
-  const inspect = Array.isArray(detail.data) ? detail.data[0] : detail.data;
-  usePageTitle(inspect?.Name?.replace(/^\//, '') || id.slice(0, 12));
   const usage = stats.data && stats.data.text === undefined ? resourceUsage(stats.data) : null;
   useEffect(() => {
     if (!usage) return;

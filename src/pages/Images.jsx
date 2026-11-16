@@ -454,7 +454,8 @@ function ScanPanel({ scan, image }) {
 
 function Images() {
   const locale = useLocale();
-  const { status, job, form, confirm, busy } = useActions(),
+  const { status, job, form, confirm, notify, busy } = useActions(),
+    qc = useQueryClient(),
     data = useResource('images');
   const [search, setSearch] = useState(''),
     [layerInspectImage, setLayerInspectImage] = useState(null),
@@ -710,9 +711,17 @@ function Images() {
         onClose={() => setPruneModalOpen(false)}
         kind="images"
         busy={busy}
-        onConfirm={async () => {
+        onConfirm={async (selectedItems) => {
           setPruneModalOpen(false);
-          await job('pruneImages');
+          if (!selectedItems || !selectedItems.length) return;
+          try {
+            await Promise.allSettled(
+              selectedItems.map((item) => job('removeImage', { id: item.id || item.name })),
+            );
+          } catch (e) {
+            notify?.(e);
+          }
+          qc.invalidateQueries({ queryKey: ['images'] });
         }}
       />
     </section>
