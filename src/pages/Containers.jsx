@@ -652,49 +652,6 @@ function Containers() {
     return readLocalLocks();
   }, [locksQuery.data]);
 
-  const saveLocksLocal = useCallback((set) => {
-    try {
-      localStorage.setItem(engineStorageKey(LOCKS_STORAGE_KEY), JSON.stringify(Array.from(set)));
-    } catch {}
-  }, []);
-
-  const toggleLock = useCallback(
-    async (containerOrId) => {
-      const c =
-        typeof containerOrId === 'object' && containerOrId !== null
-          ? containerOrId
-          : candidates.find((item) => item.Id === containerOrId) || { Id: containerOrId };
-      const currentlyLocked = isContainerLocked(locks, c);
-      const next = !currentlyLocked;
-      const targets = getContainerLockTargets(c);
-      await batchLock(targets, next);
-    },
-    [candidates, locks, batchLock],
-  );
-
-  const batchLock = useCallback(
-    async (idsToUpdate, locked) => {
-      const ids = Array.from(idsToUpdate);
-      if (!ids.length) return;
-      const nextSet = new Set(locks);
-      for (const id of ids) {
-        if (locked) nextSet.add(id);
-        else nextSet.delete(id);
-      }
-      saveLocksLocal(nextSet);
-      try {
-        await api('/containers/locks', {
-          method: 'PUT',
-          body: { ids, locked },
-        });
-        qc.invalidateQueries({ queryKey: ['container-locks'] });
-      } catch (e) {
-        notify?.(e);
-      }
-    },
-    [locks, qc, notify, saveLocksLocal],
-  );
-
   // 사용량은 로컬 엔진의 진단 수집값을 쓴다. 원격 엔진에서는 요약 카드와 열을 비워 둔다.
   const remote = isRemoteEngine();
   const usage = useData('diagnostic-resources', '/diagnostics/resources', {
@@ -725,6 +682,49 @@ function Containers() {
   const visible = useMemo(
     () => candidates.filter((r) => JSON.stringify(r).toLowerCase().includes(search.toLowerCase())),
     [candidates, search],
+  );
+
+  const saveLocksLocal = useCallback((set) => {
+    try {
+      localStorage.setItem(engineStorageKey(LOCKS_STORAGE_KEY), JSON.stringify(Array.from(set)));
+    } catch {}
+  }, []);
+
+  const batchLock = useCallback(
+    async (idsToUpdate, locked) => {
+      const ids = Array.from(idsToUpdate);
+      if (!ids.length) return;
+      const nextSet = new Set(locks);
+      for (const id of ids) {
+        if (locked) nextSet.add(id);
+        else nextSet.delete(id);
+      }
+      saveLocksLocal(nextSet);
+      try {
+        await api('/containers/locks', {
+          method: 'PUT',
+          body: { ids, locked },
+        });
+        qc.invalidateQueries({ queryKey: ['container-locks'] });
+      } catch (e) {
+        notify?.(e);
+      }
+    },
+    [locks, qc, notify, saveLocksLocal],
+  );
+
+  const toggleLock = useCallback(
+    async (containerOrId) => {
+      const c =
+        typeof containerOrId === 'object' && containerOrId !== null
+          ? containerOrId
+          : candidates.find((item) => item.Id === containerOrId) || { Id: containerOrId };
+      const currentlyLocked = isContainerLocked(locks, c);
+      const next = !currentlyLocked;
+      const targets = getContainerLockTargets(c);
+      await batchLock(targets, next);
+    },
+    [candidates, locks, batchLock],
   );
   const inTab = (r, key) =>
     key === 'all' || (key === 'running' ? r.State === 'running' : r.State !== 'running');
