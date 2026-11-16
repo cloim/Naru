@@ -811,7 +811,7 @@ fn routes(app: Arc<App>) -> Router {
         .route(
             "/api/{kind}/prune-preview",
             get(|Path(kind): Path<String>| async move {
-                if !["images", "volumes", "networks"].contains(&kind.as_str()) {
+                if !["images", "volumes", "networks", "containers"].contains(&kind.as_str()) {
                     return Err(invalid("지원하지 않는 리소스 종류입니다.").into());
                 }
                 ApiResult::Ok(Json(engine::prune_preview(&kind).await?))

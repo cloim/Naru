@@ -530,6 +530,47 @@ pub async fn prune_preview(kind: &str) -> Result<Value> {
                     .map(|n| json!({ "id": n["Id"].as_str().unwrap_or_default().chars().take(12).collect::<String>(), "name": n["Name"], "driver": n["Driver"] }))
                     .collect()
             }
+            "containers" => {
+                let locks = crate::containers::load_container_locks().await.unwrap_or_default();
+                let mut preview_items = Vec::new();
+                for c in &containers {
+                    let running = c["State"] == "running"
+                        || c["Status"].as_str().is_some_and(|s| s.starts_with("Up"));
+                    if !running && !crate::containers::is_container_locked(&locks, c) {
+                        let id = c["Id"].as_str().unwrap_or_default();
+                        let name = c["Names"][0].as_str().unwrap_or(id).trim_start_matches('/');
+                        let image = c["Image"].as_str().unwrap_or_default();
+                        preview_items.push(json!({
+                            "id": short(id),
+                            "fullId": id,
+                            "name": name,
+                            "itemType": "container",
+                            "driver": image,
+                            "detail": image
+                        }));
+                    }
+                }
+                let container_val = Value::Array(containers.clone());
+                let project_list = crate::projects::list_projects(&container_val).await.unwrap_or_default();
+                for proj in project_list {
+                    let members = crate::projects::members(&container_val, &proj.name);
+                    if members.is_empty() {
+                        let is_project_locked = locks.contains(&format!("project:{}", proj.name))
+                            || locks.contains(&proj.name);
+                        if !is_project_locked {
+                            preview_items.push(json!({
+                                "id": format!("project:{}", proj.name),
+                                "fullId": format!("project:{}", proj.name),
+                                "name": proj.name,
+                                "itemType": "project",
+                                "driver": "compose",
+                                "detail": "빈 프로젝트"
+                            }));
+                        }
+                    }
+                }
+                preview_items.into()
+            }
             _ => Value::Array(vec![]),
         });
     }
@@ -556,6 +597,49 @@ pub async fn prune_preview(kind: &str) -> Result<Value> {
             .filter(|n| !["bridge", "host", "none"].contains(&n["Name"].as_str().unwrap_or_default()))
             .map(|n| json!({ "id": n["Id"].as_str().unwrap_or_default().chars().take(12).collect::<String>(), "name": n["Name"], "driver": n["Driver"] }))
             .collect(),
+        "containers" => {
+            let locks = crate::containers::load_container_locks().await.unwrap_or_default();
+            let mut preview_items = Vec::new();
+            if let Some(list) = containers.as_array() {
+                for c in list {
+                    let running = c["State"] == "running"
+                        || c["Status"].as_str().is_some_and(|s| s.starts_with("Up"));
+                    if !running && !crate::containers::is_container_locked(&locks, c) {
+                        let id = c["Id"].as_str().unwrap_or_default();
+                        let short_id: String = id.chars().take(12).collect();
+                        let name = c["Names"][0].as_str().unwrap_or(id).trim_start_matches('/');
+                        let image = c["Image"].as_str().unwrap_or_default();
+                        preview_items.push(json!({
+                            "id": short_id,
+                            "fullId": id,
+                            "name": name,
+                            "itemType": "container",
+                            "driver": image,
+                            "detail": image
+                        }));
+                    }
+                }
+            }
+            let project_list = crate::projects::list_projects(&containers).await.unwrap_or_default();
+            for proj in project_list {
+                let members = crate::projects::members(&containers, &proj.name);
+                if members.is_empty() {
+                    let is_project_locked = locks.contains(&format!("project:{}", proj.name))
+                        || locks.contains(&proj.name);
+                    if !is_project_locked {
+                        preview_items.push(json!({
+                            "id": format!("project:{}", proj.name),
+                            "fullId": format!("project:{}", proj.name),
+                            "name": proj.name,
+                            "itemType": "project",
+                            "driver": "compose",
+                            "detail": "빈 프로젝트"
+                        }));
+                    }
+                }
+            }
+            preview_items.into()
+        }
         _ => Value::Array(vec![]),
     })
 }
