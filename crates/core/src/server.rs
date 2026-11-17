@@ -804,6 +804,7 @@ fn routes(app: Arc<App>) -> Router {
             get(|State(app): Shared| async move {
                 let mut usage = app.cached("disk", Duration::from_secs(30), crate::disk::disk_usage()).await?;
                 usage["minReclaim"] = crate::disk::MIN_RECLAIM.into();
+                usage["last"] = crate::disk::last_compaction().await.into();
                 ApiResult::Ok(Json(usage))
             }),
         )

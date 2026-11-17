@@ -356,6 +356,7 @@ pub async fn start(log: &Log) -> Result<()> {
     }
     if current["ready"] == true {
         log("엔진이 이미 준비되었습니다.\n");
+        crate::disk::restore_running(log).await;
         return Ok(());
     }
     install_scripts(log).await?;
@@ -379,6 +380,7 @@ pub async fn start(log: &Log) -> Result<()> {
     for _ in 0..45 {
         if engine_responds(&cfg.engine).await {
             log("컨테이너 엔진 응답 확인.\n");
+            crate::disk::restore_running(log).await;
             if cfg.kubernetes.enabled {
                 start_kubernetes(log).await?;
             }

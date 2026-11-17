@@ -1,4 +1,4 @@
-import { t, useLocale, languages, setLanguage } from '../i18n.js';
+import { t, useLocale, languages, setLanguage, formatDate } from '../i18n.js';
 import React, {
   createContext,
   useContext,
@@ -376,7 +376,7 @@ function DiskSpace() {
               confirm(
                 t('디스크 압축'),
                 t(
-                  '약 {0}를 Windows에 돌려줍니다. 압축하는 동안 엔진과 컨테이너가 멈추고(약 10분), 끝나면 다시 시작합니다. PC 화면에 관리자 권한 승인 창(UAC)이 뜨면 2분 안에 승인해 주세요.',
+                  '약 {0}를 Windows에 돌려줍니다. PC 화면에 관리자 권한 승인 창(UAC)이 뜨면 2분 안에 승인해 주세요. 승인한 뒤에 엔진과 컨테이너가 멈추고(약 10분), 끝나면 실행 중이던 컨테이너까지 다시 시작합니다. 디스크가 풀리지 않으면 다른 WSL 배포판도 함께 종료합니다.',
                   [gb(d.reclaimable)],
                 ),
                 () => job('compactDisk'),
@@ -398,9 +398,23 @@ function DiskSpace() {
               </small>
             )
           )}
+          {d.last && <LastCompaction last={d.last} />}
         </div>
       )}
     </section>
+  );
+}
+
+function LastCompaction({ last }) {
+  const at = formatDate(last.at);
+  return (
+    <small className={cn(tw.groupText, 'basis-full')}>
+      {last.result === 'done'
+        ? t('마지막 압축 {0}: {1} 회수', [at, gb(Math.max(0, last.before - last.after))])
+        : last.result === 'skipped'
+          ? t('마지막 압축 {0}: 건너뜀, {1}', [at, last.reason])
+          : t('마지막 압축 {0}: 실패, {1}', [at, last.reason])}
+    </small>
   );
 }
 
