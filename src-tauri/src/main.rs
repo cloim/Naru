@@ -5,10 +5,15 @@ mod preflight;
 
 use naru_core::{onboarding, server, state, worker};
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::sync::Arc;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
-use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+
+/// How often the tray checks GitHub for a new release while Naru keeps running.
+const UPDATE_CHECK_INTERVAL: Duration = Duration::from_secs(60 * 60);
+/// A result older than this is refreshed when the tray menu is opened.
+const UPDATE_STALE_AFTER: Duration = Duration::from_secs(10 * 60);
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 /// Read once: the server, the window and the checks all use the port the app started with.
@@ -166,25 +171,26 @@ fn main() {
             let update_status: Arc<tokio::sync::Mutex<UpdateStatus>> =
                 Arc::new(tokio::sync::Mutex::new(UpdateStatus::Idle));
 
+            let last_update_check: Arc<std::sync::Mutex<Option<Instant>>> =
+                Arc::new(std::sync::Mutex::new(None));
+
+            // Naru stays in the tray for days, so a release published after startup must still show up.
             let update_item_bg = update.clone();
             let update_status_bg = update_status.clone();
+            let last_check_bg = last_update_check.clone();
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(Duration::from_secs(3)).await;
-                let next_status = match naru_core::updater::check_for_updates().await {
-                    Ok(info) if info.update_available => UpdateStatus::Available(info),
-                    Ok(_) => UpdateStatus::UpToDate,
-                    Err(_) => UpdateStatus::Failed,
-                };
-                *update_status_bg.lock().await = next_status.clone();
-                apply_update_status(
-                    &update_item_bg,
-                    &next_status,
-                    naru_core::updater::CURRENT_VERSION,
-                );
+                loop {
+                    refresh_update_status(&update_item_bg, &update_status_bg, &last_check_bg).await;
+                    tokio::time::sleep(UPDATE_CHECK_INTERVAL).await;
+                }
             });
 
             let update_item_click = update.clone();
             let update_status_click = update_status.clone();
+            let update_item_tray = update.clone();
+            let update_status_tray = update_status.clone();
+            let last_check_tray = last_update_check.clone();
 
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().cloned().expect("app icon"))
@@ -204,10 +210,30 @@ fn main() {
                     "quit" => app.exit(0),
                     _ => {}
                 })
-                .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::DoubleClick { button: MouseButton::Left, .. } = event {
+                .on_tray_icon_event(move |tray, event| match event {
+                    TrayIconEvent::DoubleClick { button: MouseButton::Left, .. } => {
                         show(tray.app_handle());
                     }
+                    // Opening the menu refreshes a stale result so the next look shows a new release.
+                    TrayIconEvent::Click {
+                        button: MouseButton::Right,
+                        button_state: MouseButtonState::Down,
+                        ..
+                    } => {
+                        let stale = last_check_tray
+                            .lock()
+                            .map(|last| last.map_or(true, |at| at.elapsed() >= UPDATE_STALE_AFTER))
+                            .unwrap_or(true);
+                        if stale {
+                            let item = update_item_tray.clone();
+                            let status = update_status_tray.clone();
+                            let last_check = last_check_tray.clone();
+                            tauri::async_runtime::spawn(async move {
+                                refresh_update_status(&item, &status, &last_check).await;
+                            });
+                        }
+                    }
+                    _ => {}
                 })
                 .build(app)?;
             if !background {
@@ -243,7 +269,8 @@ impl UpdateStatus {
         match self {
             UpdateStatus::Idle => ("업데이트 확인".to_string(), true),
             UpdateStatus::Checking => ("업데이트 확인 중...".to_string(), false),
-            UpdateStatus::UpToDate => (format!("최신 버전 (v{current_version})"), false),
+            // Stays clickable so the user can check again on demand.
+            UpdateStatus::UpToDate => (format!("최신 버전 (v{current_version})"), true),
             UpdateStatus::Failed => (format!("업데이트 확인 실패 (v{current_version})"), true),
             UpdateStatus::Available(info) => {
                 (format!("업데이트 하기 (v{})", info.latest_version), true)
@@ -268,6 +295,39 @@ fn apply_update_status<R: tauri::Runtime>(
     let _ = item.set_enabled(enabled);
 }
 
+/// Checks quietly in the background. It never interrupts a check, download or install in progress,
+/// and a failed check keeps the last good result instead of replacing it.
+async fn refresh_update_status<R: tauri::Runtime>(
+    item: &tauri::menu::MenuItem<R>,
+    status_lock: &tokio::sync::Mutex<UpdateStatus>,
+    last_check: &std::sync::Mutex<Option<Instant>>,
+) {
+    let refreshable = |status: &UpdateStatus| {
+        matches!(
+            status,
+            UpdateStatus::Idle | UpdateStatus::UpToDate | UpdateStatus::Failed | UpdateStatus::Available(_)
+        )
+    };
+    if !refreshable(&*status_lock.lock().await) {
+        return;
+    }
+    if let Ok(mut last) = last_check.lock() {
+        *last = Some(Instant::now());
+    }
+    let result = naru_core::updater::check_for_updates().await;
+    let mut st = status_lock.lock().await;
+    if !refreshable(&st) {
+        return;
+    }
+    *st = match result {
+        Ok(info) if info.update_available => UpdateStatus::Available(info),
+        Ok(_) => UpdateStatus::UpToDate,
+        Err(_) if matches!(*st, UpdateStatus::Idle) => UpdateStatus::Failed,
+        Err(_) => return,
+    };
+    apply_update_status(item, &st, naru_core::updater::CURRENT_VERSION);
+}
+
 async fn handle_update_action<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     item: &tauri::menu::MenuItem<R>,
@@ -279,7 +339,7 @@ async fn handle_update_action<R: tauri::Runtime>(
     };
 
     match current {
-        UpdateStatus::Idle | UpdateStatus::Failed => {
+        UpdateStatus::Idle | UpdateStatus::Failed | UpdateStatus::UpToDate => {
             {
                 let mut st = status_lock.lock().await;
                 *st = UpdateStatus::Checking;
