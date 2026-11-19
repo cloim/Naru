@@ -36,42 +36,40 @@ import { EditContainerModal } from '../components/EditContainerModal.jsx';
 import ResourceChart from '../components/ResourceChart.jsx';
 const TerminalPanel = lazy(() => import('../components/TerminalPanel.jsx'));
 
-function InfoSection({ title, rows, autoSizeLabels = false, children }) {
+function InfoSection({ title, rows, autoSizeLabels = false }) {
   return (
     <details open className="border-b border-line last:border-b-0">
       <summary className="cursor-pointer bg-[#f5f8f2] px-5 py-2.5 text-[13px] font-semibold text-ink focus-visible:outline-accent">
         {title}
       </summary>
-      {children || (
-        <dl
-          className={cn(
-            'm-0 text-[13px]',
-            autoSizeLabels &&
-              'grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 max-tablet:grid-cols-1',
-          )}
-        >
-          {rows?.map(([label, value], index) => (
-            <div
-              key={index}
-              className={cn(
-                'grid gap-x-4 gap-y-1 border-t border-line px-5 py-2.5 max-tablet:px-3',
-                autoSizeLabels
-                  ? 'col-span-full grid-cols-subgrid'
-                  : 'grid-cols-[180px_minmax(0,1fr)] max-tablet:grid-cols-1',
-              )}
+      <dl
+        className={cn(
+          'm-0 text-[13px]',
+          autoSizeLabels &&
+            'grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 max-tablet:grid-cols-1',
+        )}
+      >
+        {rows.map(([label, value], index) => (
+          <div
+            key={index}
+            className={cn(
+              'grid gap-x-4 gap-y-1 border-t border-line px-5 py-2.5 max-tablet:px-3',
+              autoSizeLabels
+                ? 'col-span-full grid-cols-subgrid'
+                : 'grid-cols-[180px_minmax(0,1fr)] max-tablet:grid-cols-1',
+            )}
+          >
+            <dt
+              className={cn('text-muted', autoSizeLabels ? 'whitespace-nowrap' : 'wrap-anywhere')}
             >
-              <dt
-                className={cn('text-muted', autoSizeLabels ? 'whitespace-nowrap' : 'wrap-anywhere')}
-              >
-                {label}
-              </dt>
-              <dd className="m-0 min-w-0 whitespace-pre-wrap wrap-anywhere text-ink">
-                {value === undefined || value === null || value === '' ? '-' : value}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      )}
+              {label}
+            </dt>
+            <dd className="m-0 min-w-0 whitespace-pre-wrap wrap-anywhere text-ink">
+              {value === undefined || value === null || value === '' ? '-' : value}
+            </dd>
+          </div>
+        ))}
+      </dl>
     </details>
   );
 }
@@ -123,95 +121,33 @@ function ContainerGeneral({ inspect }) {
           ],
         ]}
       />
-      <InfoSection title={t('볼륨과 마운트')}>
-        {mounts.length === 0 ? (
-          <div className="border-t border-line px-5 py-3 text-[13px] text-muted max-tablet:px-3">
-            {t('연결된 볼륨 또는 마운트가 없습니다.')}
-          </div>
-        ) : (
-          <div className="divide-y divide-line text-[13px]">
-            {mounts.map((mount, index) => {
-              const isVolume = mount.Type === 'volume';
-              const isBind = mount.Type === 'bind';
-              const isRo = !mount.RW;
-              const source = isVolume ? mount.Name || mount.Source : mount.Source;
-              const typeLabel = isVolume
-                ? t('볼륨')
-                : isBind
-                  ? t('바인드 마운트')
-                  : mount.Type || t('마운트');
-
-              return (
-                <div
-                  key={index}
-                  className="flex flex-col gap-1.5 border-t border-line px-5 py-3 first:border-t-0 hover:bg-[#fafcf7] max-tablet:px-3"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={cn(
-                          'rounded px-1.5 py-0.5 text-[11px] font-semibold',
-                          isVolume
-                            ? 'bg-[#e9f0f8] text-[#2c5282]'
-                            : isBind
-                              ? 'bg-[#eef2e6] text-[#3d5a40]'
-                              : 'bg-[#f0f2ed] text-[#556358]',
-                        )}
-                      >
-                        {typeLabel}
+      <InfoSection
+        title={t('볼륨과 마운트')}
+        rows={
+          mounts.length
+            ? mounts.map((mount) => {
+                const isVolume = mount.Type === 'volume';
+                const source = (isVolume ? mount.Name || mount.Source : mount.Source) || '-';
+                return [
+                  isVolume
+                    ? t('볼륨 마운트')
+                    : mount.Type === 'bind'
+                      ? t('바인드 마운트')
+                      : mount.Type || t('마운트'),
+                  <>
+                    {`${source} → ${mount.Destination || '-'}`}
+                    {!mount.RW && <span className="text-muted"> · {t('읽기 전용 (ro)')}</span>}
+                    {isVolume && mount.Source && mount.Source !== mount.Name && (
+                      <span className="block text-muted">
+                        {t('실제 저장 경로')}: {mount.Source}
                       </span>
-                      <span
-                        className={cn(
-                          'rounded px-1.5 py-0.5 text-[11px] font-semibold',
-                          isRo ? 'bg-[#faeeeb] text-[#b24639]' : 'bg-[#e4f2df] text-[#35664d]',
-                        )}
-                      >
-                        {isRo ? t('읽기 전용 (ro)') : t('읽기/쓰기 (rw)')}
-                      </span>
-                      {mount.Propagation ? (
-                        <span className="text-[11px] text-[#8c978e]">
-                          ({mount.Propagation})
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-[140px_minmax(0,1fr)] items-start gap-x-3 gap-y-1 text-[12.5px] max-tablet:grid-cols-1">
-                    <span className="text-muted">{t('컨테이너 경로')}</span>
-                    <div className="flex min-w-0 items-center gap-1.5">
-                      <code className="rounded bg-[#f4f6f0] px-1.5 py-0.5 font-mono text-ink wrap-anywhere">
-                        {mount.Destination || '-'}
-                      </code>
-                      {mount.Destination && (
-                        <CopyButton text={mount.Destination} label={t('컨테이너 경로 복사')} />
-                      )}
-                    </div>
-
-                    <span className="text-muted">
-                      {isVolume ? t('볼륨 이름 / 호스트') : t('호스트 경로')}
-                    </span>
-                    <div className="flex min-w-0 flex-col gap-0.5">
-                      <div className="flex items-center gap-1.5">
-                        <code className="font-mono font-medium text-ink wrap-anywhere">
-                          {source || '-'}
-                        </code>
-                        {source && (
-                          <CopyButton text={source} label={t('호스트 경로 복사')} />
-                        )}
-                      </div>
-                      {isVolume && mount.Source && mount.Source !== mount.Name && (
-                        <div className="text-[11px] font-mono text-[#8c978e] wrap-anywhere">
-                          {t('실제 저장 경로')}: {mount.Source}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </InfoSection>
+                    )}
+                  </>,
+                ];
+              })
+            : [[t('볼륨과 마운트'), t('없음')]]
+        }
+      />
       <InfoSection
         title={t('환경 변수')}
         autoSizeLabels
