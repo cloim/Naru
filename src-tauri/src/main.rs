@@ -59,7 +59,7 @@ fn show(app: &AppHandle) {
     let setup = !state::app_config().onboarded;
     let built = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(splash_url()))
         .title("Naru")
-        .inner_size(1360.0, 860.0)
+        .inner_size(1460.0, 860.0)
         .min_inner_size(960.0, 600.0)
         .center()
         .maximized(setup)
