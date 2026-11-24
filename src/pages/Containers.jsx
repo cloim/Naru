@@ -106,12 +106,22 @@ function readCollapsedState() {
 // 프로젝트 머리 행은 그리드 셀 렌더러 안에서 그려지므로 화면 동작을 context로 전달한다.
 const ProjectContext = createContext(null);
 
+// 이름 셀의 기본 아이콘 색 규칙보다 우선하도록 important를 붙인다.
+const IDLE_ICON = 'text-[#8f9491]!';
+
+// 그리드는 이름 값이 그대로면 셀을 다시 그리지 않으므로 실행 상태는 context에서 읽는다.
+function ContainerIcon({ id }) {
+  const { runningIds } = useContext(ProjectContext);
+  return <Box size={19} className={runningIds.has(id) ? undefined : IDLE_ICON} />;
+}
+
 function ProjectRow({ data: g }) {
   useLocale();
   const { job, confirm, busy, toggle, collapsed, openLogs, openManage, locks, toggleProjectLock } =
     useContext(ProjectContext);
   const open = !collapsed.has(g.__group);
   const named = g.__group !== NO_PROJECT;
+  const GroupIcon = named ? Boxes : Box;
   const run = (action) => job('project', { name: g.__group, action });
   const isLocked = named && locks ? isProjectLocked(locks, g.__group, g.members || []) : false;
   return (
@@ -124,12 +134,13 @@ function ProjectRow({ data: g }) {
         className={cn('flex-none text-[#7a857c] transition-transform', open && 'rotate-90')}
         aria-hidden
       />
-      {/* 프로젝트 묶음은 여러 상자 아이콘, 프로젝트에 속하지 않은 컨테이너 묶음은 상자 하나로 구분한다. */}
-      {named ? (
-        <Boxes size={19} className="flex-none text-[#4f7750]" aria-hidden />
-      ) : (
-        <Box size={19} className="flex-none text-[#8c978e]" aria-hidden />
-      )}
+      {/* 프로젝트 묶음은 여러 상자 아이콘, 프로젝트에 속하지 않은 컨테이너 묶음은 상자 하나로 구분한다.
+          실행 중인 컨테이너가 하나도 없으면 회색으로 표시한다. */}
+      <GroupIcon
+        size={19}
+        className={cn('flex-none', g.running > 0 ? 'text-[#4f7750]' : IDLE_ICON)}
+        aria-hidden
+      />
       <div className="flex min-w-0 flex-col leading-[1.5] max-tablet:flex-1">
         <div className="flex items-center gap-1.5 truncate">
           {named && isLocked && (
@@ -824,6 +835,10 @@ function Containers() {
     [candidates, locks, batchLock],
   );
 
+  const runningIds = useMemo(
+    () => new Set(candidates.filter((c) => c.State === 'running').map((c) => c.Id)),
+    [candidates],
+  );
   const projectContext = useMemo(
     () => ({
       job,
@@ -835,8 +850,9 @@ function Containers() {
       openManage: setManageGroup,
       locks,
       toggleProjectLock,
+      runningIds,
     }),
-    [job, confirm, busy, collapsed, toggle, locks, toggleProjectLock],
+    [job, confirm, busy, collapsed, toggle, locks, toggleProjectLock, runningIds],
   );
   const cols = useMemo(
     () => [
@@ -900,7 +916,7 @@ function Containers() {
         valueGetter: ({ data: r }) => containerName(r),
         cellRenderer: ({ data: r }) => (
           <div className={cn(tw.nameCell, 'pl-7 max-tablet:pl-4')}>
-            <Box size={19} />
+            <ContainerIcon id={r.Id} />
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
                 {isContainerLocked(locks, r) && (
