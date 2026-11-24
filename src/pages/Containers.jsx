@@ -107,12 +107,19 @@ function readCollapsedState() {
 const ProjectContext = createContext(null);
 
 // 이름 셀의 기본 아이콘 색 규칙보다 우선하도록 important를 붙인다.
-const IDLE_ICON = 'text-[#8f9491]!';
+const IDLE_ICON = 'text-[#c2c6c3]!';
+// 이름은 읽을 수 있어야 하므로 아이콘보다 한 단계 진한 회색을 쓴다.
+const IDLE_TITLE = 'text-[#a3a9a5]';
 
 // 그리드는 이름 값이 그대로면 셀을 다시 그리지 않으므로 실행 상태는 context에서 읽는다.
 function ContainerIcon({ id }) {
   const { runningIds } = useContext(ProjectContext);
   return <Box size={19} className={runningIds.has(id) ? undefined : IDLE_ICON} />;
+}
+
+function ContainerTitle({ id, children }) {
+  const { runningIds } = useContext(ProjectContext);
+  return <strong className={cn('truncate', !runningIds.has(id) && IDLE_TITLE)}>{children}</strong>;
 }
 
 function ProjectRow({ data: g }) {
@@ -148,7 +155,7 @@ function ProjectRow({ data: g }) {
               <Lock size={14} className="flex-none text-[#d97706]" aria-hidden="true" />
             </span>
           )}
-          <strong className="truncate text-[13px] text-ink">
+          <strong className={cn('truncate text-[13px]', g.running > 0 ? 'text-ink' : IDLE_TITLE)}>
             {g.virtual ? 'coolify-util' : named ? g.__group : t('프로젝트 없음')}
           </strong>
         </div>
@@ -924,7 +931,7 @@ function Containers() {
                     <Lock size={14} className="flex-none text-[#d97706]" aria-hidden="true" />
                   </span>
                 )}
-                <strong className="truncate">{containerName(r)}</strong>
+                <ContainerTitle id={r.Id}>{containerName(r)}</ContainerTitle>
                 <CopyButton
                   text={containerName(r)}
                   label={t('{0} 이름 복사', [containerName(r)])}
