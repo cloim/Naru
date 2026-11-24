@@ -8,6 +8,8 @@ export default defineConfig({
     host: '127.0.0.1',
     port: 5173,
     allowedHosts: true,
+    // 빌드 산출물까지 감시하면 파일 수만큼 시작이 밀려 첫 응답이 늦어진다.
+    watch: { ignored: ['**/target/**', '**/brag-output/**'] },
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:49170',
