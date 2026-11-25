@@ -375,11 +375,6 @@ async fn handle_update_action<R: tauri::Runtime>(
             apply_update_status(item, &st, naru_core::updater::CURRENT_VERSION);
         }
         UpdateStatus::Available(info) => {
-            let Some(download_url) = &info.download_url else {
-                preflight::show_error("다운로드 가능한 설치 파일 주소를 찾지 못했습니다.");
-                return;
-            };
-
             let version = info.latest_version.clone();
             {
                 let mut st = status_lock.lock().await;
@@ -389,9 +384,7 @@ async fn handle_update_action<R: tauri::Runtime>(
                 apply_update_status(item, &st, naru_core::updater::CURRENT_VERSION);
             }
 
-            let file_name = info.file_name.as_deref().unwrap_or("Naru_setup.exe");
-
-            match naru_core::updater::download_update(download_url, file_name).await {
+            match naru_core::updater::download_update(&info).await {
                 Ok(installer_path) => {
                     {
                         let mut st = status_lock.lock().await;
