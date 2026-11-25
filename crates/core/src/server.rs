@@ -905,6 +905,10 @@ fn routes(app: Arc<App>) -> Router {
         .route("/api/projects/{name}/files", get(project_files))
         .route("/api/projects/{name}/logs", get(project_logs))
         .route("/api/projects/{name}", delete(forget))
+        .route("/api/diagnostics/report", get(|| async {
+            let name = format!("naru-report-{}.txt", chrono::Local::now().format("%Y%m%d-%H%M%S"));
+            ApiResult::Ok(Json(json!({ "name": name, "text": crate::diagnostics::report().await })))
+        }))
         .route("/api/diagnostics/resources", get(|| async { ApiResult::Ok(Json(crate::diagnostics::resource_sample().await?)) }))
         .route("/api/diagnostics", get(diagnostics))
         .route("/api/open-external", post(open_external_url))

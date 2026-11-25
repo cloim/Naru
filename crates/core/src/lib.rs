@@ -15,6 +15,7 @@ pub mod onboarding;
 pub mod paths;
 pub mod ports;
 pub mod projects;
+pub mod redact;
 pub mod registry;
 pub mod runner;
 pub mod runtime;

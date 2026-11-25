@@ -802,4 +802,6 @@ export default {
     'This image stops right after starting unless {0} is set.',
   '환경 변수에 추가': 'Add to environment',
   '대신 {0}={1} 추가': 'Add {0}={1} instead',
+  '진단 리포트 저장': 'Save diagnostic report',
+  '진단 리포트를 만드는 중…': 'Making the diagnostic report…',
 };

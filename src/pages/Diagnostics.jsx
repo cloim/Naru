@@ -1,6 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { t, useLocale } from '../i18n.js';
-import { useActions, useData, Skeleton, ErrorState, bytes } from '../ui.jsx';
+import { FileDown } from 'lucide-react';
+import { api } from '../api.js';
+import {
+  useActions,
+  useData,
+  Skeleton,
+  ErrorState,
+  bytes,
+  PageActions,
+  PageAction,
+} from '../ui.jsx';
 import ResourceChart from '../components/ResourceChart.jsx';
 import SelectControl from '../components/SelectControl/SelectControl.tsx';
 import { cn, tw } from '../tw.js';
@@ -15,7 +25,27 @@ function Diagnostics() {
     refetchInterval: 3000,
     retry: false,
   });
-  const { status } = useActions();
+  const { status, notify } = useActions();
+  const [saving, setSaving] = useState(false);
+  // 리포트는 서버가 민감정보를 가린 뒤 보내 준다. 다운로드 폴더에 텍스트 파일로 저장한다.
+  const saveReport = async () => {
+    setSaving(true);
+    try {
+      const { name, text } = await api('/diagnostics/report');
+      const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = name;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+      notify?.(e);
+    } finally {
+      setSaving(false);
+    }
+  };
   const [history, setHistory] = useState([]);
   const [scope, setScope] = useState('all');
   const [tab, setTab] = useState('graphs');
@@ -68,6 +98,14 @@ function Diagnostics() {
   ];
   return (
     <section className={tw.page}>
+      <PageActions>
+        <PageAction
+          label={saving ? t('진단 리포트를 만드는 중…') : t('진단 리포트 저장')}
+          icon={FileDown}
+          disabled={saving}
+          onClick={saveReport}
+        />
+      </PageActions>
       <section className={cn(tw.panel, 'sticky top-0 z-20 shrink-0')}>
         <div className={tw.tabs} role="tablist" aria-label={t('진단')}>
           {tabs.map(([key, label], index) => (
