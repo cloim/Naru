@@ -1,7 +1,7 @@
 //! Compose projects: grouped from container labels, Naru-saved compose files and earlier sightings,
 //! so a project stays listed after `down` and can be brought up again.
-use crate::connections::remote_command;
-use crate::context::{engine_key, remote_target};
+use crate::connections::{endpoint_key, remote_command};
+use crate::context::{engine_key, remote_target, target};
 use crate::engine;
 use crate::jobs::PROJECT_NAME;
 use crate::runner::{args, command, Log, Opts};
@@ -10,8 +10,10 @@ use crate::tools::ensure_windows_tool;
 use anyhow::{anyhow, bail, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
+use std::sync::{LazyLock, Mutex};
+use std::time::{Duration, Instant};
 
 // Compose labels every container it creates; these let Naru group and manage existing projects.
 pub const LABEL_PROJECT: &str = "com.docker.compose.project";
@@ -118,14 +120,18 @@ pub async fn list_projects(containers: &Value) -> Result<Vec<Project>> {
     if known != before {
         atomic_json(&registry, &known).await?;
     }
+    let remote_files: Vec<String> = if remote_target() {
+        known.values().filter(|k| !k.managed).flat_map(|k| k.config_files.clone()).collect()
+    } else {
+        vec![]
+    };
+    let on_remote = remote_files_exist(remote_files).await;
     let mut projects = vec![];
     for (name, k) in known {
         let mut found = !k.config_files.is_empty();
         for file in &k.config_files {
             let exists = if remote_target() && !k.managed {
-                remote_command(&args(["test", "-f", file]), Opts::default())
-                    .await
-                    .is_ok()
+                on_remote.get(file).copied().unwrap_or(false)
             } else {
                 Path::new(file).exists()
             };
@@ -219,6 +225,60 @@ pub async fn delete_project(name: &str, log: &Log) -> Result<()> {
     drop_record(name).await?;
     log(&format!("프로젝트 '{name}' 삭제 완료.\n"));
     Ok(())
+}
+
+/// How long a remote compose file check is trusted; the project list polls far more often than files move.
+const FILE_CHECK_TTL: Duration = Duration::from_secs(120);
+/// A failed check is tried again sooner, but still not on every poll.
+const FILE_CHECK_RETRY: Duration = Duration::from_secs(30);
+
+/// A remote file check: checked at, exists, trusted for.
+type FileCheck = (Instant, bool, Duration);
+/// Remote file checks per endpoint and path.
+static FILE_CHECKS: LazyLock<Mutex<HashMap<String, FileCheck>>> = LazyLock::new(Default::default);
+
+/// Whether compose files exist on the remote host. All unknown paths are checked with one SSH login,
+/// and answers are kept for FILE_CHECK_TTL, so the polled project list does not log in on every poll.
+async fn remote_files_exist(files: Vec<String>) -> HashMap<String, bool> {
+    let endpoint = endpoint_key(&target());
+    let key = |file: &str| format!("{endpoint}
+{file}");
+    let mut known = HashMap::new();
+    let mut unknown: Vec<String> = vec![];
+    {
+        let checks = FILE_CHECKS.lock().unwrap();
+        for file in files {
+            match checks.get(&key(&file)) {
+                Some((at, exists, ttl)) if at.elapsed() < *ttl => {
+                    known.insert(file, *exists);
+                }
+                _ if !unknown.contains(&file) => unknown.push(file),
+                _ => {}
+            }
+        }
+    }
+    if unknown.is_empty() {
+        return known;
+    }
+    let mut cmd = args(["sh", "-c", r#"for f in "$@"; do if test -f "$f"; then echo 1; else echo 0; fi; done"#, "sh"]);
+    cmd.extend(unknown.iter().cloned());
+    let answers = remote_command(&cmd, Opts::timeout(20))
+        .await
+        .ok()
+        .map(|out| out.lines().map(|l| l.trim() == "1").collect::<Vec<_>>())
+        .filter(|lines| lines.len() == unknown.len());
+    let now = Instant::now();
+    let mut checks = FILE_CHECKS.lock().unwrap();
+    checks.retain(|_, (at, _, ttl)| at.elapsed() < *ttl);
+    for (i, file) in unknown.into_iter().enumerate() {
+        let (exists, ttl) = match &answers {
+            Some(lines) => (lines[i], FILE_CHECK_TTL),
+            None => (false, FILE_CHECK_RETRY),
+        };
+        checks.insert(key(&file), (now, exists, ttl));
+        known.insert(file, exists);
+    }
+    known
 }
 
 pub async fn read_project_files(project: &Project) -> Result<Value> {

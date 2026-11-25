@@ -48,11 +48,22 @@ fn splash_url() -> tauri::Url {
     format!("data:text/html;charset=utf-8,{encoded}").parse().expect("splash url")
 }
 
+/// Tells the page whether the window can be seen. WebView2 keeps `document.visibilityState` visible when the
+/// window is minimized or hidden in the tray, so without this the screens would keep polling the engine.
+fn tell_page_hidden(window: &tauri::WebviewWindow, hidden: bool) {
+    static HIDDEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if HIDDEN.swap(hidden, std::sync::atomic::Ordering::SeqCst) == hidden {
+        return;
+    }
+    let _ = window.eval(format!("window.dispatchEvent(new CustomEvent('naru-window', {{ detail: {{ hidden: {hidden} }} }}))"));
+}
+
 fn show(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
+        tell_page_hidden(&window, false);
         return;
     }
     // Setup opens maximized so every step has room; afterwards the window opens centered.
@@ -84,8 +95,8 @@ fn show(app: &AppHandle) {
             let _ = target.navigate(url);
         });
         let hide = window.clone();
-        window.on_window_event(move |event| {
-            if let WindowEvent::CloseRequested { api, .. } = event {
+        window.on_window_event(move |event| match event {
+            WindowEvent::CloseRequested { api, .. } => {
                 // Closing during setup ends the app: nothing runs yet that the tray would keep alive.
                 if !state::app_config().onboarded {
                     hide.app_handle().exit(0);
@@ -94,7 +105,11 @@ fn show(app: &AppHandle) {
                 // Afterwards Naru stays in the tray: port forwarding and the Docker pipe stay up.
                 api.prevent_close();
                 let _ = hide.hide();
+                tell_page_hidden(&hide, true);
             }
+            // Minimizing and restoring both resize the window.
+            WindowEvent::Resized(_) => tell_page_hidden(&hide, hide.is_minimized().unwrap_or(false)),
+            _ => {}
         });
     }
 }

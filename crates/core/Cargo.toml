@@ -43,3 +43,6 @@ windows-sys = { version = "0.59", features = [
   "Win32_Storage_FileSystem",
   "Win32_System_IO",
 ] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

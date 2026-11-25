@@ -289,7 +289,11 @@ pub async fn run(exe: &str, args: &[String], opts: Opts) -> Result<Output> {
 
 /// Runs a command and returns trimmed stdout; a non-zero exit becomes an error carrying its output.
 pub async fn command(exe: &str, args: &[String], opts: Opts) -> Result<String> {
-    let output = run(exe, args, opts).await?;
+    checked(exe, run(exe, args, opts).await?)
+}
+
+/// Stdout of a finished command, or an error carrying its output when the exit code is not zero.
+pub fn checked(exe: &str, output: Output) -> Result<String> {
     if output.code == Some(0) {
         return Ok(output.stdout);
     }
