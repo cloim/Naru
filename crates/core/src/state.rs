@@ -150,6 +150,9 @@ pub struct Settings {
     pub proxy: Proxy,
     #[serde(default = "default_poll")]
     pub poll_seconds: u32,
+    /// Tell containers about changes made on Windows in the folders they bind (fswatch.rs).
+    #[serde(default = "yes")]
+    pub watch_windows_folders: bool,
 }
 
 fn managed() -> String {
@@ -224,7 +227,7 @@ impl Settings {
 
     /// Only these change the screen or the next server start, so they can change while the engine runs.
     pub fn engine_changed(&self, next: &Settings) -> bool {
-        let strip = |s: &Settings| Settings { poll_seconds: 0, auto_start: false, ..s.clone() };
+        let strip = |s: &Settings| Settings { poll_seconds: 0, auto_start: false, watch_windows_folders: false, ..s.clone() };
         strip(self) != strip(next)
     }
 }

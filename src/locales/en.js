@@ -347,6 +347,9 @@ export default {
   '컨테이너 엔진': 'Container engine',
   'containerd 네임스페이스': 'containerd namespace',
   'Naru 서버 시작 시 엔진도 시작': 'Start engine when Naru server starts',
+  'Windows 폴더 변경 감지': 'Notice changes in Windows folders',
+  '컨테이너에 연결한 Windows 폴더에서 파일을 저장하면 컨테이너 안의 개발 서버가 알아채도록 알립니다. node_modules와 .git 폴더는 제외합니다.':
+    'When you save a file in a Windows folder bound to a container, dev servers inside it are told. node_modules and .git are left out.',
   '엔진 시작 시 Kubernetes도 시작': 'Start Kubernetes with the engine',
   'k3s 버전': 'k3s version',
   'API 포트': 'API port',

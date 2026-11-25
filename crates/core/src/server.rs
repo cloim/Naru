@@ -193,6 +193,7 @@ async fn put_settings(State(app): Shared, Json(body): Json<Value>) -> ApiResult 
     }
     let previous_port = current["kubernetes"]["port"].as_u64();
     let value = save_settings(body).await?;
+    crate::fswatch::set_enabled(value.watch_windows_folders);
     crate::tools::sync_cli_proxies().await?;
     if previous_port != Some(value.kubernetes.port as u64) {
         let mut bridge = app.kubernetes.lock().unwrap();

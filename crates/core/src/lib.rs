@@ -8,6 +8,7 @@ pub mod disk;
 pub mod engine;
 pub mod extensions;
 pub mod forwarding;
+pub mod fswatch;
 pub mod jobs;
 pub mod onboarding;
 pub mod paths;

@@ -114,6 +114,11 @@ fn close(state: &mut State, port: u16) {
     }
 }
 
+/// Sends a message to naru-agent over the control channel; false while it is not connected.
+pub fn send_control(message: String) -> bool {
+    STATE.lock().unwrap().control.as_ref().is_some_and(|c| c.send(message).is_ok())
+}
+
 fn close_all(state: &mut State) {
     state.relay = None;
     state.targets.clear();
@@ -166,6 +171,10 @@ fn handle(message: Value) {
             state.targets = message["items"].as_array().cloned().unwrap_or_default();
             apply(&mut state);
         }
+        Some("roots") => {
+            let roots = message["items"].as_array().into_iter().flatten().filter_map(Value::as_str).map(String::from).collect();
+            tokio::spawn(crate::fswatch::set_roots(roots));
+        }
         Some("open") => {
             static ID: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[0-9a-f]{32}$").unwrap());
             let id = message["id"].as_str().filter(|id| ID.is_match(id));
@@ -213,6 +222,8 @@ async fn connect() -> anyhow::Result<()> {
     }
     writing.abort();
     STATE.lock().unwrap().control = None;
+    // The agent reports its roots again when it comes back.
+    crate::fswatch::set_roots(Vec::new()).await;
     Ok(())
 }
 

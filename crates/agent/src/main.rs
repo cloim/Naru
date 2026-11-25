@@ -5,6 +5,10 @@
 //!   kubectl port-forward listeners.
 //! - Serves host.docker.internal: TCP to HOST_IP reaches Windows localhost through the Naru server,
 //!   and DNS answers the Docker Desktop host names.
+//! - Reports the Windows folders running containers bind, and raises the inotify events of the changes
+//!   the Naru server sees there (fsnotify.rs).
+mod fsnotify;
+
 use anyhow::{bail, Result};
 use regex::Regex;
 use serde_json::{json, Value};
@@ -34,6 +38,7 @@ struct Shared {
     controls: Vec<mpsc::UnboundedSender<String>>,
     pending: HashMap<String, oneshot::Sender<Option<TcpStream>>>,
     targets: Targets,
+    roots: Vec<String>,
 }
 
 static SHARED: LazyLock<Mutex<Shared>> = LazyLock::new(Default::default);
@@ -164,10 +169,18 @@ fn parse_dnat(text: &str, k3s_running: bool) -> Targets {
     found
 }
 
-fn discover() -> Result<Targets> {
+/// The Windows folders `containers` bind. Folders only: a single bound file (a config) has no folder to
+/// watch.
+fn bound_folders(containers: &Value) -> Vec<String> {
+    fsnotify::roots(containers).into_iter().filter(|r| std::path::Path::new(r).is_dir()).collect()
+}
+
+fn discover() -> Result<(Targets, Vec<String>)> {
     let mut found = dnat_ports();
     let mut host_containers = HashSet::new();
-    for container in docker_get("/containers/json")?.as_array().into_iter().flatten() {
+    let containers = docker_get("/containers/json?all=1")?;
+    let roots = bound_folders(&containers);
+    for container in containers.as_array().into_iter().flatten().filter(|c| c["State"] == "running") {
         if container["HostConfig"]["NetworkMode"] == "host" {
             if let Some(id) = container["Id"].as_str() {
                 host_containers.insert(id.to_string());
@@ -194,7 +207,40 @@ fn discover() -> Result<Targets> {
             found.entry(port).or_insert(target);
         }
     }
-    Ok(found)
+    Ok((found, roots))
+}
+
+/// Holds a new container's Windows folders as soon as Docker reports it created, before it starts: its
+/// dev server's watches must land on held folders (fsnotify.rs). Runs on its own thread, reconnecting
+/// to Docker's event stream whenever it ends.
+fn watch_creates() {
+    use std::io::BufRead;
+    let filters = "%7B%22type%22%3A%5B%22container%22%5D%2C%22event%22%3A%5B%22create%22%5D%7D";
+    loop {
+        let stream = std::os::unix::net::UnixStream::connect(DOCKER_SOCKET);
+        if let Ok(mut s) = stream {
+            if write!(s, "GET /events?filters={filters} HTTP/1.0\r\nHost: docker\r\n\r\n").is_ok() {
+                let mut reader = std::io::BufReader::new(s);
+                let mut line = String::new();
+                // Status line and headers, then one JSON event per line until Docker closes the stream.
+                while reader.read_line(&mut line).is_ok_and(|n| n > 0) {
+                    if let Ok(event) = serde_json::from_str::<Value>(line.trim()) {
+                        let id = event["id"].as_str().or(event["Actor"]["ID"].as_str()).unwrap_or_default();
+                        if id.len() == 64 && id.bytes().all(|b| b.is_ascii_hexdigit()) {
+                            if let Ok(inspect) = docker_get(&format!("/containers/{id}/json")) {
+                                let roots = bound_folders(&json!([inspect]));
+                                if !roots.is_empty() {
+                                    let _ = fsnotify::sender().send(fsnotify::Command::Hold(roots));
+                                }
+                            }
+                        }
+                    }
+                    line.clear();
+                }
+            }
+        }
+        std::thread::sleep(Duration::from_secs(1));
+    }
 }
 
 fn targets_message(targets: &Targets) -> String {
@@ -202,9 +248,12 @@ fn targets_message(targets: &Targets) -> String {
     json!({ "type": "targets", "items": items }).to_string()
 }
 
-fn broadcast() {
+fn roots_message(roots: &[String]) -> String {
+    json!({ "type": "roots", "items": roots }).to_string()
+}
+
+fn broadcast(message: String) {
     let mut shared = SHARED.lock().unwrap();
-    let message = targets_message(&shared.targets);
     shared.controls.retain(|c| c.send(message.clone()).is_ok());
 }
 
@@ -212,16 +261,22 @@ async fn watch_ports() {
     let mut last_error = String::new();
     loop {
         match tokio::task::spawn_blocking(discover).await {
-            Ok(Ok(current)) => {
+            Ok(Ok((current, roots))) => {
                 last_error.clear();
-                let changed = {
+                let (targets_changed, roots_changed) = {
                     let mut shared = SHARED.lock().unwrap();
-                    let changed = shared.targets != current;
-                    shared.targets = current;
+                    let changed = (shared.targets != current, shared.roots != roots);
+                    shared.targets = current.clone();
+                    shared.roots = roots.clone();
                     changed
                 };
-                if changed {
-                    broadcast();
+                if targets_changed {
+                    broadcast(targets_message(&current));
+                }
+                if roots_changed {
+                    eprintln!("watched folders: {}", roots.join(", "));
+                    let _ = fsnotify::sender().send(fsnotify::Command::Roots(roots.clone()));
+                    broadcast(roots_message(&roots));
                 }
             }
             // The next pass retries; Docker may still be starting.
@@ -249,7 +304,7 @@ async fn on_control(stream: TcpStream) -> Result<()> {
             let message = {
                 let mut shared = SHARED.lock().unwrap();
                 shared.controls.push(tx);
-                targets_message(&shared.targets)
+                format!("{}\n{}", targets_message(&shared.targets), roots_message(&shared.roots))
             };
             let (read, mut write) = reader.into_inner().into_split();
             write.write_all(format!("{message}\n").as_bytes()).await?;
@@ -268,6 +323,10 @@ async fn on_control(stream: TcpStream) -> Result<()> {
                     if let Some(waiter) = waiter {
                         let _ = waiter.send(None);
                     }
+                }
+                if request["type"] == "fs" {
+                    let lines = request["events"].as_array().into_iter().flatten().filter_map(Value::as_str).map(str::to_owned);
+                    let _ = fsnotify::sender().send(fsnotify::Command::Events(lines.take(4096).collect()));
                 }
             }
             writer.abort();
@@ -458,6 +517,7 @@ async fn main() -> Result<()> {
     let dns_stream = TcpListener::bind((HOST_IP, 53)).await?;
     let dns = Arc::new(UdpSocket::bind((HOST_IP, 53)).await?);
     println!("naru-agent ready");
+    std::thread::spawn(watch_creates);
     tokio::spawn(accept_loop(control, |s| async move {
         let _ = on_control(s).await;
     }));

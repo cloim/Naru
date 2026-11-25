@@ -221,6 +221,19 @@ function Settings() {
                   />{' '}
                   {t('Naru 서버 시작 시 엔진도 시작')}{' '}
                 </label>
+                <label className={tw.checkbox}>
+                  <input
+                    type="checkbox"
+                    checked={value.watchWindowsFolders}
+                    onChange={(e) => setValue({ ...value, watchWindowsFolders: e.target.checked })}
+                  />{' '}
+                  {t('Windows 폴더 변경 감지')}{' '}
+                </label>
+                <p className={cn(tw.groupText, '-mt-1 pl-6.5 leading-[1.6]')}>
+                  {t(
+                    '컨테이너에 연결한 Windows 폴더에서 파일을 저장하면 컨테이너 안의 개발 서버가 알아채도록 알립니다. node_modules와 .git 폴더는 제외합니다.',
+                  )}
+                </p>
               </fieldset>
               <LaunchAtLogin />
             </>
