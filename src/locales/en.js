@@ -770,4 +770,32 @@ export default {
   '가장 최근': 'Latest',
   '취약점 상세': 'Vulnerability details',
   '수정 버전 없음': 'No fixed version',
+  '전체 로그 보기': 'Show full log',
+  '{0} 환경 변수가 없어 시작하지 못했습니다': 'Could not start: {0} is not set',
+  'Compose 프로젝트 {0}의 컨테이너입니다. Compose 파일의 environment에 {1}을(를) 추가한 뒤 프로젝트를 다시 실행해 주세요.':
+    'This container belongs to the Compose project {0}. Add {1} under environment in the Compose file, then run the project again.',
+  '임의 값 만들기': 'Generate',
+  '저장하고 시작': 'Save and start',
+  '{0}={1}로 시작': 'Start with {0}={1}',
+  '비밀번호 없이 접속할 수 있게 됩니다. 이 PC에서만 쓸 때 사용해 주세요.':
+    'Anyone can connect without a password. Use it only on this PC.',
+  '만들어진 비밀번호는 컨테이너 로그에 한 번 출력됩니다.':
+    'The password it picks is printed once in the container log.',
+  '값은 이 컨테이너의 환경 변수에 저장되며, 컨테이너를 같은 설정으로 새로 만들어 시작합니다.':
+    'The value is saved in the container environment; the container is made again with the same settings and started.',
+  '포트 {0}을(를) 이미 다른 곳에서 쓰고 있어 시작하지 못했습니다':
+    'Could not start: port {0} is already in use',
+  '다른 포트로 바꾸거나, 그 포트를 쓰는 컨테이너를 먼저 멈춰 주세요.':
+    'Use another port, or stop the container using that port first.',
+  '포트 바꾸기': 'Change port',
+  '메모리가 부족해 멈췄습니다': 'Stopped: out of memory',
+  '이 컨테이너의 메모리 제한은 {0}입니다. 제한을 늘리거나 없애 보세요.':
+    'This container may use up to {0}. Raise or remove the limit.',
+  '이 컨테이너에는 메모리 제한이 없습니다. WSL에 할당된 메모리가 충분한지 확인해 주세요.':
+    'This container has no memory limit. Check that WSL has enough memory.',
+  '메모리 설정 바꾸기': 'Change memory limit',
+  '엔진이 컨테이너를 시작하지 못했습니다': 'The engine could not start the container',
+  '시작한 지 얼마 되지 않아 종료 코드 {0}(으)로 멈췄습니다':
+    'Stopped right after starting, with exit code {0}',
+  '마지막 로그입니다.': 'The last lines of its log.',
 };

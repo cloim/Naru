@@ -670,7 +670,8 @@ async fn update_container(job_id: &str, p: &Value, log: &Log) -> Result<()> {
 
     let apply = async {
         cli(&create_args, Opts::timeout(15 * 60).log(log)).await?;
-        if was_running {
+        // A stopped container is started too when the change was made to get it running.
+        if was_running || p["start"] == true {
             cli(&args(["start", requested_name]), Opts::timeout(60).log(log)).await?;
             if was_paused {
                 cli(&args(["pause", requested_name]), Opts::timeout(60).log(log)).await?;

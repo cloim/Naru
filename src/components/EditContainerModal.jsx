@@ -6,7 +6,7 @@ import { Button } from '../ui.jsx';
 import { tw } from '../tw.js';
 import { parseCommandInput, parseMountsInput, parsePortsInput } from './CreateContainerModal.jsx';
 
-function initialForm(inspect) {
+export function initialForm(inspect) {
   const config = inspect?.Config || {};
   const host = inspect?.HostConfig || {};
   const ports = [
@@ -46,6 +46,33 @@ function initialForm(inspect) {
   };
 }
 
+// 폼 값을 updateContainer 작업 입력으로 바꾼다. 값이 잘못되면 그 이유로 예외를 던진다.
+export function formPayload(form) {
+  const cpus = form.cpus.trim() ? Number(form.cpus) : 0;
+  const memoryMiB = form.memoryMiB.trim() ? Number(form.memoryMiB) : 0;
+  if (!form.image.trim()) throw new Error(t('이미지 이름을 입력해 주세요.'));
+  if (!Number.isFinite(cpus) || cpus < 0 || cpus > 256) {
+    throw new Error(t('CPU 제한은 0에서 256 사이 숫자로 입력해 주세요.'));
+  }
+  if (!Number.isFinite(memoryMiB) || memoryMiB < 0 || memoryMiB > 1_073_741_824) {
+    throw new Error(t('메모리 제한을 MiB 단위의 올바른 숫자로 입력해 주세요.'));
+  }
+  return {
+    image: form.image.trim(),
+    name: form.name.trim() || undefined,
+    ports: parsePortsInput(form.ports),
+    env: form.env
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean),
+    mounts: parseMountsInput(form.mounts),
+    command: parseCommandInput(form.command),
+    restart: form.restart,
+    nanoCpus: Math.round(cpus * 1_000_000_000),
+    memory: Math.round(memoryMiB * 1048576),
+  };
+}
+
 export function EditContainerModal({ inspect, isOpen, busy, onClose, onSubmit }) {
   useLocale();
   const [form, setForm] = useState(() => initialForm(inspect));
@@ -64,29 +91,7 @@ export function EditContainerModal({ inspect, isOpen, busy, onClose, onSubmit })
     event.preventDefault();
     setError('');
     try {
-      const cpus = form.cpus.trim() ? Number(form.cpus) : 0;
-      const memoryMiB = form.memoryMiB.trim() ? Number(form.memoryMiB) : 0;
-      if (!form.image.trim()) throw new Error(t('이미지 이름을 입력해 주세요.'));
-      if (!Number.isFinite(cpus) || cpus < 0 || cpus > 256) {
-        throw new Error(t('CPU 제한은 0에서 256 사이 숫자로 입력해 주세요.'));
-      }
-      if (!Number.isFinite(memoryMiB) || memoryMiB < 0 || memoryMiB > 1_073_741_824) {
-        throw new Error(t('메모리 제한을 MiB 단위의 올바른 숫자로 입력해 주세요.'));
-      }
-      const result = await onSubmit({
-        image: form.image.trim(),
-        name: form.name.trim() || undefined,
-        ports: parsePortsInput(form.ports),
-        env: form.env
-          .split(/\r?\n/)
-          .map((line) => line.trim())
-          .filter(Boolean),
-        mounts: parseMountsInput(form.mounts),
-        command: parseCommandInput(form.command),
-        restart: form.restart,
-        nanoCpus: Math.round(cpus * 1_000_000_000),
-        memory: Math.round(memoryMiB * 1048576),
-      });
+      const result = await onSubmit(formPayload(form));
       if (result) onClose();
     } catch (reason) {
       setError(reason.message || String(reason));

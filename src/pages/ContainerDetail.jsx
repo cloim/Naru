@@ -32,7 +32,8 @@ import { cn, tw } from '../tw.js';
 import { isContainerLocked, getContainerLockTargets } from '../container-locks.js';
 import { getContainerMounts } from '../container-mounts.js';
 import { ContainerFileExplorer } from '../components/ContainerFileExplorer.jsx';
-import { EditContainerModal } from '../components/EditContainerModal.jsx';
+import { EditContainerModal, formPayload, initialForm } from '../components/EditContainerModal.jsx';
+import { randomSecret, secretLike, shouldExplain, stopReason } from '../container-stop.js';
 import ResourceChart from '../components/ResourceChart.jsx';
 const TerminalPanel = lazy(() => import('../components/TerminalPanel.jsx'));
 
@@ -224,6 +225,147 @@ export function resourceUsage(stats) {
   };
 }
 
+// 컨테이너가 시작 직후 멈췄거나 시작이 거부됐을 때, 그 이유와 고칠 방법을 페이지 위에 보여 준다.
+// 이유는 엔진 정보와 마지막 로그에서만 읽고(container-stop.js), 알아보지 못한 경우는 로그를 그대로 인용한다.
+function StopReason({ inspect, id, busy, onEdit, onLogs, onFix }) {
+  useLocale();
+  const finished = inspect.State?.FinishedAt || '';
+  const logs = useData(`stop-logs:${id}:${finished}`, `/containers/${id}/logs`, {
+    staleTime: Infinity,
+  });
+  const [value, setValue] = useState('');
+  if (logs.isLoading) return null;
+  const reason = stopReason(inspect, logs.data?.text || '');
+  const compose = inspect.Config?.Labels?.['com.docker.compose.project'];
+  const quote = reason.quote ? (
+    <pre className="m-0 max-h-40 overflow-auto rounded-[6px] border border-[#ecdcbf] bg-white px-3 py-2 font-mono text-[12px] leading-[1.6] whitespace-pre-wrap wrap-anywhere text-[#4f3d1c]">
+      {reason.quote}
+    </pre>
+  ) : null;
+  const logsButton = (
+    <Button compact onClick={onLogs}>
+      {t('전체 로그 보기')}
+    </Button>
+  );
+  let title, body, actions;
+  if (reason.kind === 'env') {
+    title = t('{0} 환경 변수가 없어 시작하지 못했습니다', [reason.name]);
+    body = compose ? (
+      <p>
+        {t(
+          'Compose 프로젝트 {0}의 컨테이너입니다. Compose 파일의 environment에 {1}을(를) 추가한 뒤 프로젝트를 다시 실행해 주세요.',
+          [compose, reason.name],
+        )}
+      </p>
+    ) : (
+      <>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex min-w-[260px] flex-1 items-center gap-2 rounded-[6px] border border-[#e0d3bb] bg-white px-2.5">
+            <span className="font-mono text-[12px] text-[#7a6440]">{reason.name}=</span>
+            <input
+              className="h-8.5 min-w-0 flex-1 bg-transparent font-mono text-[12px] text-ink outline-0"
+              aria-label={reason.name}
+              spellCheck={false}
+              autoComplete="off"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+            />
+          </label>
+          {secretLike(reason.name) && (
+            <Button compact disabled={busy} onClick={() => setValue(randomSecret())}>
+              {t('임의 값 만들기')}
+            </Button>
+          )}
+          <Button
+            compact
+            primary
+            disabled={busy || !value.trim()}
+            onClick={() => onFix(`${reason.name}=${value.trim()}`)}
+          >
+            {t('저장하고 시작')}
+          </Button>
+        </div>
+        {reason.alternatives.map((alt) => (
+          <div key={alt.name} className="flex flex-wrap items-center gap-2">
+            <Button compact disabled={busy} onClick={() => onFix(`${alt.name}=${alt.value}`)}>
+              {t('{0}={1}로 시작', [alt.name, alt.value])}
+            </Button>
+            {/ALLOW_EMPTY|AUTH_METHOD/.test(alt.name) && (
+              <span className="text-[12px]">
+                {t('비밀번호 없이 접속할 수 있게 됩니다. 이 PC에서만 쓸 때 사용해 주세요.')}
+              </span>
+            )}
+            {/RANDOM/.test(alt.name) && (
+              <span className="text-[12px]">
+                {t('만들어진 비밀번호는 컨테이너 로그에 한 번 출력됩니다.')}
+              </span>
+            )}
+          </div>
+        ))}
+        <p className="text-[12px]">
+          {t(
+            '값은 이 컨테이너의 환경 변수에 저장되며, 컨테이너를 같은 설정으로 새로 만들어 시작합니다.',
+          )}
+        </p>
+      </>
+    );
+    actions = logsButton;
+  } else if (reason.kind === 'port') {
+    title = t('포트 {0}을(를) 이미 다른 곳에서 쓰고 있어 시작하지 못했습니다', [reason.port]);
+    body = <p>{t('다른 포트로 바꾸거나, 그 포트를 쓰는 컨테이너를 먼저 멈춰 주세요.')}</p>;
+    actions = (
+      <>
+        <Button compact primary disabled={busy} onClick={onEdit}>
+          {t('포트 바꾸기')}
+        </Button>
+        {logsButton}
+      </>
+    );
+  } else if (reason.kind === 'oom') {
+    title = t('메모리가 부족해 멈췄습니다');
+    body = (
+      <p>
+        {reason.memory > 0
+          ? t('이 컨테이너의 메모리 제한은 {0}입니다. 제한을 늘리거나 없애 보세요.', [
+              bytes(reason.memory),
+            ])
+          : t(
+              '이 컨테이너에는 메모리 제한이 없습니다. WSL에 할당된 메모리가 충분한지 확인해 주세요.',
+            )}
+      </p>
+    );
+    actions = (
+      <>
+        <Button compact primary disabled={busy} onClick={onEdit}>
+          {t('메모리 설정 바꾸기')}
+        </Button>
+        {logsButton}
+      </>
+    );
+  } else if (reason.kind === 'error') {
+    title = t('엔진이 컨테이너를 시작하지 못했습니다');
+    actions = logsButton;
+  } else {
+    title = t('시작한 지 얼마 되지 않아 종료 코드 {0}(으)로 멈췄습니다', [reason.exitCode]);
+    body = reason.quote ? <p>{t('마지막 로그입니다.')}</p> : null;
+    actions = logsButton;
+  }
+  return (
+    <div
+      role="alert"
+      className="flex flex-col gap-3 rounded-[10px] border border-[#ecd3a6] bg-[#fff9ef] p-4 text-[13px] text-[#5e4516] max-tablet:p-3"
+    >
+      <div className="flex items-start gap-2.5">
+        <TriangleAlert size={18} className="mt-0.5 flex-none text-[#c27c0e]" />
+        <strong className="font-semibold">{title}</strong>
+      </div>
+      {quote}
+      {body}
+      {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
+    </div>
+  );
+}
+
 function ContainerDetail() {
   useLocale();
   const navigate = useNavigate();
@@ -374,6 +516,35 @@ function ContainerDetail() {
             const result = await job('updateContainer', { id, ...payload });
             if (result) navigate('/containers');
             return result;
+          }}
+        />
+      )}
+
+      {inspect && shouldExplain(inspect) && (
+        <StopReason
+          inspect={inspect}
+          id={id}
+          busy={busy}
+          onEdit={() => setEditing(true)}
+          onLogs={() => setTab('logs')}
+          onFix={async (line) => {
+            // 같은 설정에 값 하나를 더해 다시 만들고 시작한다. 이름은 그대로라 새 컨테이너 페이지로 이어진다.
+            const form = initialForm(inspect);
+            const key = line.split('=')[0] + '=';
+            form.env = [
+              ...form.env.split(/\r?\n/).filter((l) => l.trim() && !l.startsWith(key)),
+              line,
+            ].join('\n');
+            try {
+              const result = await job('updateContainer', {
+                id,
+                ...formPayload(form),
+                start: true,
+              });
+              if (result && form.name) navigate(`/containers/${encodeURIComponent(form.name)}`);
+            } catch (e) {
+              notify?.(e);
+            }
           }}
         />
       )}

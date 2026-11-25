@@ -237,6 +237,8 @@ pub fn validate_job(kind: &str, payload: &Value) -> Result<Value> {
                 "restart": f.choice("restart", &["no", "unless-stopped", "always", "on-failure"], Some("no"))?,
                 "nanoCpus": f.int("nanoCpus", 0, 256_000_000_000, Some(0))?,
                 "memory": f.int("memory", 0, 1_125_899_906_842_624, Some(0))?,
+                // updateContainer: start it once recreated even if it was not running (a fix for why it stopped).
+                "start": f.boolean("start", false)?,
             })
         }
         "removeImage" => json!({ "id": f.string("id", &IDENTIFIER)? }),
@@ -573,6 +575,11 @@ mod tests {
         assert_eq!(update["nanoCpus"], 1_500_000_000_i64);
         assert_eq!(update["memory"], 536_870_912_i64);
         assert_eq!(update["ports"][0]["hostIp"], "0.0.0.0");
+        // Starting after the change is asked for only by the stop-reason fix; a plain edit keeps it off.
+        assert_eq!(update["start"], false);
+        let fix = validate_job("updateContainer", &json!({ "id": "pg", "image": "postgres", "env": ["POSTGRES_PASSWORD=x"], "start": true }));
+        assert_eq!(fix.unwrap()["start"], true);
+        assert!(validate_job("updateContainer", &json!({ "id": "pg", "image": "postgres", "start": "yes" })).is_err());
         assert!(validate_job(
             "updateContainer",
             &json!({ "id": "web", "image": "nginx", "nanoCpus": -1 })
