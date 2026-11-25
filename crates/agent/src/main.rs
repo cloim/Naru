@@ -516,6 +516,16 @@ async fn main() -> Result<()> {
     let host = TcpListener::bind(("0.0.0.0", HOST_PORT)).await?;
     let dns_stream = TcpListener::bind((HOST_IP, 53)).await?;
     let dns = Arc::new(UdpSocket::bind((HOST_IP, 53)).await?);
+    let preloaded: Vec<String> = fsnotify::saved_restart_roots(std::path::Path::new("/var/lib/naru/docker"))
+        .into_iter()
+        .filter(|r| std::path::Path::new(r).is_dir())
+        .collect();
+    if !preloaded.is_empty() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _ = fsnotify::sender().send(fsnotify::Command::HoldSync(preloaded, tx));
+        let _ = rx.recv_timeout(Duration::from_secs(2));
+    }
+    let _ = std::fs::write("/run/naru/agent-ready", b"1\n");
     println!("naru-agent ready");
     std::thread::spawn(watch_creates);
     tokio::spawn(accept_loop(control, |s| async move {

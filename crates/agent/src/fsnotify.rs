@@ -41,6 +41,8 @@ pub enum Command {
     Roots(Vec<String>),
     /// The roots of a container just created, held at once.
     Hold(Vec<String>),
+    /// Hold roots synchronously and signal when done (used before dockerd boots).
+    HoldSync(Vec<String>, mpsc::Sender<()>),
     Events(Vec<String>),
 }
 
@@ -68,6 +70,10 @@ pub fn sender() -> &'static mpsc::Sender<Command> {
                 match command {
                     Some(Command::Roots(roots)) => raiser.set_roots(roots),
                     Some(Command::Hold(roots)) => raiser.hold_now(roots),
+                    Some(Command::HoldSync(roots, done)) => {
+                        raiser.hold_now(roots);
+                        let _ = done.send(());
+                    }
                     Some(Command::Events(lines)) => lines.iter().for_each(|l| raiser.raise_line(l)),
                     None => raiser.walk_some(WALK_STEP),
                 }
@@ -113,6 +119,54 @@ pub fn roots(containers: &Value) -> Vec<String> {
         .filter_map(|m| m["Source"].as_str().map(str::to_owned))
         .filter(|s| split_drive_path(s).is_some_and(|(_, rel)| !rel.is_empty()))
         .collect();
+    found.sort();
+    found.dedup();
+    let mut out: Vec<String> = Vec::new();
+    for root in found {
+        if !out.iter().any(|kept| under(&root, kept)) {
+            out.push(root);
+        }
+    }
+    out
+}
+
+/// Windows folders bound by saved containers that dockerd will auto-start on boot
+/// (restart policy `always`, `on-failure`, or `unless-stopped` when not manually stopped).
+/// Reading these before dockerd starts avoids the race where a dev server adds inotify watches
+/// before the agent pins the drvfs folders.
+pub fn saved_restart_roots(docker_root: &std::path::Path) -> Vec<String> {
+    let dir = docker_root.join("containers");
+    let Ok(entries) = std::fs::read_dir(dir) else { return Vec::new() };
+    let mut found: Vec<String> = Vec::new();
+    for entry in entries.flatten() {
+        let base = entry.path();
+        let Ok(host_text) = std::fs::read_to_string(base.join("hostconfig.json")) else { continue };
+        let Ok(host) = serde_json::from_str::<Value>(&host_text) else { continue };
+        let policy = host["RestartPolicy"]["Name"].as_str().unwrap_or_default();
+        let auto_start = match policy {
+            "always" | "on-failure" => true,
+            "unless-stopped" => {
+                let cfg_text = std::fs::read_to_string(base.join("config.v2.json")).unwrap_or_default();
+                let cfg = serde_json::from_str::<Value>(&cfg_text).unwrap_or_default();
+                !cfg["ManuallyStopped"].as_bool().unwrap_or(false)
+            }
+            _ => false,
+        };
+        if !auto_start {
+            continue;
+        }
+        for bind in host["Binds"].as_array().into_iter().flatten().filter_map(Value::as_str) {
+            let src = bind.split(':').next().unwrap_or_default();
+            if split_drive_path(src).is_some_and(|(_, rel)| !rel.is_empty()) {
+                found.push(src.to_string());
+            }
+        }
+        for m in host["Mounts"].as_array().into_iter().flatten().filter(|m| m["Type"] == "bind") {
+            if let Some(src) = m["Source"].as_str().filter(|s| split_drive_path(s).is_some_and(|(_, rel)| !rel.is_empty())) {
+                found.push(src.to_string());
+            }
+        }
+    }
     found.sort();
     found.dedup();
     let mut out: Vec<String> = Vec::new();
@@ -380,5 +434,23 @@ mod tests {
         // Nothing exists here, so the walk ends without holding anything.
         raiser.walk_some(8);
         assert!(!raiser.walking() && raiser.held.is_empty());
+    }
+
+    #[test]
+    fn saved_restart_roots_collects_auto_started_containers_only() {
+        let dir = std::env::temp_dir().join(format!("naru-fsnotify-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let c1 = dir.join("containers/c1");
+        let c2 = dir.join("containers/c2");
+        let c3 = dir.join("containers/c3");
+        std::fs::create_dir_all(&c1).unwrap();
+        std::fs::create_dir_all(&c2).unwrap();
+        std::fs::create_dir_all(&c3).unwrap();
+        std::fs::write(c1.join("hostconfig.json"), r#"{"RestartPolicy":{"Name":"always"},"Binds":["/mnt/d/app:/app:rw"]}"#).unwrap();
+        std::fs::write(c2.join("hostconfig.json"), r#"{"RestartPolicy":{"Name":"unless-stopped"},"Mounts":[{"Type":"bind","Source":"/mnt/d/web"}]}"#).unwrap();
+        std::fs::write(c2.join("config.v2.json"), r#"{"ManuallyStopped":true}"#).unwrap();
+        std::fs::write(c3.join("hostconfig.json"), r#"{"RestartPolicy":{"Name":"no"},"Binds":["/mnt/d/nope:/x"]}"#).unwrap();
+        assert_eq!(saved_restart_roots(&dir), vec!["/mnt/d/app"]);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -17,7 +17,7 @@ cleanup() {
   wait || true
   ip netns del naru-engine 2>/dev/null || true
   ip link del naru0 2>/dev/null || true
-  rm -f /run/naru/supervisor.pid /run/naru/port-relay
+  rm -f /run/naru/supervisor.pid /run/naru/port-relay /run/naru/agent-ready
 }
 trap cleanup EXIT
 trap 'exit 0' TERM INT
@@ -28,7 +28,7 @@ mount --make-rshared / 2>/dev/null || true
 # In NAT mode the engine gets its own network namespace, like a separate VM. wslrelay only watches
 # the WSL root namespace, so engine ports stay private until Naru opens them on Windows.
 # Addresses: 198.19.249.1 root side, .2 engine side, .254 host.docker.internal (served by naru-agent).
-rm -f /run/naru/port-relay
+rm -f /run/naru/port-relay /run/naru/agent-ready
 ip netns del naru-engine 2>/dev/null || true
 ip link del naru0 2>/dev/null || true
 if [ "$(wslinfo --networking-mode 2>/dev/null)" = 'nat' ]; then
@@ -72,6 +72,23 @@ if [ "$(wslinfo --networking-mode 2>/dev/null)" = 'nat' ]; then
   export HTTP_PROXY HTTPS_PROXY
 fi
 
+if [ -e /run/netns/naru-engine ]; then
+  # Start naru-agent before dockerd so restart-policy containers' Windows folders are pinned
+  # before their dev servers add inotify watches.
+  (while :; do /usr/local/bin/naru-netns /usr/local/bin/naru-agent || true; sleep 1; done) >> /var/log/naru/agent.log 2>&1 &
+  agent_pid=$!
+  i=0
+  while [ ! -f /run/naru/agent-ready ] && [ "$i" -lt 20 ]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+  # Port 29170 matches RELAY_PORT in crates/core/src/ports.rs. Only the Windows host reaches eth0 in NAT mode.
+  relay_ip=$(ip -4 -o addr show eth0 | awk '{split($4, a, "/"); print a[1]}')
+  (while :; do socat TCP-LISTEN:29170,bind="$relay_ip",fork,reuseaddr EXEC:/usr/local/bin/naru-port-relay,nofork || true; sleep 1; done) >> /var/log/naru/port-relay.log 2>&1 &
+  relay_pid=$!
+  echo "$relay_ip" > /run/naru/port-relay
+fi
+
 if [ "$engine" = 'moby' ]; then
   ln -sf /run/naru/docker.sock /var/run/docker.sock
   # Fixed min-api-version and containerd-snapshotter so migrated data and older clients keep working.
@@ -83,7 +100,7 @@ if [ "$engine" = 'moby' ]; then
 elif [ "$engine" = 'containerd' ]; then
   mkdir -p /var/lib/naru/k3s/agent/etc/cni/net.d /etc/cni /etc/naru/cni/net.d
   if [ ! -e /etc/cni/net.d ]; then ln -s /var/lib/naru/k3s/agent/etc/cni/net.d /etc/cni/net.d; fi
-  /usr/local/bin/naru-netns /usr/bin/containerd --address /run/naru/containerd.sock --root /var/lib/naru/containerd --state /run/naru/containerd > /var/log/naru/engine.log 2>&1 &
+  /usr/local/bin/naru-netns /usr/bin/containerd --address /run/naru/containerd.sock --root /var/lib/naru/containerd --state /var/lib/naru/containerd > /var/log/naru/engine.log 2>&1 &
   engine_pid=$!
   /usr/local/bin/naru-netns /usr/bin/buildkitd --addr unix:///run/naru/buildkitd.sock --root /var/lib/naru/buildkit --oci-worker=false --containerd-worker=true --containerd-worker-addr /run/naru/containerd.sock > /var/log/naru/buildkit.log 2>&1 &
   buildkit_pid=$!
@@ -92,16 +109,6 @@ else
   exit 2
 fi
 
-if [ -e /run/netns/naru-engine ]; then
-  # Restart loops; '|| true' keeps set -e from ending a loop when its process exits.
-  (while :; do /usr/local/bin/naru-netns /usr/local/bin/naru-agent || true; sleep 1; done) >> /var/log/naru/agent.log 2>&1 &
-  agent_pid=$!
-  # Port 29170 matches RELAY_PORT in crates/core/src/ports.rs. Only the Windows host reaches eth0 in NAT mode.
-  relay_ip=$(ip -4 -o addr show eth0 | awk '{split($4, a, "/"); print a[1]}')
-  (while :; do socat TCP-LISTEN:29170,bind="$relay_ip",fork,reuseaddr EXEC:/usr/local/bin/naru-port-relay,nofork || true; sleep 1; done) >> /var/log/naru/port-relay.log 2>&1 &
-  relay_pid=$!
-  echo "$relay_ip" > /run/naru/port-relay
-fi
 while kill -0 "$engine_pid" 2>/dev/null; do sleep 2 & wait $! || true; done
 echo 'Engine process exited; check /var/log/naru/engine.log' >&2
 exit 1

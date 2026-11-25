@@ -22,6 +22,7 @@ pub fn to_linux_path(value: &str) -> String {
 }
 
 static WIN: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[a-zA-Z]:[\\/]").unwrap());
+static MNT: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^/mnt/([a-z])(?:/(.*))?$").unwrap());
 
 /// The Windows source of a bind ("source:target[:options]"), whose drive carries its own colon.
 fn bind_source(bind: &str) -> Option<&str> {
@@ -32,6 +33,20 @@ fn bind_source(bind: &str) -> Option<&str> {
         None => bind,
         Some(i) => &bind[..i + 2],
     })
+}
+
+/// Source path of a bind entry when it points to a Windows drive (either `D:\...` or `/mnt/d/...`).
+fn host_bind_source(bind: &str) -> Option<&str> {
+    if let Some(src) = bind_source(bind) {
+        return Some(src);
+    }
+    if MNT.is_match(bind) {
+        return Some(match bind.find(':') {
+            None => bind,
+            Some(i) => &bind[..i],
+        });
+    }
+    None
 }
 
 pub fn rewrite_bind(bind: &str) -> String {
@@ -52,14 +67,22 @@ pub enum HostSource {
 /// letter changed) would quietly become an empty folder inside the WSL disk. That is refused; a missing
 /// folder on a present drive is not, as with Docker. Paths that are not Windows paths pass.
 pub fn check_host_source(path: &str, exists: impl Fn(&Path) -> bool) -> Result<HostSource, String> {
-    let Some(m) = DRIVE.captures(path) else { return Ok(HostSource::Present) };
-    let drive = format!("{}:", m[1].to_uppercase());
+    let (drive, win_path) = if let Some(m) = DRIVE.captures(path) {
+        (format!("{}:", m[1].to_uppercase()), path.to_string())
+    } else if let Some(m) = MNT.captures(path) {
+        let drive = format!("{}:", m[1].to_uppercase());
+        let rest = m.get(2).map_or("", |r| r.as_str()).replace('/', "\\");
+        let full = if rest.is_empty() { format!("{drive}\\") } else { format!("{drive}\\{rest}") };
+        (drive, full)
+    } else {
+        return Ok(HostSource::Present);
+    };
     if !exists(Path::new(&format!("{drive}\\"))) {
         return Err(format!(
             "{drive} 드라이브를 찾을 수 없어 {path}를 연결하지 않았습니다. 드라이브가 연결되어 있는지, 드라이브 문자가 바뀌지 않았는지 확인해 주세요."
         ));
     }
-    Ok(if exists(Path::new(path)) { HostSource::Present } else { HostSource::FolderMissing })
+    Ok(if exists(Path::new(&win_path)) { HostSource::Present } else { HostSource::FolderMissing })
 }
 
 /// Checks the Windows sources a create body binds, before it is rewritten. Returns the warnings for
@@ -70,7 +93,7 @@ pub fn check_create(rewrite: Rewrite, body: &Value, exists: impl Fn(&Path) -> bo
     match rewrite {
         Rewrite::Container => {
             let host = &body["HostConfig"];
-            sources.extend(host["Binds"].as_array().into_iter().flatten().filter_map(Value::as_str).filter_map(bind_source).map(|s| (s, true)));
+            sources.extend(host["Binds"].as_array().into_iter().flatten().filter_map(Value::as_str).filter_map(host_bind_source).map(|s| (s, true)));
             let mounts = host["Mounts"].as_array().into_iter().flatten().filter(|m| m["Type"] == "bind");
             sources.extend(mounts.filter_map(|m| m["Source"].as_str()).map(|s| (s, false)));
         }
@@ -233,20 +256,26 @@ mod tests {
         assert_eq!(check_host_source("d:/work", |p: &Path| p.to_string_lossy() == r"D:\" || p.to_string_lossy() == "d:/work"), Ok(HostSource::Present));
         assert_eq!(check_host_source(r"D:\new", exists), Ok(HostSource::FolderMissing));
         assert_eq!(check_host_source("named-volume", exists), Ok(HostSource::Present));
+        assert_eq!(check_host_source("/mnt/d/work", exists), Ok(HostSource::Present));
+        assert_eq!(check_host_source("/mnt/d/new", exists), Ok(HostSource::FolderMissing));
+        assert!(check_host_source("/mnt/e/Models", exists).unwrap_err().contains("E: 드라이브"));
         assert!(check_host_source(r"E:\Models", exists).unwrap_err().contains("E: 드라이브"));
 
         let body = |binds: Value, mounts: Value| json!({ "HostConfig": { "Binds": binds, "Mounts": mounts } });
-        let ok = check_create(Rewrite::Container, &body(json!([r"D:\work:/app:ro", "vol:/data"]), json!(null)), exists).unwrap();
+        let ok = check_create(Rewrite::Container, &body(json!([r"D:\work:/app:ro", "/mnt/d/work:/app2", "vol:/data"]), json!(null)), exists).unwrap();
         assert!(ok.is_empty());
-        let warned = check_create(Rewrite::Container, &body(json!([r"D:\new:/app"]), json!([])), exists).unwrap();
-        assert_eq!(warned.len(), 1);
+        let warned = check_create(Rewrite::Container, &body(json!([r"D:\new:/app", "/mnt/d/new:/app2"]), json!([])), exists).unwrap();
+        assert_eq!(warned.len(), 2);
         assert!(warned[0].contains(r"D:\new"));
+        assert!(warned[1].contains("/mnt/d/new"));
         // --mount needs an existing source; the engine refuses a missing one itself, so no warning.
         let mount = check_create(Rewrite::Container, &body(json!(null), json!([{ "Type": "bind", "Source": r"D:\new" }])), exists).unwrap();
         assert!(mount.is_empty());
         for refused in [
             body(json!([r"E:\Models:/models"]), json!(null)),
+            body(json!(["/mnt/e/Models:/models"]), json!(null)),
             body(json!(null), json!([{ "Type": "bind", "Source": r"E:\y" }])),
+            body(json!(null), json!([{ "Type": "bind", "Source": "/mnt/e/y" }])),
         ] {
             assert!(check_create(Rewrite::Container, &refused, exists).is_err());
         }
