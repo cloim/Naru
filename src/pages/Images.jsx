@@ -452,6 +452,157 @@ function ScanPanel({ scan, image }) {
   );
 }
 
+function PullImageModal({ isOpen, onClose, onSubmit, busy }) {
+  useLocale();
+  const [value, setValue] = useState('');
+  const [results, setResults] = useState([]);
+  const [tags, setTags] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setValue('');
+      setResults([]);
+      setTags([]);
+      setLoading(false);
+    }
+  }, [isOpen]);
+
+  const trimmed = value.trim();
+  const colonIdx = trimmed.indexOf(':');
+  const tagMode = colonIdx > 0;
+  const repoPart = tagMode ? trimmed.slice(0, colonIdx) : trimmed;
+  const tagQuery = tagMode ? trimmed.slice(colonIdx + 1) : '';
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!tagMode && repoPart.length < 2) {
+      setResults([]);
+      setTags([]);
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        if (tagMode) {
+          const list = await api(
+            `/hub/tags?repo=${encodeURIComponent(repoPart)}&q=${encodeURIComponent(tagQuery)}`,
+          );
+          if (!cancelled) {
+            setTags(Array.isArray(list) ? list : []);
+            setResults([]);
+          }
+        } else {
+          const list = await api(`/hub/search?q=${encodeURIComponent(repoPart)}`);
+          if (!cancelled) {
+            setResults(Array.isArray(list) ? list : []);
+            setTags([]);
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setResults([]);
+          setTags([]);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }, tagMode ? 250 : 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [isOpen, tagMode, repoPart, tagQuery]);
+
+  const submit = (e) => {
+    e?.preventDefault();
+    if (!trimmed || busy) return;
+    onSubmit(trimmed);
+    onClose();
+  };
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={t('이미지 가져오기')}
+      footer={
+        <>
+          <Button onClick={onClose}>{t('취소')}</Button>
+          <Button primary icon={Download} disabled={!trimmed || busy} onClick={submit}>
+            {t('가져오기')}
+          </Button>
+        </>
+      }
+    >
+      <form onSubmit={submit} className="flex flex-col gap-3">
+        <p className={cn(tw.groupText, 'leading-[1.5]')}>
+          {t('이미지 이름을 입력하면 Docker Hub에서 검색하고, 콜론(:) 뒤에 태그를 제안합니다.')}
+        </p>
+        <label className={tw.field}>
+          <span>{t('이미지 주소')}</span>
+          <input
+            autoFocus
+            value={value}
+            placeholder="nginx:alpine"
+            spellCheck={false}
+            onChange={(e) => setValue(e.target.value)}
+          />
+        </label>
+        {loading && (
+          <p className="text-[12px] text-muted">
+            {tagMode ? t('태그 불러오는 중…') : t('검색 중…')}
+          </p>
+        )}
+        {!tagMode && results.length > 0 && (
+          <ul className="max-h-[260px] divide-y divide-[#eef1eb] overflow-y-auto rounded-[8px] border border-line">
+            {results.map((item) => (
+              <li key={item.name}>
+                <button
+                  type="button"
+                  className="flex w-full flex-col gap-0.5 px-3 py-2 text-left hover:bg-[#f6faef]"
+                  onClick={() => setValue(`${item.name}:`)}
+                >
+                  <div className="flex items-center gap-2 text-[13px]">
+                    <strong className="font-mono text-ink">{item.name}</strong>
+                    {item.isOfficial && (
+                      <span className="rounded bg-[#edf3ec] px-1.5 py-0.5 text-[10px] font-semibold text-[#4d6650]">
+                        {t('공식')}
+                      </span>
+                    )}
+                    {item.starCount > 0 && (
+                      <span className="ml-auto text-[11px] text-muted">★ {item.starCount}</span>
+                    )}
+                  </div>
+                  {item.description && (
+                    <span className="line-clamp-1 text-[11px] text-muted">{item.description}</span>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {tagMode && tags.length > 0 && (
+          <div className="flex max-h-[220px] flex-wrap gap-1.5 overflow-y-auto rounded-[8px] border border-line p-2.5">
+            {tags.map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                className="rounded-[6px] border border-line bg-[#fbfcf9] px-2 py-1 font-mono text-[12px] text-ink hover:border-[#4f7750] hover:bg-[#f6faef]"
+                onClick={() => setValue(`${repoPart}:${tag}`)}
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
+        )}
+      </form>
+    </Modal>
+  );
+}
+
 function Images() {
   const locale = useLocale();
   const { status, job, form, confirm, notify, busy } = useActions(),
@@ -460,6 +611,7 @@ function Images() {
   const [search, setSearch] = useState(''),
     [layerInspectImage, setLayerInspectImage] = useState(null),
     [pruneModalOpen, setPruneModalOpen] = useState(false),
+    [pullModalOpen, setPullModalOpen] = useState(false),
     [submitted, setSubmitted] = useState({}),
     [closedPull, setClosedPull] = useState(null);
   // 작업 기록은 새 작업이 앞에 온다. 이 화면에서 요청한 이미지 이름은 작업 ID별로 기억해 진행 중에도 보여 준다.
@@ -677,20 +829,7 @@ function Images() {
           icon={Download}
           primary
           disabled={busy}
-          onClick={() =>
-            form(
-              t('이미지 가져오기'),
-              [
-                {
-                  key: 'image',
-                  label: t('이미지 주소'),
-                  required: true,
-                  placeholder: 'nginx:alpine',
-                },
-              ],
-              (v) => job('pullImage', v).then(track(v.image)),
-            )
-          }
+          onClick={() => setPullModalOpen(true)}
         />
       </PageActions>
       {showPull && (
@@ -706,6 +845,12 @@ function Images() {
       {layerInspectImage && (
         <ImageLayerModal image={layerInspectImage} onClose={() => setLayerInspectImage(null)} />
       )}
+      <PullImageModal
+        isOpen={pullModalOpen}
+        onClose={() => setPullModalOpen(false)}
+        busy={busy}
+        onSubmit={(image) => job('pullImage', { image }).then(track(image))}
+      />
       <PruneConfirmModal
         isOpen={pruneModalOpen}
         onClose={() => setPruneModalOpen(false)}

@@ -831,4 +831,10 @@ export default {
   '현재 우선 실행되는 경로: {0}': 'Currently active path: {0}',
   'Windows는 시스템 PATH를 사용자 PATH보다 먼저 찾습니다. 다른 docker CLI에서도 docker context use naru로 Naru 엔진을 그대로 쓸 수 있고, Naru의 CLI를 우선 쓰려면 시스템 PATH 순서를 조정해 주세요.':
     'Windows searches System PATH before User PATH. You can still use Naru with docker context use naru from any Docker CLI, or adjust PATH order to prefer Naru.',
+  '이미지 이름을 입력하면 Docker Hub에서 검색하고, 콜론(:) 뒤에 태그를 제안합니다.':
+    'Type an image name to search Docker Hub, or add a colon (:) to browse tags.',
+  '검색 중…': 'Searching…',
+  '태그 불러오는 중…': 'Loading tags…',
+  '공식': 'Official',
+  가져오기: 'Pull',
 };

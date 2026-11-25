@@ -9,6 +9,7 @@ pub mod engine;
 pub mod extensions;
 pub mod forwarding;
 pub mod fswatch;
+pub mod hub;
 pub mod jobs;
 pub mod needs;
 pub mod onboarding;

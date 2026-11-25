@@ -891,6 +891,15 @@ fn routes(app: Arc<App>) -> Router {
         .route("/api/volumes/{id}/export", get(export_volume))
         .route("/api/volumes/{id}/import", post(import_volume).layer(DefaultBodyLimit::max(500 * 1024 * 1024)))
         .route("/api/images/needs", get(image_needs))
+        .route("/api/hub/search", get(|Query(q): Query<HashMap<String, String>>| async move {
+            let term = q.get("q").map(String::as_str).unwrap_or_default();
+            ApiResult::Ok(Json(crate::hub::search(term).await?))
+        }))
+        .route("/api/hub/tags", get(|Query(q): Query<HashMap<String, String>>| async move {
+            let repo = q.get("repo").map(String::as_str).unwrap_or_default();
+            let filter = q.get("q").map(String::as_str).unwrap_or_default();
+            ApiResult::Ok(Json(crate::hub::tags(repo, filter).await?))
+        }))
         .route("/api/images/{id}/history", get(image_history))
         .route("/api/networks/ping", post(network_check))
         .route("/api/jobs", get(jobs).post(create_job))
