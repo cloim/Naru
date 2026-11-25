@@ -1,0 +1,20 @@
+# test_name	ref	summary
+# 버그를 고칠 때마다 한 줄을 추가합니다. tests/regressions.test.js가 이 목록의 검사가 코드에 남아 있는지 확인합니다.
+real_tools_resolve_to_system32	eb1bd56	Windows 시스템 도구를 현재 폴더가 아니라 System32에서 찾도록 고정
+tools_never_come_from_the_exe_folder	eb1bd56	실행 파일 폴더에 놓인 동명 도구가 우선 실행되지 않도록 방지
+every_powershell_script_exists	eb1bd56	인라인 -Command 대신 리소스로 등록한 PowerShell 스크립트 파일 존재 확인
+downloads_must_match_size_and_digest	84e7ade	업데이트 설치 파일의 SHA-256과 크기가 릴리스 digest와 다르면 중단
+releases_without_a_digest_or_not_newer_are_refused	84e7ade	digest가 없거나 현재보다 새 버전이 아닌 릴리스의 자동 설치 거부
+the_disk_must_be_in_the_data_folder	7182929	WSL 배포판 디스크가 데이터 폴더 밖에 있으면 엔진 시작 차단
+missing_drives_are_refused_and_missing_folders_warned	7182929	bind mount 원본 드라이브가 없으면 거부하고 폴더만 없으면 경고
+concurrent_remote_requests_share_a_few_long_lived_logins	20aa452	원격 엔진 폴링마다 SSH 로그인이 새로 생기지 않도록 장기 연결 재사용
+a_failed_login_backs_off_instead_of_retrying	20aa452	원격 엔진 SSH 로그인 실패 시 즉시 재시도하지 않고 백오프 적용
+a_batch_keeps_each_paths_last_change	28aef78	Windows 폴더 변경 감지에서 50ms 묶음마다 경로별 마지막 변경만 전송
+a_real_folder_reports_saves_but_not_attribute_changes	28aef78	권한 재설정(Attributes)으로 인한 무한 반복 없이 실제 파일 저장만 감지
+postgres_needs_its_password_or_trust	7d47511	PostgreSQL 이미지의 필수 환경 변수(POSTGRES_PASSWORD)와 trust 대안 감지
+mariadb_needs_a_root_password_or_an_alternative	7d47511	MariaDB 이미지의 필수 환경 변수와 빈/임의 비밀번호 대안 감지
+home_paths_and_the_user_name	58b2cae	진단 리포트에서 Windows/WSL 홈 경로와 사용자 이름 가리기
+people_and_machines	58b2cae	진단 리포트에서 컴퓨터 이름과 tailnet 호스트 이름 가리기
+urls_keys_and_tokens	58b2cae	진단 리포트에서 URL 비밀번호, 개인 키, JWT와 토큰 접두사 가리기
+settings_that_hold_secrets	58b2cae	진단 리포트에서 비밀번호와 토큰류 설정값 가리기
+tests/container-stop.test.js	857b71f	컨테이너 시작 직후 종료 원인(OOM, 포트 충돌, 환경 변수 누락) 판정

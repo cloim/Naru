@@ -35,6 +35,7 @@ Windows에서 컨테이너와 로컬 Kubernetes 환경을 관리하는 데스크
 | 개발용 서버(창 없음) | `cargo run -p naru -- --serve` |
 | 개발용 앱 | `cargo run -p naru` |
 | 테스트 | `cargo test -p naru-core`, `npm test` |
+| 성능 측정 | `python scripts/bench.py` |
 | 설치 파일(NSIS) | `npm run build:desktop` |
 
 백엔드는 Rust(`crates/core`)이고, Tauri 셸(`src-tauri`)이 같은 프로세스에서 서버와 창을 함께 실행합니다. 개발용 서버는 [Naru 열기](http://127.0.0.1:49170)로 브라우저에서 확인할 수 있어요. 엔진 에이전트(`crates/agent`)는 Linux 정적 바이너리라 `rustup target add x86_64-unknown-linux-musl`이 필요하며, 설치 파일 빌드는 에이전트와 화면을 먼저 빌드합니다.
