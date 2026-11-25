@@ -1,6 +1,7 @@
 //! Docker API request rewriting for Windows clients: host paths become WSL paths and proxies are filled in.
 use regex::Regex;
 use serde_json::Value;
+use std::path::Path;
 use std::sync::LazyLock;
 
 static DRIVE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?s)^([a-zA-Z]):(?:[\\/](.*))?$").unwrap());
@@ -20,19 +21,82 @@ pub fn to_linux_path(value: &str) -> String {
     }
 }
 
-/// A bind is "source:target[:options]"; a drive source carries its own colon.
-pub fn rewrite_bind(bind: &str) -> String {
-    static WIN: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[a-zA-Z]:[\\/]").unwrap());
+static WIN: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[a-zA-Z]:[\\/]").unwrap());
+
+/// The Windows source of a bind ("source:target[:options]"), whose drive carries its own colon.
+fn bind_source(bind: &str) -> Option<&str> {
     if !WIN.is_match(bind) {
-        return bind.to_string();
+        return None;
     }
-    match bind[2..].find(':') {
-        None => to_linux_path(bind),
-        Some(i) => {
-            let end = i + 2;
-            format!("{}{}", to_linux_path(&bind[..end]), &bind[end..])
+    Some(match bind[2..].find(':') {
+        None => bind,
+        Some(i) => &bind[..i + 2],
+    })
+}
+
+pub fn rewrite_bind(bind: &str) -> String {
+    match bind_source(bind) {
+        None => bind.to_string(),
+        Some(source) => format!("{}{}", to_linux_path(source), &bind[source.len()..]),
+    }
+}
+
+/// A Windows bind source on a drive that exists.
+#[derive(Debug, PartialEq)]
+pub enum HostSource {
+    Present,
+    FolderMissing,
+}
+
+/// The engine makes a missing bind folder itself, so a source on a drive that is gone (unplugged, or its
+/// letter changed) would quietly become an empty folder inside the WSL disk. That is refused; a missing
+/// folder on a present drive is not, as with Docker. Paths that are not Windows paths pass.
+pub fn check_host_source(path: &str, exists: impl Fn(&Path) -> bool) -> Result<HostSource, String> {
+    let Some(m) = DRIVE.captures(path) else { return Ok(HostSource::Present) };
+    let drive = format!("{}:", m[1].to_uppercase());
+    if !exists(Path::new(&format!("{drive}\\"))) {
+        return Err(format!(
+            "{drive} 드라이브를 찾을 수 없어 {path}를 연결하지 않았습니다. 드라이브가 연결되어 있는지, 드라이브 문자가 바뀌지 않았는지 확인해 주세요."
+        ));
+    }
+    Ok(if exists(Path::new(path)) { HostSource::Present } else { HostSource::FolderMissing })
+}
+
+/// Checks the Windows sources a create body binds, before it is rewritten. Returns the warnings for
+/// `-v` folders the engine will create; `--mount` and volume devices need an existing source, which the
+/// engine checks itself.
+pub fn check_create(rewrite: Rewrite, body: &Value, exists: impl Fn(&Path) -> bool) -> Result<Vec<String>, String> {
+    let mut sources: Vec<(&str, bool)> = Vec::new();
+    match rewrite {
+        Rewrite::Container => {
+            let host = &body["HostConfig"];
+            sources.extend(host["Binds"].as_array().into_iter().flatten().filter_map(Value::as_str).filter_map(bind_source).map(|s| (s, true)));
+            let mounts = host["Mounts"].as_array().into_iter().flatten().filter(|m| m["Type"] == "bind");
+            sources.extend(mounts.filter_map(|m| m["Source"].as_str()).map(|s| (s, false)));
+        }
+        Rewrite::Volume => {
+            if let Some(device) = body["DriverOpts"]["device"].as_str() {
+                sources.push((device, false));
+            }
         }
     }
+    let mut warnings = Vec::new();
+    for (source, created) in sources {
+        if check_host_source(source, &exists)? == HostSource::FolderMissing && created {
+            warnings.push(format!("{source} 폴더가 없어 엔진이 빈 폴더를 새로 만듭니다. 경로가 맞는지 확인해 주세요."));
+        }
+    }
+    Ok(warnings)
+}
+
+/// Adds warnings to a create response's `Warnings`, which the Docker CLI prints as WARNING lines.
+pub fn add_warnings(body: &[u8], warnings: &[String]) -> Option<Vec<u8>> {
+    let mut value: Value = serde_json::from_slice(body).ok()?;
+    let object = value.as_object_mut()?;
+    let mut list = object.get("Warnings").and_then(Value::as_array).cloned().unwrap_or_default();
+    list.extend(warnings.iter().cloned().map(Value::from));
+    object.insert("Warnings".into(), list.into());
+    Some(value.to_string().into_bytes())
 }
 
 /// The same variables the Docker CLI adds from its proxies config.
@@ -159,6 +223,44 @@ mod tests {
         assert_eq!(body["HostConfig"]["Mounts"][1]["Source"], "v");
         let vol = rewrite_volume_create(json!({ "DriverOpts": { "o": "bind", "device": r"D:\data" } }));
         assert_eq!(vol["DriverOpts"]["device"], "/mnt/d/data");
+    }
+
+    #[test]
+    fn missing_drives_are_refused_and_missing_folders_warned() {
+        // Only D: exists, holding D:\work.
+        let exists = |p: &Path| matches!(p.to_string_lossy().as_ref(), r"D:\" | r"D:\work" | "D:/work");
+        assert_eq!(check_host_source(r"D:\work", exists), Ok(HostSource::Present));
+        assert_eq!(check_host_source("d:/work", |p: &Path| p.to_string_lossy() == r"D:\" || p.to_string_lossy() == "d:/work"), Ok(HostSource::Present));
+        assert_eq!(check_host_source(r"D:\new", exists), Ok(HostSource::FolderMissing));
+        assert_eq!(check_host_source("named-volume", exists), Ok(HostSource::Present));
+        assert!(check_host_source(r"E:\Models", exists).unwrap_err().contains("E: 드라이브"));
+
+        let body = |binds: Value, mounts: Value| json!({ "HostConfig": { "Binds": binds, "Mounts": mounts } });
+        let ok = check_create(Rewrite::Container, &body(json!([r"D:\work:/app:ro", "vol:/data"]), json!(null)), exists).unwrap();
+        assert!(ok.is_empty());
+        let warned = check_create(Rewrite::Container, &body(json!([r"D:\new:/app"]), json!([])), exists).unwrap();
+        assert_eq!(warned.len(), 1);
+        assert!(warned[0].contains(r"D:\new"));
+        // --mount needs an existing source; the engine refuses a missing one itself, so no warning.
+        let mount = check_create(Rewrite::Container, &body(json!(null), json!([{ "Type": "bind", "Source": r"D:\new" }])), exists).unwrap();
+        assert!(mount.is_empty());
+        for refused in [
+            body(json!([r"E:\Models:/models"]), json!(null)),
+            body(json!(null), json!([{ "Type": "bind", "Source": r"E:\y" }])),
+        ] {
+            assert!(check_create(Rewrite::Container, &refused, exists).is_err());
+        }
+        let volume = json!({ "DriverOpts": { "o": "bind", "device": r"E:\data" } });
+        assert!(check_create(Rewrite::Volume, &volume, exists).is_err());
+    }
+
+    #[test]
+    fn warnings_join_the_create_response() {
+        let out = add_warnings(br#"{"Id":"abc","Warnings":["engine"]}"#, &["naru".into()]).unwrap();
+        assert_eq!(serde_json::from_slice::<Value>(&out).unwrap(), json!({ "Id": "abc", "Warnings": ["engine", "naru"] }));
+        let out = add_warnings(br#"{"Id":"abc","Warnings":null}"#, &["naru".into()]).unwrap();
+        assert_eq!(serde_json::from_slice::<Value>(&out).unwrap()["Warnings"], json!(["naru"]));
+        assert_eq!(add_warnings(b"not json", &["naru".into()]), None);
     }
 
     #[test]

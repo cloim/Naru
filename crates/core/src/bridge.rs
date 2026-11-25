@@ -3,7 +3,7 @@
 //! hijacked attach and exec streams pass through untouched.
 use crate::context::Target;
 use crate::engine::engine_stream;
-use crate::paths::{apply, create_rewriter, rewrite_build_url};
+use crate::paths::{add_warnings, apply, check_create, create_rewriter, rewrite_build_url};
 use crate::runner::{args, hidden, kill_tree};
 use crate::runtime::require_ready;
 use crate::state::{container_proxy_config, settings, DISTRO};
@@ -14,6 +14,7 @@ use hyper::body::Incoming;
 use hyper::client::conn::http1::SendRequest;
 use hyper::{Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
+use std::path::Path;
 use std::process::Stdio;
 use std::sync::LazyLock;
 use std::time::Duration;
@@ -104,6 +105,7 @@ async fn proxy_request(mut req: Request<Incoming>) -> Result<Response<Body>, hyp
         Ok(uri) => uri,
         Err(e) => return Ok(json_error(StatusCode::BAD_REQUEST, e.to_string())),
     };
+    let mut warnings = Vec::new();
     let body: Body = match rewrite {
         None => body.boxed(),
         Some(kind) => {
@@ -115,7 +117,13 @@ async fn proxy_request(mut req: Request<Incoming>) -> Result<Response<Body>, hyp
                 Bytes::new()
             } else {
                 match serde_json::from_slice(&collected) {
-                    Ok(value) => Bytes::from(apply(kind, value, proxies.as_ref()).to_string()),
+                    Ok(value) => {
+                        match check_create(kind, &value, Path::exists) {
+                            Ok(found) => warnings = found,
+                            Err(message) => return Ok(json_error(StatusCode::BAD_REQUEST, message)),
+                        }
+                        Bytes::from(apply(kind, value, proxies.as_ref()).to_string())
+                    }
                     Err(e) => return Ok(json_error(StatusCode::BAD_REQUEST, e.to_string())),
                 }
             };
@@ -134,6 +142,14 @@ async fn proxy_request(mut req: Request<Incoming>) -> Result<Response<Body>, hyp
     };
     if response.status() != StatusCode::SWITCHING_PROTOCOLS {
         release(sender);
+        if !warnings.is_empty() && response.status().is_success() {
+            let (mut parts, body) = response.into_parts();
+            let bytes = body.collect().await?.to_bytes();
+            let out = add_warnings(&bytes, &warnings).map(Bytes::from).unwrap_or(bytes);
+            parts.headers.remove(hyper::header::TRANSFER_ENCODING);
+            parts.headers.insert(hyper::header::CONTENT_LENGTH, out.len().into());
+            return Ok(Response::from_parts(parts, full(out)));
+        }
     } else {
         // attach and exec: join both upgraded streams; this engine connection is now a raw stream.
         drop(sender);

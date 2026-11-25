@@ -359,6 +359,8 @@ pub async fn start(log: &Log) -> Result<()> {
         crate::disk::restore_running(log).await;
         return Ok(());
     }
+    // Booting from a disk outside the data folder, or from none, is what a missing drive looks like.
+    crate::storage::require_ready()?;
     install_scripts(log).await?;
     write_cli_proxies(&cfg.proxy).await?;
     // Pass proxy values as env arguments, never interpolate into a shell program.

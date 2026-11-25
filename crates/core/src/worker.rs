@@ -117,6 +117,19 @@ fn windows_path(value: &str) -> bool {
     Regex::new(r"^[a-zA-Z]:[\\/]").unwrap().is_match(value)
 }
 
+/// The screen creates containers with `--mount`, which needs an existing source, so a missing folder is
+/// refused here in plain words, and a missing drive before WSL can make anything of it.
+fn check_mount_source(source: &str) -> Result<()> {
+    if !windows_path(source) {
+        return Ok(());
+    }
+    match crate::paths::check_host_source(source, std::path::Path::exists) {
+        Err(message) => bail!(message),
+        Ok(crate::paths::HostSource::FolderMissing) => bail!("{source} 폴더가 없습니다. 경로를 확인하거나 폴더를 먼저 만들어 주세요."),
+        Ok(crate::paths::HostSource::Present) => Ok(()),
+    }
+}
+
 async fn execute(id: &str, kind: &str, p: &Value, log: &Log) -> Result<()> {
     let long = || Opts::timeout(15 * 60).log(log);
     match kind {
@@ -466,6 +479,7 @@ async fn container_create_args(p: &Value) -> Result<Vec<String>> {
         if remote_target() && windows_path(source) {
             bail!("원격 엔진의 Linux 마운트 경로를 입력해 주세요.");
         }
+        check_mount_source(source)?;
         let source = if !source.starts_with('/') && windows_path(source) {
             wslpath(source).await?
         } else {
@@ -498,6 +512,12 @@ async fn container_create_args(p: &Value) -> Result<Vec<String>> {
 }
 
 async fn update_container(job_id: &str, p: &Value, log: &Log) -> Result<()> {
+    // Checked before the old container is stopped and renamed, so a bad path changes nothing.
+    if !remote_target() {
+        for m in p["mounts"].as_array().into_iter().flatten() {
+            check_mount_source(s(m, "source"))?;
+        }
+    }
     let inspected = engine::inspect("containers", s(p, "id")).await?;
     let inspect = inspected
         .as_array()

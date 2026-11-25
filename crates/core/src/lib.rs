@@ -19,6 +19,7 @@ pub mod runtime;
 pub mod security;
 pub mod server;
 pub mod state;
+pub mod storage;
 pub mod terminal;
 pub mod tools;
 pub mod updater;
