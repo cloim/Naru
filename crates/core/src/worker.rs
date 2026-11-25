@@ -182,7 +182,27 @@ async fn execute(id: &str, kind: &str, p: &Value, log: &Log) -> Result<()> {
         "scanImage" => scan_image(id, s(p, "image"), log).await?,
         "installCLI" => install_cli(log).await?,
         "containerAction" => {
-            engine::container_action(s(p, "id"), s(p, "action"), log).await?;
+            let action = s(p, "action");
+            if let Some(ids) = p["ids"].as_array().filter(|a| !a.is_empty()) {
+                let mut ok = 0usize;
+                let mut failed = 0usize;
+                for item in ids {
+                    let Some(cid) = item.as_str() else { continue };
+                    match engine::container_action(cid, action, log).await {
+                        Ok(_) => ok += 1,
+                        Err(e) => {
+                            failed += 1;
+                            log(&format!("컨테이너 {action} 실패 ({cid}): {e}\n"));
+                        }
+                    }
+                }
+                log(&format!("컨테이너 일괄 {action} 완료: 성공 {ok}개, 실패 {failed}개.\n"));
+                if ok == 0 && failed > 0 {
+                    bail!("선택한 컨테이너 작업을 완료하지 못했습니다.");
+                }
+            } else {
+                engine::container_action(s(p, "id"), action, log).await?;
+            }
         }
         "pullImage" => {
             cli(&args(["pull", s(p, "image")]), long()).await?;
@@ -324,16 +344,64 @@ async fn execute(id: &str, kind: &str, p: &Value, log: &Log) -> Result<()> {
             log("미사용 리소스 정리(Prune) 완료.\n");
         }
         "pruneImages" => {
-            cli(&args(["image", "prune", "-a", "-f"]), long()).await?;
-            log("미사용 이미지 정리 완료.\n");
+            if let Some(ids) = p["ids"].as_array().filter(|a| !a.is_empty()) {
+                let mut ok = 0usize;
+                let mut failed = 0usize;
+                for item in ids {
+                    let Some(img) = item.as_str() else { continue };
+                    match cli(&args(["image", "rm", img]), Opts::default().log(log)).await {
+                        Ok(_) => ok += 1,
+                        Err(e) => {
+                            failed += 1;
+                            log(&format!("이미지 삭제 실패 ({img}): {e}\n"));
+                        }
+                    }
+                }
+                log(&format!("선택한 미사용 이미지 정리 완료: 삭제 {ok}개, 실패 {failed}개.\n"));
+            } else {
+                cli(&args(["image", "prune", "-a", "-f"]), long()).await?;
+                log("미사용 이미지 정리 완료.\n");
+            }
         }
         "pruneVolumes" => {
-            cli(&args(["volume", "prune", "-f"]), long()).await?;
-            log("미사용 볼륨 정리 완료.\n");
+            if let Some(ids) = p["ids"].as_array().filter(|a| !a.is_empty()) {
+                let mut ok = 0usize;
+                let mut failed = 0usize;
+                for item in ids {
+                    let Some(vol) = item.as_str() else { continue };
+                    match cli(&args(["volume", "rm", vol]), Opts::default().log(log)).await {
+                        Ok(_) => ok += 1,
+                        Err(e) => {
+                            failed += 1;
+                            log(&format!("볼륨 삭제 실패 ({vol}): {e}\n"));
+                        }
+                    }
+                }
+                log(&format!("선택한 미사용 볼륨 정리 완료: 삭제 {ok}개, 실패 {failed}개.\n"));
+            } else {
+                cli(&args(["volume", "prune", "-f"]), long()).await?;
+                log("미사용 볼륨 정리 완료.\n");
+            }
         }
         "pruneNetworks" => {
-            cli(&args(["network", "prune", "-f"]), long()).await?;
-            log("미사용 네트워크 정리 완료.\n");
+            if let Some(ids) = p["ids"].as_array().filter(|a| !a.is_empty()) {
+                let mut ok = 0usize;
+                let mut failed = 0usize;
+                for item in ids {
+                    let Some(net) = item.as_str() else { continue };
+                    match cli(&args(["network", "rm", net]), Opts::default().log(log)).await {
+                        Ok(_) => ok += 1,
+                        Err(e) => {
+                            failed += 1;
+                            log(&format!("네트워크 삭제 실패 ({net}): {e}\n"));
+                        }
+                    }
+                }
+                log(&format!("선택한 미사용 네트워크 정리 완료: 삭제 {ok}개, 실패 {failed}개.\n"));
+            } else {
+                cli(&args(["network", "prune", "-f"]), long()).await?;
+                log("미사용 네트워크 정리 완료.\n");
+            }
         }
         "createContainer" => create_container(p, log).await?,
         "updateContainer" => update_container(id, p, log).await?,

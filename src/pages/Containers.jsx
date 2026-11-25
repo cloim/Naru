@@ -1222,11 +1222,10 @@ function Containers() {
 
       try {
         if (containersToRemove.length > 0) {
-          await Promise.allSettled(
-            containersToRemove.map((c) =>
-              job('containerAction', { id: c.fullId || c.id, action: 'remove' }),
-            ),
-          );
+          const ids = containersToRemove.map((c) => c.fullId || c.id).filter(Boolean);
+          if (ids.length > 0) {
+            await job('containerAction', { ids, action: 'remove' });
+          }
         }
         if (projectsToRemove.length > 0) {
           await Promise.allSettled(
@@ -1396,9 +1395,8 @@ function Containers() {
                 icon={Play}
                 disabled={busy}
                 onClick={async () => {
-                  for (const id of selectedIds) {
-                    await job('containerAction', { id, action: 'start' });
-                  }
+                  const ids = Array.from(selectedIds);
+                  if (ids.length) await job('containerAction', { ids, action: 'start' });
                   setSelectedIds(new Set());
                 }}
               >
@@ -1409,9 +1407,8 @@ function Containers() {
                 icon={Square}
                 disabled={busy}
                 onClick={async () => {
-                  for (const id of selectedIds) {
-                    await job('containerAction', { id, action: 'stop' });
-                  }
+                  const ids = Array.from(selectedIds);
+                  if (ids.length) await job('containerAction', { ids, action: 'stop' });
                   setSelectedIds(new Set());
                 }}
               >
@@ -1429,9 +1426,8 @@ function Containers() {
                       selectedIds.size,
                     ]),
                     async () => {
-                      for (const id of selectedIds) {
-                        await job('containerAction', { id, action: 'remove' });
-                      }
+                      const ids = Array.from(selectedIds);
+                      if (ids.length) await job('containerAction', { ids, action: 'remove' });
                       setSelectedIds(new Set());
                     },
                   );

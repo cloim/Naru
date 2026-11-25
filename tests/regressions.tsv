@@ -24,3 +24,4 @@ parse_and_update_preserves_other_sections_and_comments	218ac6a	.wslconfig 수정
 detects_other_docker_cli_before_naru	218ac6a	PATH에서 Docker Desktop 등 다른 docker CLI 우선 실행 감지
 parses_hub_repo_paths_and_skips_custom_registries	3800112	Docker Hub 저장소 경로 해석 및 사설 레지스트리 제외
 merge_dockerd_crun_keeps_existing_keys_and_sets_default	P2-5	기존 dockerd.json 설정을 유지하면서 crun 런타임 병합
+batch_prune_and_container_actions_accept_id_lists	prune-batch	미사용 이미지·볼륨·네트워크·컨테이너 일괄 정리 시 1건만 실행되던 동시 작업 충돌 수정

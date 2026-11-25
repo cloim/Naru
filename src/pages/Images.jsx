@@ -859,13 +859,9 @@ function Images() {
         onConfirm={async (selectedItems) => {
           setPruneModalOpen(false);
           if (!selectedItems || !selectedItems.length) return;
-          try {
-            await Promise.allSettled(
-              selectedItems.map((item) => job('removeImage', { id: item.id || item.name })),
-            );
-          } catch (e) {
-            notify?.(e);
-          }
+          const ids = selectedItems.map((item) => item.id || item.name).filter(Boolean);
+          if (!ids.length) return;
+          await job('pruneImages', { ids });
           qc.invalidateQueries({ queryKey: ['images'] });
         }}
       />

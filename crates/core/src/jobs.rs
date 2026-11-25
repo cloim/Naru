@@ -131,6 +131,18 @@ impl Fields {
             _ => bail!("{key} 목록을 확인해 주세요."),
         }
     }
+    fn id_list(&mut self, key: &'static str, pattern: &Regex, max: usize) -> Result<Vec<String>> {
+        let items = self.array(key, max)?;
+        let mut out = Vec::with_capacity(items.len());
+        for item in items {
+            let s = item
+                .as_str()
+                .filter(|v| pattern.is_match(v))
+                .ok_or_else(|| anyhow!("{key} 항목 형식을 확인해 주세요."))?;
+            out.push(s.to_string());
+        }
+        Ok(out)
+    }
     fn done(self, out: Value) -> Result<Value> {
         if let Some(extra) = self.map.keys().find(|k| !self.seen.contains(&k.as_str())) {
             bail!("알 수 없는 입력 항목: {extra}");
@@ -144,13 +156,26 @@ pub fn validate_job(kind: &str, payload: &Value) -> Result<Value> {
     let mut f = Fields::new(payload)?;
     let out = match kind {
         "installRuntime" | "startRuntime" | "stopRuntime" | "compactDisk" | "startKubernetes"
-        | "stopKubernetes" | "installCLI" | "pruneImages" | "pruneVolumes" | "pruneNetworks" => {
+        | "stopKubernetes" | "installCLI" => {
             json!({})
         }
-        "containerAction" => json!({
-            "id": f.string("id", &IDENTIFIER)?,
-            "action": f.choice("action", &["start", "stop", "restart", "pause", "unpause", "remove"], None)?,
-        }),
+        "pruneImages" | "pruneNetworks" => {
+            let ids = f.id_list("ids", &IDENTIFIER, 500)?;
+            if ids.is_empty() { json!({}) } else { json!({ "ids": ids }) }
+        }
+        "pruneVolumes" => {
+            let ids = f.id_list("ids", &NAME, 500)?;
+            if ids.is_empty() { json!({}) } else { json!({ "ids": ids }) }
+        }
+        "containerAction" => {
+            let action = f.choice("action", &["start", "stop", "restart", "pause", "unpause", "remove"], None)?;
+            let ids = f.id_list("ids", &IDENTIFIER, 500)?;
+            if !ids.is_empty() {
+                json!({ "ids": ids, "action": action })
+            } else {
+                json!({ "id": f.string("id", &IDENTIFIER)?, "action": action })
+            }
+        }
         "registryLogin" => json!({
             "server": f.string("server", &REGISTRY)?,
             "username": f.text("username", 1, 256)?,
@@ -619,5 +644,23 @@ mod tests {
             )
             .is_err());
         }
+    }
+
+    #[test]
+    fn batch_prune_and_container_actions_accept_id_lists() {
+        assert_eq!(
+            validate_job("pruneImages", &json!({ "ids": ["sha256:abc", "nginx:alpine"] })).unwrap(),
+            json!({ "ids": ["sha256:abc", "nginx:alpine"] })
+        );
+        assert_eq!(validate_job("pruneImages", &json!({})).unwrap(), json!({}));
+        assert!(validate_job("pruneImages", &json!({ "ids": ["bad id!"] })).is_err());
+        assert_eq!(
+            validate_job("pruneVolumes", &json!({ "ids": ["vol-a", "vol_b"] })).unwrap(),
+            json!({ "ids": ["vol-a", "vol_b"] })
+        );
+        assert_eq!(
+            validate_job("containerAction", &json!({ "ids": ["c1", "c2"], "action": "remove" })).unwrap(),
+            json!({ "ids": ["c1", "c2"], "action": "remove" })
+        );
     }
 }
