@@ -837,4 +837,6 @@ export default {
   '태그 불러오는 중…': 'Loading tags…',
   '공식': 'Official',
   가져오기: 'Pull',
+  '프로젝트 내 최대 CPU 사용량': 'Highest CPU usage among containers in this project',
+  '프로젝트 전체 메모리 사용량 합계': 'Total memory usage of all containers in this project',
 };

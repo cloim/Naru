@@ -122,18 +122,46 @@ function ContainerTitle({ id, children }) {
   return <strong className={cn('truncate', !runningIds.has(id) && IDLE_TITLE)}>{children}</strong>;
 }
 
-function ProjectRow({ data: g }) {
+export function projectResourceStats(members, statsById) {
+  let maxCpu = null;
+  let sumMemory = null;
+  for (const m of members || []) {
+    const stat = statsById?.get(m.Id?.slice(0, 12));
+    if (Number.isFinite(stat?.cpu)) {
+      maxCpu = maxCpu === null ? stat.cpu : Math.max(maxCpu, stat.cpu);
+    }
+    if (Number.isFinite(stat?.memory)) {
+      sumMemory = (sumMemory ?? 0) + stat.memory;
+    }
+  }
+  return { cpu: maxCpu, memory: sumMemory };
+}
+
+function ProjectRow({ data: g, api: gridApi }) {
   useLocale();
-  const { job, confirm, busy, toggle, collapsed, openLogs, openManage, locks, toggleProjectLock } =
-    useContext(ProjectContext);
+  const {
+    job,
+    confirm,
+    busy,
+    toggle,
+    collapsed,
+    openLogs,
+    openManage,
+    locks,
+    toggleProjectLock,
+    remote,
+  } = useContext(ProjectContext);
   const open = !collapsed.has(g.__group);
   const named = g.__group !== NO_PROJECT;
   const GroupIcon = named ? Boxes : Box;
   const run = (action) => job('project', { name: g.__group, action });
   const isLocked = named && locks ? isProjectLocked(locks, g.__group, g.members || []) : false;
+  const cpuWidth = gridApi?.getColumn?.('__cpu')?.getActualWidth?.() || 90;
+  const memoryWidth = gridApi?.getColumn?.('__memory')?.getActualWidth?.() || 110;
+  const actionsWidth = gridApi?.getColumn?.('actions')?.getActualWidth?.() || 172;
   return (
     <div
-      className="flex h-full cursor-pointer items-center gap-3 bg-[#f6f8f2] pr-3 pl-3.5 max-tablet:gap-2 max-tablet:pl-2.5"
+      className="flex h-full cursor-pointer items-center gap-3 bg-[#f6f8f2] pl-3.5 max-tablet:gap-2 max-tablet:pr-3 max-tablet:pl-2.5"
       onClick={() => toggle(g.__group)}
     >
       <ChevronRight
@@ -170,87 +198,113 @@ function ProjectRow({ data: g }) {
       <Badge state={g.running > 0 ? 'running' : 'exited'} marker={false}>
         {`${g.running}/${g.total}`}
       </Badge>
-      {named && !g.virtual && (
-        <div className={cn(tw.rowActions, 'ml-auto')} onClick={(e) => e.stopPropagation()}>
-          <IconButton
-            icon={isLocked ? Lock : Unlock}
-            label={
-              isLocked
-                ? t('{0} 프로젝트 전체 잠금 해제', [g.__group])
-                : t('{0} 프로젝트 전체 잠금', [g.__group])
-            }
-            className={isLocked ? 'text-[#d97706] enabled:hover:text-[#b45309]' : ''}
-            disabled={busy}
-            onClick={() => toggleProjectLock?.(g.__group)}
-          />
-          {g.total === 0 ? (
-            <IconButton
-              icon={Play}
-              label={t('{0} 프로젝트 up', [g.__group])}
-              disabled={busy || !g.info?.filesFound}
-              onClick={() => run('up')}
-            />
-          ) : g.running < g.total ? (
-            <IconButton
-              icon={Play}
-              label={t('{0} 프로젝트 시작', [g.__group])}
-              disabled={busy}
-              onClick={() => run('start')}
-            />
-          ) : (
-            <IconButton
-              icon={Square}
-              label={t('{0} 프로젝트 정지', [g.__group])}
-              disabled={busy}
-              onClick={() => run('stop')}
-            />
+      <div className="ml-auto flex h-full flex-none items-center">
+        {!remote && (
+          <>
+            <span
+              style={{ width: cpuWidth }}
+              className="flex-none px-[20px] text-right text-[13px] tabular-nums text-ink max-tablet:hidden"
+              title={t('프로젝트 내 최대 CPU 사용량')}
+            >
+              {Number.isFinite(g.__cpu) ? `${g.__cpu.toFixed(1)}%` : '-'}
+            </span>
+            <span
+              style={{ width: memoryWidth }}
+              className="flex-none px-[20px] text-right text-[13px] tabular-nums text-ink max-tablet:hidden"
+              title={t('프로젝트 전체 메모리 사용량 합계')}
+            >
+              {Number.isFinite(g.__memory) ? bytes(g.__memory) : '-'}
+            </span>
+          </>
+        )}
+        <div
+          style={{ width: actionsWidth }}
+          className="flex h-full flex-none items-center justify-end pr-[14px] pl-[20px] max-tablet:w-auto max-tablet:px-0"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {named && !g.virtual && (
+            <div className={tw.rowActions}>
+              <IconButton
+                icon={isLocked ? Lock : Unlock}
+                label={
+                  isLocked
+                    ? t('{0} 프로젝트 전체 잠금 해제', [g.__group])
+                    : t('{0} 프로젝트 전체 잠금', [g.__group])
+                }
+                className={isLocked ? 'text-[#d97706] enabled:hover:text-[#b45309]' : ''}
+                disabled={busy}
+                onClick={() => toggleProjectLock?.(g.__group)}
+              />
+              {g.total === 0 ? (
+                <IconButton
+                  icon={Play}
+                  label={t('{0} 프로젝트 up', [g.__group])}
+                  disabled={busy || !g.info?.filesFound}
+                  onClick={() => run('up')}
+                />
+              ) : g.running < g.total ? (
+                <IconButton
+                  icon={Play}
+                  label={t('{0} 프로젝트 시작', [g.__group])}
+                  disabled={busy}
+                  onClick={() => run('start')}
+                />
+              ) : (
+                <IconButton
+                  icon={Square}
+                  label={t('{0} 프로젝트 정지', [g.__group])}
+                  disabled={busy}
+                  onClick={() => run('stop')}
+                />
+              )}
+              <RowMenu
+                label={t('{0} 프로젝트 작업 더 보기', [g.__group])}
+                items={[
+                  {
+                    icon: isLocked ? Unlock : Lock,
+                    label: isLocked ? t('프로젝트 전체 잠금 해제') : t('프로젝트 전체 잠금'),
+                    disabled: busy,
+                    onClick: () => toggleProjectLock?.(g.__group),
+                  },
+                  g.running > 0 &&
+                    g.running < g.total && {
+                      icon: Square,
+                      label: t('정지'),
+                      disabled: busy,
+                      onClick: () => run('stop'),
+                    },
+                  g.total > 0 && {
+                    icon: RotateCw,
+                    label: t('재시작'),
+                    disabled: busy,
+                    onClick: () => run('restart'),
+                  },
+                  g.total > 0 && {
+                    icon: Terminal,
+                    label: t('로그 보기'),
+                    onClick: () => openLogs(g.__group),
+                  },
+                  { icon: Settings2, label: t('프로젝트 관리'), onClick: () => openManage(g) },
+                  {
+                    icon: Trash2,
+                    label: t('프로젝트 삭제'),
+                    danger: true,
+                    disabled: busy,
+                    onClick: () =>
+                      confirm(
+                        t('프로젝트 삭제'),
+                        t('{0} 프로젝트를 삭제합니다. 소속된 컨테이너도 모두 함께 삭제됩니다.', [
+                          g.__group,
+                        ]),
+                        () => job('deleteProject', { name: g.__group }),
+                      ),
+                  },
+                ]}
+              />
+            </div>
           )}
-          <RowMenu
-            label={t('{0} 프로젝트 작업 더 보기', [g.__group])}
-            items={[
-              {
-                icon: isLocked ? Unlock : Lock,
-                label: isLocked ? t('프로젝트 전체 잠금 해제') : t('프로젝트 전체 잠금'),
-                disabled: busy,
-                onClick: () => toggleProjectLock?.(g.__group),
-              },
-              g.running > 0 &&
-                g.running < g.total && {
-                  icon: Square,
-                  label: t('정지'),
-                  disabled: busy,
-                  onClick: () => run('stop'),
-                },
-              g.total > 0 && {
-                icon: RotateCw,
-                label: t('재시작'),
-                disabled: busy,
-                onClick: () => run('restart'),
-              },
-              g.total > 0 && {
-                icon: Terminal,
-                label: t('로그 보기'),
-                onClick: () => openLogs(g.__group),
-              },
-              { icon: Settings2, label: t('프로젝트 관리'), onClick: () => openManage(g) },
-              {
-                icon: Trash2,
-                label: t('프로젝트 삭제'),
-                danger: true,
-                disabled: busy,
-                onClick: () =>
-                  confirm(
-                    t('프로젝트 삭제'),
-                    t('{0} 프로젝트를 삭제합니다. 소속된 컨테이너도 모두 함께 삭제됩니다.', [
-                      g.__group,
-                    ]),
-                    () => job('deleteProject', { name: g.__group }),
-                  ),
-              },
-            ]}
-          />
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -775,6 +829,7 @@ function Containers() {
     const result = [];
     for (const key of ordered) {
       const members = all.get(key) || [];
+      const groupStats = projectResourceStats(members, cpuById);
       result.push({
         __group: key,
         virtual: key === COOLIFY_UTIL,
@@ -784,10 +839,19 @@ function Containers() {
         total: members.length,
         running: members.filter((r) => r.State === 'running').length,
         members,
+        __cpu: groupStats.cpu,
+        __memory: groupStats.memory,
       });
       for (const r of shown)
-        if (projectOf(r) === key)
-          result.push({ ...r, __groupKey: key, __cpu: cpuById.get(r.Id?.slice(0, 12))?.cpu });
+        if (projectOf(r) === key) {
+          const stat = cpuById.get(r.Id?.slice(0, 12));
+          result.push({
+            ...r,
+            __groupKey: key,
+            __cpu: stat?.cpu,
+            __memory: stat?.memory,
+          });
+        }
     }
     return result;
   }, [candidates, visible, projects.data, tab, search, cpuById]);
@@ -858,8 +922,9 @@ function Containers() {
       locks,
       toggleProjectLock,
       runningIds,
+      remote,
     }),
-    [job, confirm, busy, collapsed, toggle, locks, toggleProjectLock, runningIds],
+    [job, confirm, busy, collapsed, toggle, locks, toggleProjectLock, runningIds, remote],
   );
   const cols = useMemo(
     () => [
@@ -1031,6 +1096,14 @@ function Containers() {
               type: 'rightAligned',
               valueFormatter: ({ value }) =>
                 Number.isFinite(value) ? `${value.toFixed(1)}%` : '-',
+            },
+            {
+              headerName: t('메모리'),
+              field: '__memory',
+              width: 110,
+              minWidth: 96,
+              type: 'rightAligned',
+              valueFormatter: ({ value }) => (Number.isFinite(value) ? bytes(value) : '-'),
             },
           ]),
       {
