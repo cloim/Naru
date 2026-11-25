@@ -18,6 +18,7 @@ pub mod runner;
 pub mod runtime;
 pub mod security;
 pub mod server;
+pub mod ssh_gate;
 pub mod state;
 pub mod terminal;
 pub mod tools;

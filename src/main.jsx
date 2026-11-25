@@ -21,7 +21,13 @@ import {
   Navigate,
   useParams,
 } from 'react-router-dom';
-import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  QueryClient,
+  QueryClientProvider,
+  focusManager,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 
 import Engines from './pages/Engines.jsx';
 import { EngineSelector } from './components/EngineSelector.jsx';
@@ -88,6 +94,23 @@ import './components/DataGrid/data-grid.css';
 
 const client = new QueryClient({
   defaultOptions: { queries: { staleTime: 3000, retry: false, refetchOnWindowFocus: true } },
+});
+
+// 주기 조회는 화면이 보일 때만 한다. WebView2는 창을 최소화하거나 트레이로 숨겨도 문서를 보이는 상태로
+// 두므로, 데스크톱 셸이 naru-window 이벤트로 알려 준 상태도 함께 본다. 원격 엔진이면 숨긴 동안 SSH 연결도 쉰다.
+let shellHidden = false;
+focusManager.setEventListener((handleFocus) => {
+  const update = () => handleFocus(!shellHidden && document.visibilityState !== 'hidden');
+  const fromShell = (event) => {
+    shellHidden = !!event.detail?.hidden;
+    update();
+  };
+  document.addEventListener('visibilitychange', update);
+  window.addEventListener('naru-window', fromShell);
+  return () => {
+    document.removeEventListener('visibilitychange', update);
+    window.removeEventListener('naru-window', fromShell);
+  };
 });
 
 const navLink = ({ isActive }) =>

@@ -748,6 +748,8 @@ async fn update_engine(Path(id): Path<String>, Json(body): Json<Value>) -> ApiRe
         Ok(())
     })
     .await?;
+    // The user changed the connection: the next try should run instead of waiting out an old backoff.
+    engine::close_remote_connections();
     ok()
 }
 
@@ -784,6 +786,7 @@ async fn select_engine(Json(body): Json<Value>) -> ApiResult {
         Ok(())
     })
     .await?;
+    crate::ssh_gate::reset_backoff();
     ok()
 }
 
@@ -897,6 +900,8 @@ fn routes(app: Arc<App>) -> Router {
         .route("/api/remote-access", get(get_remote).put(put_remote))
         .route("/api/engines", get(engines).post(add_engine))
         .route("/api/engines/test", post(test_engine))
+        // SSH logins per remote endpoint (total, last minute, running, peak, backoff), to check for churn.
+        .route("/api/engines/ssh-stats", get(|| async { Json(crate::ssh_gate::snapshot()) }))
         .route("/api/engines/selection/current", put(select_engine))
         .route("/api/engines/{id}", put(update_engine).delete(delete_engine))
         .merge(crate::extensions::routes(app.port))
@@ -988,17 +993,22 @@ pub async fn run(port: u16) -> Result<()> {
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await?;
     let remote = app.remote.read().unwrap().as_ref().map(|r| format!(" | https://{}", r.host)).unwrap_or_default();
     println!("Naru http://127.0.0.1:{port} | {}{remote}", data().display());
-    start_docker_bridge();
-    start_compat_bridge();
-    crate::ports::start_port_forwarding();
-    *app.kubernetes.lock().unwrap() = Some(start_kubernetes_bridge(settings().await?.kubernetes.port));
-    tokio::spawn(async move {
-        if let Err(e) = crate::extensions::serve_isolated(port).await {
-            eprintln!("확장 격리 서버: {e}");
-        }
-    });
+    // NARU_API_ONLY serves the API alone, for tests that run beside an installed Naru: no pipes, bridges,
+    // port forwarding or engine start that would compete with it.
+    let api_only = std::env::var_os("NARU_API_ONLY").is_some();
+    if !api_only {
+        start_docker_bridge();
+        start_compat_bridge();
+        crate::ports::start_port_forwarding();
+        *app.kubernetes.lock().unwrap() = Some(start_kubernetes_bridge(settings().await?.kubernetes.port));
+        tokio::spawn(async move {
+            if let Err(e) = crate::extensions::serve_isolated(port).await {
+                eprintln!("확장 격리 서버: {e}");
+            }
+        });
+    }
     // Containers with a restart policy come back only when the engine starts with the server.
-    if settings().await?.auto_start && crate::onboarding::onboarded().await {
+    if !api_only && settings().await?.auto_start && crate::onboarding::onboarded().await {
         tokio::spawn(async {
             match runtime::status().await {
                 Ok(s) if s["managed"] == true && s["installed"] == true && s["running"] != true => {

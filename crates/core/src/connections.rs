@@ -1,6 +1,7 @@
 //! Remote engine profiles reached over SSH, stored in engines.json.
 use crate::context::{target, Target};
-use crate::runner::{command, Opts};
+use crate::runner::{checked, run, Opts, Output};
+use crate::ssh_gate;
 use crate::state::{atomic_json, read_json};
 use anyhow::{bail, Result};
 use regex::Regex;
@@ -118,9 +119,23 @@ pub fn ssh_args(profile: &Target, remote: &[String]) -> Result<Vec<String>> {
         "port": profile.port,
         "identityFile": profile.identity_file,
     }))?;
-    let mut out: Vec<String> = ["-T", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=8"]
-        .map(String::from)
-        .to_vec();
+    // ServerAlive makes ssh notice a dead link and exit (about 45 s), instead of a pooled connection
+    // waiting forever on a socket a NAT dropped.
+    let mut out: Vec<String> = [
+        "-T",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "StrictHostKeyChecking=yes",
+        "-o",
+        "ConnectTimeout=8",
+        "-o",
+        "ServerAliveInterval=15",
+        "-o",
+        "ServerAliveCountMax=3",
+    ]
+    .map(String::from)
+    .to_vec();
     if !p.user.is_empty() {
         out.extend(["-l".into(), p.user]);
     }
@@ -134,8 +149,47 @@ pub fn ssh_args(profile: &Target, remote: &[String]) -> Result<Vec<String>> {
     Ok(out)
 }
 
+/// The physical SSH endpoint: names and profile revisions do not change where ssh logs in.
+pub fn endpoint_key(profile: &Target) -> String {
+    if profile.id == "local" {
+        "local".into()
+    } else {
+        format!("{}|{}|{:?}|{}", profile.host, profile.user, profile.port, profile.identity_file)
+    }
+}
+
+/// `user@host:port` for logs and diagnostics.
+pub fn endpoint_label(profile: &Target) -> String {
+    let user = if profile.user.is_empty() { String::new() } else { format!("{}@", profile.user) };
+    let port = profile.port.map(|p| format!(":{p}")).unwrap_or_default();
+    format!("{user}{}{port}", profile.host)
+}
+
+/// Runs one command over SSH through the endpoint's gate: it waits for a command slot, is refused while
+/// the gate backs off, and a failed login (ssh exits 255, or never finishes) extends the backoff.
+pub async fn ssh_output(profile: &Target, remote: &[String], opts: Opts) -> Result<Output> {
+    let gate = ssh_gate::endpoint(&endpoint_key(profile), &endpoint_label(profile));
+    let argv = ssh_args(profile, remote)?;
+    gate.admit()?;
+    let _slot = gate.command_slot().await;
+    // Another command may have failed while this one waited.
+    gate.admit()?;
+    let _login = gate.started();
+    let result = run("ssh.exe", &argv, opts).await;
+    match &result {
+        Ok(output) if output.code == Some(255) => {
+            gate.failed(if output.stderr.is_empty() { "ssh 연결 실패 (255)" } else { &output.stderr });
+        }
+        Ok(_) => gate.succeeded(),
+        Err(e) => {
+            gate.failed(&e.to_string());
+        }
+    }
+    result
+}
+
 pub async fn remote_command(cmd: &[String], opts: Opts) -> Result<String> {
-    command("ssh.exe", &ssh_args(&target(), cmd)?, opts).await
+    checked("ssh.exe", ssh_output(&target(), cmd, opts).await?)
 }
 
 #[cfg(test)]
@@ -153,6 +207,13 @@ mod tests {
         assert_eq!(&a[a.len() - 2..], ["box.example.com", "'docker' 'ps' 'it'\\''s'"]);
         assert!(a.windows(2).any(|w| w == ["-p", "2222"]));
         assert!(a.windows(2).any(|w| w == ["-l", "dev"]));
+        assert!(a.windows(2).any(|w| w == ["-o", "ServerAliveInterval=15"]));
+        assert_eq!(endpoint_label(&t), "dev@box.example.com:2222");
+        assert_eq!(endpoint_key(&Target::local()), "local");
+        let mut renamed = t.clone();
+        renamed.name = "other".into();
+        renamed.id = "y".into();
+        assert_eq!(endpoint_key(&renamed), endpoint_key(&t));
     }
 
     #[test]
