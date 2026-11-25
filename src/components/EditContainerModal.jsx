@@ -130,7 +130,7 @@ export function EditContainerModal({ inspect, isOpen, busy, onClose, onSubmit })
               )}
         </div>
 
-        <div className="grid grid-cols-2 gap-3.5 max-tablet:grid-cols-1">
+        <div className="my-4 grid grid-cols-2 items-start gap-3.5 first:mt-0 last:mb-0 max-tablet:grid-cols-1 [&>label]:my-0">
           <label className={tw.field}>
             <span>{t('이미지')} *</span>
             <input required autoComplete="off" value={form.image} onChange={set('image')} />
@@ -172,10 +172,17 @@ export function EditContainerModal({ inspect, isOpen, busy, onClose, onSubmit })
           <small>{t('JSON 배열 또는 공백으로 구분한 인수를 입력합니다')}</small>
         </label>
 
-        <div className="grid grid-cols-3 gap-3.5 max-tablet:grid-cols-1" data-ui-audit-row>
+        <div
+          className="my-4 grid grid-cols-3 items-start gap-3.5 first:mt-0 last:mb-0 max-tablet:grid-cols-1 [&>label]:my-0"
+          data-ui-audit-row
+        >
           <label className={tw.field}>
             <span>{t('재시작 정책')}</span>
-            <SelectControl value={form.restart} onChange={set('restart')}>
+            <SelectControl
+              className="w-full py-2.75"
+              value={form.restart}
+              onChange={set('restart')}
+            >
               <option value="no">{t('사용 안 함')}</option>
               <option value="unless-stopped">unless-stopped</option>
               <option value="always">always</option>

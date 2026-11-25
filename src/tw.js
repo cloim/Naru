@@ -18,7 +18,8 @@ export const tw = {
     'text-[#245d48] after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-[#35664d] [&>span]:bg-[#e9f3df] [&>span]:text-[#47763b]',
   field:
     'my-4 flex flex-col gap-2.25 first:mt-0 last:mb-0 [&_input]:w-full [&_input]:rounded-[7px] [&_input]:border [&_input]:border-[#dce4d6] [&_input]:bg-[#fdfefb] [&_input]:px-3 [&_input]:py-2.75 [&_input]:text-[13px] [&_input]:text-[#294035] [&_small]:text-[11px] [&_small]:leading-[1.6] [&_textarea]:min-h-[90px] [&_textarea]:w-full [&_textarea]:resize-y [&_textarea]:rounded-[7px] [&_textarea]:border [&_textarea]:border-[#dce4d6] [&_textarea]:bg-[#fdfefb] [&_textarea]:px-3 [&_textarea]:py-2.75 [&_textarea]:text-[12px] [&_textarea]:leading-[1.65] [&_textarea]:text-[#294035] [&>span]:text-[12px] [&>span]:font-semibold [&>span]:text-[#536454]',
-  formRow: 'flex gap-5.5 max-tablet:flex-col max-tablet:gap-0 [&>label]:min-w-0 [&>label]:flex-1',
+  formRow:
+    'my-4 flex items-start gap-5.5 first:mt-0 last:mb-0 max-tablet:flex-col max-tablet:gap-4 [&>label]:my-0 [&>label]:min-w-0 [&>label]:flex-1',
   checkbox: 'flex items-center gap-2.5 py-2.5 text-[13px] [&_input]:accent-brand',
   terminal:
     'm-0 max-h-[65vh] min-h-[270px] overflow-auto rounded-[8px] bg-console p-5.5 font-mono text-[12px] leading-[1.9] whitespace-pre-wrap wrap-anywhere text-[#d7e8cf] max-tablet:whitespace-pre max-tablet:wrap-normal',

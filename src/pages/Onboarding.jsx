@@ -526,7 +526,7 @@ export default function Onboarding({ onDone }) {
                       {t('프록시 사용 (선택)')}
                     </summary>
                     <div className="mt-4">
-                      <div className={cn(tw.formRow, '[&>label]:my-0')}>
+                      <div className={tw.formRow}>
                         <label className={tw.field}>
                           <span>HTTP_PROXY</span>
                           <input
