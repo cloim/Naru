@@ -804,4 +804,6 @@ export default {
   '대신 {0}={1} 추가': 'Add {0}={1} instead',
   '진단 리포트 저장': 'Save diagnostic report',
   '진단 리포트를 만드는 중…': 'Making the diagnostic report…',
+  '공개 포트는 이 PC(localhost)에서만 열립니다. 외부 접속은 Tailscale을 사용해 주세요.':
+    'Published ports open on this PC (localhost) only. Use Tailscale for external access.',
 };

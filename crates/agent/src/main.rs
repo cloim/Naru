@@ -18,7 +18,7 @@ use std::net::{Ipv4Addr, SocketAddr};
 use std::os::fd::AsRawFd;
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpSocket, TcpStream, UdpSocket};
 use tokio::sync::{mpsc, oneshot};
 
@@ -31,7 +31,7 @@ const DOCKER_SOCKET: &str = "/run/naru/docker.sock";
 const SO_ORIGINAL_DST: libc::c_int = 80;
 const UPSTREAM_MARK: u32 = 0x6E61; // naru-boot leaves DNS packets with this mark alone.
 
-type Targets = BTreeMap<u16, String>;
+type Targets = BTreeMap<(u16, String), String>;
 
 #[derive(Default)]
 struct Shared {
@@ -155,16 +155,23 @@ fn parse_dnat(text: &str, k3s_running: bool) -> Targets {
     let own = format!("--to-destination {HOST_IP}:");
     let mut found = Targets::new();
     for line in text.lines() {
-        if !line.starts_with("-A ") || !line.contains("-j DNAT") || !line.contains(" -p tcp") {
+        if !line.starts_with("-A ") || !line.contains("-j DNAT") {
             continue;
         }
+        let proto = if line.contains(" -p tcp") {
+            "tcp"
+        } else if line.contains(" -p udp") {
+            "udp"
+        } else {
+            continue;
+        };
         let chain = line.split_whitespace().nth(1).unwrap_or_default();
         if chain.starts_with("DOCKER") || (k3s_chains.contains(chain) && !k3s_running) || line.contains(&own) {
             continue;
         }
         let Some(port) = DPORT.captures(line).and_then(|m| m[1].parse::<u16>().ok()) else { continue };
         let host = if LOOPBACK.is_match(line) { "127.0.0.1" } else { ENGINE_IP };
-        found.insert(port, format!("{host}:{port}"));
+        found.insert((port, proto.to_string()), format!("{host}:{port}"));
     }
     found
 }
@@ -188,15 +195,17 @@ fn discover() -> Result<(Targets, Vec<String>)> {
         }
         for p in container["Ports"].as_array().into_iter().flatten() {
             let Some(port) = p["PublicPort"].as_u64().map(|p| p as u16) else { continue };
-            if p["Type"] != "tcp" {
-                continue;
-            }
+            let proto = match p["Type"].as_str() {
+                Some("tcp") => "tcp",
+                Some("udp") => "udp",
+                _ => continue,
+            };
             match p["IP"].as_str() {
                 Some("0.0.0.0" | "127.0.0.1") => {
-                    found.insert(port, format!("127.0.0.1:{port}"));
+                    found.insert((port, proto.to_string()), format!("127.0.0.1:{port}"));
                 }
-                Some("::") => {
-                    found.entry(port).or_insert(format!("[::1]:{port}"));
+                Some("::" | "::1") => {
+                    found.entry((port, proto.to_string())).or_insert(format!("[::1]:{port}"));
                 }
                 _ => {}
             }
@@ -204,7 +213,7 @@ fn discover() -> Result<(Targets, Vec<String>)> {
     }
     for target in owned_listeners(&process_scan(&host_containers)) {
         if let Some(port) = target.rsplit(':').next().and_then(|p| p.parse().ok()) {
-            found.entry(port).or_insert(target);
+            found.entry((port, "tcp".to_string())).or_insert(target);
         }
     }
     Ok((found, roots))
@@ -244,7 +253,10 @@ fn watch_creates() {
 }
 
 fn targets_message(targets: &Targets) -> String {
-    let items: Vec<Value> = targets.iter().map(|(port, target)| json!({ "port": port, "target": target })).collect();
+    let items: Vec<Value> = targets
+        .iter()
+        .map(|((port, proto), target)| json!({ "port": port, "proto": proto, "target": target }))
+        .collect();
     json!({ "type": "targets", "items": items }).to_string()
 }
 
@@ -335,6 +347,58 @@ async fn on_control(stream: TcpStream) -> Result<()> {
             let waiter = SHARED.lock().unwrap().pending.remove(*id);
             if let Some(waiter) = waiter {
                 let _ = waiter.send(Some(reader.into_inner()));
+            }
+        }
+        ["UDP", target] => {
+            static VALID_TARGET: LazyLock<Regex> =
+                LazyLock::new(|| Regex::new(r"^(?:127\.0\.0\.1|\[::1\]|198\.19\.249\.2):(\d{1,5})$").unwrap());
+            let ok = VALID_TARGET
+                .captures(target)
+                .and_then(|m| m[1].parse::<u32>().ok())
+                .is_some_and(|p| p > 0 && p < 65536);
+            if !ok {
+                return Ok(());
+            }
+            let bind_addr = if target.starts_with('[') { "[::]:0" } else { "0.0.0.0:0" };
+            let udp = Arc::new(UdpSocket::bind(bind_addr).await?);
+            udp.connect(*target).await?;
+            let stream = reader.into_inner();
+            let (mut tcp_read, mut tcp_write) = stream.into_split();
+            let udp_send = udp.clone();
+            let to_udp = tokio::spawn(async move {
+                let mut len_buf = [0u8; 2];
+                let mut payload = vec![0u8; 65535];
+                loop {
+                    if tokio::time::timeout(Duration::from_secs(60), tcp_read.read_exact(&mut len_buf)).await.ok().and_then(Result::ok).is_none() {
+                        break;
+                    }
+                    let len = u16::from_be_bytes(len_buf) as usize;
+                    if len == 0 || tcp_read.read_exact(&mut payload[..len]).await.is_err() {
+                        break;
+                    }
+                    if udp_send.send(&payload[..len]).await.is_err() {
+                        break;
+                    }
+                }
+            });
+            let to_tcp = tokio::spawn(async move {
+                let mut buf = vec![0u8; 65535];
+                loop {
+                    let Ok(Ok(n)) = tokio::time::timeout(Duration::from_secs(60), udp.recv(&mut buf)).await else {
+                        break;
+                    };
+                    if n == 0 || n > u16::MAX as usize {
+                        continue;
+                    }
+                    let len = (n as u16).to_be_bytes();
+                    if tcp_write.write_all(&len).await.is_err() || tcp_write.write_all(&buf[..n]).await.is_err() {
+                        break;
+                    }
+                }
+            });
+            tokio::select! {
+                _ = to_udp => {}
+                _ = to_tcp => {}
             }
         }
         _ => {}
@@ -572,11 +636,18 @@ mod tests {
         let rules = r#"-A CNI-DN-abc -p tcp -m tcp --dport 80 -j DNAT --to-destination 10.42.0.22:80
 -A CNI-HOSTPORT-DNAT -p tcp -m comment --comment "dnat name: \"cbr0\" id: \"a\"" -m multiport --dports 80 -j CNI-DN-abc
 -A CNI-DN-def -d 127.0.0.1/32 -p tcp -m tcp --dport 48081 -j DNAT --to-destination 10.4.0.2:80
+-A CNI-DN-udp -d 127.0.0.1/32 -p udp -m udp --dport 5353 -j DNAT --to-destination 10.4.0.2:5353
 -A DOCKER ! -i docker0 -p tcp -m tcp --dport 5432 -j DNAT --to-destination 172.17.0.2:5432
 -A PREROUTING -d 10.255.255.254/32 -p tcp -m tcp --dport 53 -j DNAT --to-destination 198.19.249.254:53"#;
         let stopped = parse_dnat(rules, false);
-        assert_eq!(stopped.into_iter().collect::<Vec<_>>(), vec![(48081, "127.0.0.1:48081".to_string())]);
+        assert_eq!(
+            stopped.into_iter().collect::<Vec<_>>(),
+            vec![
+                ((5353, "udp".to_string()), "127.0.0.1:5353".to_string()),
+                ((48081, "tcp".to_string()), "127.0.0.1:48081".to_string()),
+            ]
+        );
         let running = parse_dnat(rules, true);
-        assert_eq!(running.get(&80).map(String::as_str), Some("198.19.249.2:80"));
+        assert_eq!(running.get(&(80, "tcp".to_string())).map(String::as_str), Some("198.19.249.2:80"));
     }
 }

@@ -108,17 +108,28 @@ function ContainerGeneral({ inspect }) {
           [t('자동 재시작 정책'), host.RestartPolicy?.Name || t('없음')],
           [
             t('포트'),
-            Object.entries(inspect.NetworkSettings?.Ports || {})
-              .map(([port, bindings]) =>
-                bindings?.length
-                  ? bindings
-                      .map(
-                        (binding) => `${binding.HostIp || '0.0.0.0'}:${binding.HostPort} → ${port}`,
-                      )
-                      .join('\n')
-                  : port,
-              )
-              .join('\n'),
+            Object.keys(inspect.NetworkSettings?.Ports || {}).length ? (
+              <>
+                <span className="whitespace-pre-line">
+                  {Object.entries(inspect.NetworkSettings?.Ports || {})
+                    .map(([port, bindings]) =>
+                      bindings?.length
+                        ? bindings
+                            .map(
+                              (binding) => `${binding.HostIp || '0.0.0.0'}:${binding.HostPort} → ${port}`,
+                            )
+                            .join('\n')
+                        : port,
+                    )
+                    .join('\n')}
+                </span>
+                <span className="mt-1 block text-[12px] text-muted">
+                  {t('공개 포트는 이 PC(localhost)에서만 열립니다. 외부 접속은 Tailscale을 사용해 주세요.')}
+                </span>
+              </>
+            ) : (
+              ''
+            ),
           ],
         ]}
       />
