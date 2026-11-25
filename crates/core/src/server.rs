@@ -381,6 +381,16 @@ fn bail_api(message: &str) -> Result<()> {
     bail!(message.to_string())
 }
 
+/// Environment variables an image needs before its first run (needs.rs). Moby only: it reads the image
+/// through the Docker API.
+async fn image_needs(Query(q): Query<HashMap<String, String>>) -> ApiResult {
+    let image = id_param(q.get("image").map(String::as_str).unwrap_or_default())?;
+    if settings().await?.engine != "moby" {
+        return Ok(Json(json!({ "checked": false, "needs": [] })));
+    }
+    Ok(Json(crate::needs::image_needs(&image).await?))
+}
+
 async fn image_history(Path(id): Path<String>) -> ApiResult {
     let id = id_param(&id)?;
     if settings().await?.engine == "moby" {
@@ -880,6 +890,7 @@ fn routes(app: Arc<App>) -> Router {
         .route("/api/volumes/{id}/files/content", get(volume_file).put(save_volume_file))
         .route("/api/volumes/{id}/export", get(export_volume))
         .route("/api/volumes/{id}/import", post(import_volume).layer(DefaultBodyLimit::max(500 * 1024 * 1024)))
+        .route("/api/images/needs", get(image_needs))
         .route("/api/images/{id}/history", get(image_history))
         .route("/api/networks/ping", post(network_check))
         .route("/api/jobs", get(jobs).post(create_job))

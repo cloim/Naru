@@ -798,4 +798,8 @@ export default {
   '시작한 지 얼마 되지 않아 종료 코드 {0}(으)로 멈췄습니다':
     'Stopped right after starting, with exit code {0}',
   '마지막 로그입니다.': 'The last lines of its log.',
+  '이 이미지는 {0} 값이 없으면 시작하자마자 멈춥니다.':
+    'This image stops right after starting unless {0} is set.',
+  '환경 변수에 추가': 'Add to environment',
+  '대신 {0}={1} 추가': 'Add {0}={1} instead',
 };

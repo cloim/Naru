@@ -10,6 +10,7 @@ pub mod extensions;
 pub mod forwarding;
 pub mod fswatch;
 pub mod jobs;
+pub mod needs;
 pub mod onboarding;
 pub mod paths;
 pub mod ports;

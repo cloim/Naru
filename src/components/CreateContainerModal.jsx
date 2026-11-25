@@ -1,4 +1,4 @@
-import { engineStorageKey } from '../api.js';
+import { api, engineStorageKey } from '../api.js';
 import { t, useLocale } from '../i18n.js';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
@@ -14,6 +14,7 @@ import {
 import { Modal } from './Modal/Modal.jsx';
 import { Button, CopyButton } from '../ui.jsx';
 import { tw, cn } from '../tw.js';
+import { randomSecret, secretLike } from '../container-stop.js';
 
 export const CONTAINER_TEMPLATES = [
   {
@@ -262,6 +263,120 @@ export function generateDockerRunCommand({ image, name, ports, env, mounts, comm
   parts.push(image?.trim() || '<image>');
   if (command?.trim()) parts.push(command.trim());
   return parts.join(' ');
+}
+
+// 입력한 값이 있는지: 같은 이름의 줄에 값이 비어 있지 않으면 있다.
+const envHas = (env, name, value) =>
+  env
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .some((line) =>
+      value === undefined
+        ? line.startsWith(name + '=') && line.length > name.length + 1
+        : line === `${name}=${value}`,
+    );
+
+// 이미지가 첫 실행 전에 요구하는 환경 변수(서버가 이미지의 시작 스크립트에서 읽는다). 이미 받은 이미지만 확인하며,
+// 값이나 대안이 입력되면 사라진다. 이미지 이름을 입력하는 동안에는 잠시 기다렸다가 묻는다.
+function EnvNeeds({ image, env, setEnv }) {
+  const [asked, setAsked] = useState('');
+  const [needs, setNeeds] = useState([]);
+  const [values, setValues] = useState({});
+  useEffect(() => {
+    const name = image.trim();
+    setNeeds([]);
+    if (!name) return undefined;
+    let current = true;
+    const timer = setTimeout(async () => {
+      try {
+        const result = await api(`/images/needs?image=${encodeURIComponent(name)}`);
+        if (current) {
+          setAsked(name);
+          setNeeds(result?.needs || []);
+        }
+      } catch {
+        // 확인하지 못하면 아무것도 묻지 않는다. 실행 뒤에 멈추면 상세 화면이 이유를 보여 준다.
+      }
+    }, 600);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  }, [image]);
+  const open = needs.filter(
+    (need) =>
+      asked === image.trim() &&
+      !envHas(env, need.name) &&
+      !need.alternatives.some(([name, value]) => envHas(env, name, value)),
+  );
+  if (!open.length) return null;
+  const add = (line) =>
+    setEnv((prev) => (prev.trim() ? `${prev.replace(/\s+$/, '')}\n${line}` : line));
+  return (
+    <div
+      role="status"
+      className="flex flex-col gap-2.5 rounded-[8px] border border-[#ecd3a6] bg-[#fff9ef] p-3 text-[12px] text-[#5e4516]"
+    >
+      {open.map((need) => (
+        <div key={need.name} className="flex flex-col gap-2">
+          <span className="font-semibold">
+            {t('이 이미지는 {0} 값이 없으면 시작하자마자 멈춥니다.', [need.name])}
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex min-w-[220px] flex-1 items-center gap-2 rounded-[6px] border border-[#e0d3bb] bg-white px-2.5">
+              <span className="font-mono text-[12px] text-[#7a6440]">{need.name}=</span>
+              <input
+                className="h-8 min-w-0 flex-1 bg-transparent font-mono text-[12px] text-ink outline-0"
+                aria-label={need.name}
+                spellCheck={false}
+                autoComplete="off"
+                value={values[need.name] || ''}
+                onChange={(e) => setValues((v) => ({ ...v, [need.name]: e.target.value }))}
+              />
+            </label>
+            {secretLike(need.name) && (
+              <Button
+                compact
+                type="button"
+                onClick={() => setValues((v) => ({ ...v, [need.name]: randomSecret() }))}
+              >
+                {t('임의 값 만들기')}
+              </Button>
+            )}
+            <Button
+              compact
+              primary
+              type="button"
+              disabled={!values[need.name]?.trim()}
+              onClick={() => add(`${need.name}=${values[need.name].trim()}`)}
+            >
+              {t('환경 변수에 추가')}
+            </Button>
+          </div>
+          {need.alternatives.map(([name, value]) => (
+            <div key={name} className="flex flex-wrap items-center gap-2">
+              <Button
+                compact
+                className="max-w-full text-left break-all whitespace-normal"
+                type="button"
+                onClick={() => add(`${name}=${value}`)}
+              >
+                {t('대신 {0}={1} 추가', [name, value])}
+              </Button>
+              {/ALLOW_EMPTY|AUTH_METHOD/.test(name) && (
+                <span>
+                  {t('비밀번호 없이 접속할 수 있게 됩니다. 이 PC에서만 쓸 때 사용해 주세요.')}
+                </span>
+              )}
+              {/RANDOM/.test(name) && (
+                <span>{t('만들어진 비밀번호는 컨테이너 로그에 한 번 출력됩니다.')}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function CreateContainerModal({ isOpen, onClose, onSubmit, busy, initialValues }) {
@@ -573,6 +688,7 @@ export function CreateContainerModal({ isOpen, onClose, onSubmit, busy, initialV
             />
             <small>{t('줄마다 KEY=VALUE 형식으로 입력합니다.')}</small>
           </label>
+          <EnvNeeds image={image} env={env} setEnv={setEnv} />
         </div>
 
         <label className={tw.field}>

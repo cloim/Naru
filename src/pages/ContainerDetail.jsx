@@ -287,7 +287,12 @@ function StopReason({ inspect, id, busy, onEdit, onLogs, onFix }) {
         </div>
         {reason.alternatives.map((alt) => (
           <div key={alt.name} className="flex flex-wrap items-center gap-2">
-            <Button compact disabled={busy} onClick={() => onFix(`${alt.name}=${alt.value}`)}>
+            <Button
+              compact
+              className="max-w-full text-left break-all whitespace-normal"
+              disabled={busy}
+              onClick={() => onFix(`${alt.name}=${alt.value}`)}
+            >
               {t('{0}={1}로 시작', [alt.name, alt.value])}
             </Button>
             {/ALLOW_EMPTY|AUTH_METHOD/.test(alt.name) && (
