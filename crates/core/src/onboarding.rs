@@ -1,6 +1,6 @@
 //! First-run setup the screens walk through: WSL readiness, where data lives and Windows integration.
 //! Everything is stored in app.json and settings.json; nothing depends on environment files.
-use crate::runner::{args, command, run, Opts};
+use crate::runner::{args, command, powershell, run, Opts};
 use crate::state::{app_config, app_file, app_port, atomic_json, data, default_data, AppConfig, DEFAULT_PORT, DISTRO};
 use crate::web::{invalid, ok, ApiResult};
 use anyhow::{anyhow, Result};
@@ -94,9 +94,7 @@ async fn virtualization() -> Value {
         return json!({ "ready": false, "state": "restart", "vm": vm });
     }
     // Without the Windows hypervisor the processor flags are visible and tell whether it could start.
-    let script = "$p=Get-CimInstance Win32_Processor|Select-Object -First 1;\
-                  [pscustomobject]@{firmware=[bool]$p.VirtualizationFirmwareEnabled;slat=[bool]$p.SecondLevelAddressTranslationExtensions}|ConvertTo-Json -Compress";
-    let out = command("powershell.exe", &args(["-NoProfile", "-NonInteractive", "-Command", script]), Opts::timeout(30)).await;
+    let out = powershell("naru-virtualization.ps1", Opts::timeout(30)).await;
     let v: Value = out.ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or(Value::Null);
     let capable = v["firmware"] == true && v["slat"] == true;
     let state = if capable || v.is_null() { "platform" } else { "firmware" };
@@ -261,8 +259,7 @@ async fn install_wsl() -> ApiResult {
         config.launch_at_login = true;
         atomic_json(&app_file(), &config).await?;
     }
-    let script = "$p=Start-Process wsl.exe -ArgumentList '--install','--no-distribution' -Verb RunAs -Wait -PassThru;$p.ExitCode";
-    let out = command("powershell.exe", &args(["-NoProfile", "-NonInteractive", "-Command", script]), Opts::timeout(30 * 60))
+    let out = powershell("naru-install-wsl.ps1", Opts::timeout(30 * 60))
         .await
         .map_err(|e| anyhow!("WSL 설치를 시작하지 못했습니다. 관리자 승인 창을 확인해 주세요. ({e})"))?;
     let code: i64 = out.trim().parse().unwrap_or(-1);

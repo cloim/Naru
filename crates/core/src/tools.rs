@@ -141,24 +141,11 @@ pub async fn ensure_compose(log: &Log) -> Result<()> {
 }
 
 /// Puts Naru's CLI folder on the user PATH so `docker`, `kubectl` and `helm` work in any new terminal.
-/// The registry value is edited unexpanded and keeps its type, so entries like %USERPROFILE%\bin survive.
+/// The registry value is edited unexpanded and keeps its type (scripts/naru-user-path.ps1).
 pub async fn ensure_user_path(dir: &std::path::Path, log: &Log) -> Result<()> {
-    let script = r#"
-$dir = $env:NARU_BIN
-$key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
-$names = $key.GetValueNames()
-$current = $key.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
-$parts = @($current -split ';' | Where-Object { $_ })
-if ($parts | Where-Object { $_.TrimEnd('\') -ieq $dir.TrimEnd('\') }) { 'present'; exit }
-$kind = if ($names -contains 'Path') { $key.GetValueKind('Path') } else { [Microsoft.Win32.RegistryValueKind]::ExpandString }
-$key.SetValue('Path', (($parts + $dir) -join ';'), $kind)
-# Setting any user variable broadcasts WM_SETTINGCHANGE, so new terminals see the PATH at once.
-[Environment]::SetEnvironmentVariable('NARU_PATH_REFRESH', $null, 'User')
-'added'
-"#;
     let mut opts = Opts::timeout(30);
     opts.env = vec![("NARU_BIN".into(), dir.to_string_lossy().into_owned())];
-    let result = command("powershell.exe", &args(["-NoProfile", "-NonInteractive", "-Command", script]), opts).await?;
+    let result = crate::runner::powershell("naru-user-path.ps1", opts).await?;
     if result.trim() == "added" {
         log(&format!("사용자 PATH에 추가했습니다: {}\n새 터미널에서 docker, kubectl, helm 명령을 쓸 수 있습니다.\n", dir.display()));
     }

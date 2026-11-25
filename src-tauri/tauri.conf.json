@@ -27,6 +27,11 @@
       "../scripts/naru-port-relay.sh": "scripts/naru-port-relay.sh",
       "../scripts/naru-forward.sh": "scripts/naru-forward.sh",
       "../scripts/extension-file-dialog.ps1": "scripts/extension-file-dialog.ps1",
+      "../scripts/naru-detached.ps1": "scripts/naru-detached.ps1",
+      "../scripts/naru-virtualization.ps1": "scripts/naru-virtualization.ps1",
+      "../scripts/naru-install-wsl.ps1": "scripts/naru-install-wsl.ps1",
+      "../scripts/naru-elevate.ps1": "scripts/naru-elevate.ps1",
+      "../scripts/naru-user-path.ps1": "scripts/naru-user-path.ps1",
       "../scripts/naru-agent": "scripts/naru-agent"
     },
     "windows": {

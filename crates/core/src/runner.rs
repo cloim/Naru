@@ -2,7 +2,7 @@
 use crate::context::local_only;
 use crate::state::{data, DISTRO};
 use anyhow::{anyhow, bail, Result};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
@@ -79,11 +79,94 @@ pub fn tool_name(exe: &str) -> String {
         .unwrap_or_else(|| exe.to_string())
 }
 
+/// The program a bare tool name runs. Windows looks in the running exe's own folder before System32, so a
+/// `wsl.exe`, `reg.exe` or `powershell.exe` placed next to Naru would run instead of the real one. A bare name
+/// resolves to System32 first, then to absolute PATH entries other than Naru's own folder. A name with a path
+/// is used as given; a tool found nowhere stays a bare name, so spawning it reports the usual error.
+pub fn resolve(exe: &str) -> PathBuf {
+    if exe.contains(['\\', '/']) {
+        return PathBuf::from(exe);
+    }
+    #[cfg(windows)]
+    {
+        let own = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf));
+        let path = std::env::var_os("PATH").unwrap_or_default();
+        if let Some(found) = search_tool(exe, system_dir().as_deref(), &path, own.as_deref()) {
+            return found;
+        }
+    }
+    PathBuf::from(exe)
+}
+
+/// `C:\Windows\System32`, from the API rather than an environment variable.
+#[cfg(windows)]
+fn system_dir() -> Option<PathBuf> {
+    use windows_sys::Win32::System::SystemInformation::GetSystemDirectoryW;
+    let mut buf = [0u16; 260];
+    // SAFETY: the buffer and its length match; the call writes at most that many characters and returns the count.
+    let n = unsafe { GetSystemDirectoryW(buf.as_mut_ptr(), buf.len() as u32) } as usize;
+    (n > 0 && n < buf.len()).then(|| PathBuf::from(String::from_utf16_lossy(&buf[..n])))
+}
+
+fn search_tool(name: &str, system: Option<&Path>, path_var: &std::ffi::OsStr, own: Option<&Path>) -> Option<PathBuf> {
+    let mut leaf = name.to_string();
+    if Path::new(&leaf).extension().is_none() {
+        leaf.push_str(".exe");
+    }
+    if let Some(system) = system {
+        let candidate = if leaf.eq_ignore_ascii_case("powershell.exe") {
+            system.join(r"WindowsPowerShell\v1.0\powershell.exe")
+        } else {
+            system.join(&leaf)
+        };
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    let key = |p: &Path| p.to_string_lossy().trim_end_matches(['\\', '/']).to_lowercase();
+    let own = own.map(key);
+    std::env::split_paths(path_var)
+        .filter(|dir| dir.is_absolute() && own.as_deref() != Some(key(dir).as_str()))
+        .map(|dir| dir.join(&leaf))
+        .find(|p| p.is_file())
+}
+
+/// A blocking command for a Windows tool, resolved like [`resolve`].
+pub fn system_command(exe: &str) -> std::process::Command {
+    std::process::Command::new(resolve(exe))
+}
+
+/// One of Naru's own PowerShell scripts: installed beside the exe in `scripts`, or the source tree in a
+/// development build run from `cargo test`.
+pub fn script(name: &str) -> Result<PathBuf> {
+    let installed = crate::state::root().join("scripts").join(name);
+    if installed.is_file() {
+        return Ok(installed);
+    }
+    #[cfg(debug_assertions)]
+    {
+        let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts").join(name);
+        if source.is_file() {
+            return Ok(source);
+        }
+    }
+    bail!("Naru 스크립트를 찾을 수 없습니다: {name}")
+}
+
+/// Runs a PowerShell script file from `scripts` with `-File`; values go in `opts.env`, never into the code.
+/// Script text is never passed on the command line: a hidden PowerShell fed inline or encoded code is what
+/// malware droppers do, and antivirus heuristics treat it that way.
+pub async fn powershell(name: &str, opts: Opts) -> Result<String> {
+    let file = script(name)?;
+    let all = args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", &file.to_string_lossy()]);
+    command("powershell.exe", &all, opts).await
+}
+
 /// Stops a process and its children. Windows needs taskkill for the tree; wsl.exe leaves no orphans then.
 pub fn kill_tree(pid: u32) {
     #[cfg(windows)]
     {
-        let _ = std::process::Command::new("taskkill")
+        let _ = system_command("taskkill.exe")
             .args(["/pid", &pid.to_string(), "/T", "/F"])
             .creation_flags_no_window()
             .stdout(Stdio::null())
@@ -111,7 +194,7 @@ impl NoWindow for std::process::Command {
 }
 
 pub fn hidden(exe: &str) -> Command {
-    let mut cmd = Command::new(exe);
+    let mut cmd = Command::new(resolve(exe));
     #[cfg(windows)]
     cmd.creation_flags(CREATE_NO_WINDOW);
     cmd
@@ -217,7 +300,7 @@ pub async fn command(exe: &str, args: &[String], opts: Opts) -> Result<String> {
     } else {
         format!("명령 실패 ({}): {exe}", output.code.map_or("signal".into(), |c| c.to_string()))
     };
-    if exe == "wsl.exe" && no_hypervisor(&message) {
+    if tool_name(exe).eq_ignore_ascii_case("wsl.exe") && no_hypervisor(&message) {
         bail!(
             "Windows 하이퍼바이저가 실행되지 않아 WSL 2 엔진을 시작할 수 없습니다. \
              가상 머신 플랫폼 기능과 BIOS(또는 가상 머신 설정)의 가상화를 켠 뒤 PC를 다시 시작해 주세요. \
@@ -348,23 +431,10 @@ pub async fn detached(exe: &str, cmd_args: &[String], cwd: Option<PathBuf>) -> R
         .collect::<Vec<_>>()
         .join(" ");
     let dir = cwd.unwrap_or_else(|| crate::state::root().to_path_buf());
-    // Values travel as base64 so no PowerShell quoting applies to them.
-    use base64::Engine;
-    let b64 = |s: &str| base64::engine::general_purpose::STANDARD.encode(s.as_bytes());
-    let script = format!(
-        "$d=[Text.Encoding]::UTF8;$line=$d.GetString([Convert]::FromBase64String('{}'));$dir=$d.GetString([Convert]::FromBase64String('{}'));\
-         $s=New-CimInstance -CimClass (Get-CimClass Win32_ProcessStartup) -Property @{{ShowWindow=[uint16]0}} -ClientOnly;\
-         $r=Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{{CommandLine=$line;CurrentDirectory=$dir;ProcessStartupInformation=$s}};\
-         if($r.ReturnValue -ne 0){{throw \"WMI process creation failed: $($r.ReturnValue)\"}};$r.ProcessId",
-        b64(&line),
-        b64(&dir.to_string_lossy())
-    );
-    let out = command(
-        "powershell.exe",
-        &args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", &script]),
-        Opts::timeout(20),
-    )
-    .await?;
+    // Values travel in the environment, so no PowerShell quoting applies to them.
+    let mut opts = Opts::timeout(20);
+    opts.env = vec![("NARU_DETACH_LINE".into(), line), ("NARU_DETACH_DIR".into(), dir.to_string_lossy().into_owned())];
+    let out = powershell("naru-detached.ps1", opts).await?;
     out.trim().parse().map_err(|_| anyhow!("분리 실행 결과를 확인할 수 없습니다: {out}"))
 }
 
@@ -389,6 +459,58 @@ mod tests {
         let empty = "Linux용 Windows 하위 시스템에 설치된 배포가 없습니다.\n오류 코드: Wsl/WSL_E_DEFAULT_DISTRO_NOT_FOUND";
         assert!(parse_distributions(&out(-1, empty)).unwrap().is_empty());
         assert!(parse_distributions(&out(1, "something else failed")).is_err());
+    }
+
+    #[test]
+    fn tools_never_come_from_the_exe_folder() {
+        let base = std::env::temp_dir().join(format!("naru-resolve-{}", std::process::id()));
+        let (system, own, other) = (base.join("system"), base.join("own"), base.join("other"));
+        for dir in [&system, &own, &other, &system.join(r"WindowsPowerShell\v1.0")] {
+            std::fs::create_dir_all(dir).unwrap();
+        }
+        for file in [own.join("wsl.exe"), own.join("ssh.exe"), other.join("ssh.exe"), system.join("wsl.exe")] {
+            std::fs::write(file, "").unwrap();
+        }
+        std::fs::write(system.join(r"WindowsPowerShell\v1.0\powershell.exe"), "").unwrap();
+        let path = std::env::join_paths([own.clone(), PathBuf::from("relative"), other.clone()]).unwrap();
+        let find = |name| search_tool(name, Some(&system), &path, Some(&own));
+        // System32 wins over Naru's own folder, with or without the extension.
+        assert_eq!(find("wsl.exe"), Some(system.join("wsl.exe")));
+        assert_eq!(find("wsl"), Some(system.join("wsl.exe")));
+        assert_eq!(find("powershell.exe"), Some(system.join(r"WindowsPowerShell\v1.0\powershell.exe")));
+        // Outside System32, PATH decides, skipping Naru's own folder even when PATH lists it.
+        assert_eq!(find("ssh.exe"), Some(other.join("ssh.exe")));
+        assert_eq!(find("missing.exe"), None);
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn real_tools_resolve_to_system32() {
+        let system = system_dir().unwrap();
+        assert_eq!(resolve("cmd.exe"), system.join("cmd.exe"));
+        assert_eq!(resolve("reg"), system.join("reg.exe"));
+        assert!(resolve("powershell.exe").is_file());
+        assert_eq!(resolve(r"C:\tools\docker.exe"), PathBuf::from(r"C:\tools\docker.exe"));
+        assert_eq!(resolve("naru-no-such-tool.exe"), PathBuf::from("naru-no-such-tool.exe"));
+    }
+
+    #[test]
+    fn every_powershell_script_exists() {
+        for name in ["naru-detached.ps1", "naru-virtualization.ps1", "naru-install-wsl.ps1", "naru-elevate.ps1", "naru-user-path.ps1"] {
+            script(name).unwrap();
+        }
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn powershell_values_arrive_unquoted() {
+        let mut opts = Opts::timeout(60);
+        let line = r#"C:\Program Files\x.exe --name "a b" 'c' $env:PATH `n"#;
+        opts.env = vec![("NARU_DETACH_LINE".into(), line.into()), ("NARU_DETACH_DIR".into(), r"C:\a (b)".into())];
+        opts.env.push(("NARU_DETACH_DRY_RUN".into(), "1".into()));
+        let out = powershell("naru-detached.ps1", opts).await.unwrap();
+        assert_eq!(out.replace("\r\n", "\n"), format!("{line}\n{}", r"C:\a (b)"));
     }
 
     #[tokio::test]

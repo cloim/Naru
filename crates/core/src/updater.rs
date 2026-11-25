@@ -141,7 +141,7 @@ pub fn open_browser(url: &str) -> Result<()> {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        std::process::Command::new("rundll32")
+        crate::runner::system_command("rundll32.exe")
             .args(["url.dll,FileProtocolHandler", url])
             .creation_flags(0x00000200 | 0x00000008)
             .spawn()

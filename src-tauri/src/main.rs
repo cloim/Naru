@@ -108,7 +108,19 @@ async fn wait_for_server() {
     }
 }
 
+/// DLLs loaded at run time come from System32 only, never from Naru's folder or the working folder, where a
+/// planted copy would load in their place. The WebView2 loader is linked statically and loads the runtime by
+/// its full path, so nothing Naru needs comes from anywhere else.
+#[cfg(windows)]
+fn pin_dll_search() {
+    use windows_sys::Win32::System::LibraryLoader::{SetDefaultDllDirectories, LOAD_LIBRARY_SEARCH_SYSTEM32};
+    // SAFETY: plain flag argument; it only changes this process's search order for later loads.
+    unsafe { SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32) };
+}
+
 fn main() {
+    #[cfg(windows)]
+    pin_dll_search();
     let argv: Vec<String> = std::env::args().collect();
     state::init_root(resources());
     state::migrate_legacy_config();

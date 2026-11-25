@@ -163,11 +163,9 @@ async fn elevate(log: &Log) -> Result<Elevated> {
         .await?;
     tokio::fs::write(&batch, batch_script(&script, &started, &elevated, GO_TIMEOUT)).await?;
     log("관리자 권한 승인 창(UAC)이 PC 화면에 뜹니다. 2분 안에 승인해 주세요. 승인 전에는 엔진을 멈추지 않습니다.\n");
-    let start = format!(
-        "Start-Process -FilePath cmd.exe -ArgumentList '/d','/c','\"{}\"' -Verb RunAs -WindowStyle Hidden",
-        batch.display()
-    );
-    command("powershell.exe", &args(["-NoProfile", "-NonInteractive", "-Command", &start]), Opts::default())
+    let mut opts = Opts::default();
+    opts.env = vec![("NARU_BATCH".into(), batch.to_string_lossy().into_owned())];
+    crate::runner::powershell("naru-elevate.ps1", opts)
         .await
         .map_err(|e| anyhow!("관리자 권한을 받지 못했습니다: {e}"))?;
     let until = Instant::now() + UAC_TIMEOUT;
