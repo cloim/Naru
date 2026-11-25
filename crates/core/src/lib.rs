@@ -29,3 +29,4 @@ pub mod tools;
 pub mod updater;
 pub mod web;
 pub mod worker;
+pub mod wslconfig;

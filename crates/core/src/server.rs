@@ -114,7 +114,7 @@ async fn security(State(app): Shared, ConnectInfo(peer): ConnectInfo<SocketAddr>
 }
 
 static LOCAL_ONLY: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^/api/(settings|disk|snapshots|kubernetes|kubeconfig|forwards|extensions|diagnostics|onboarding|remote-access|update)(/|$)").unwrap());
+    LazyLock::new(|| Regex::new(r"^/api/(settings|disk|snapshots|kubernetes|kubeconfig|forwards|extensions|diagnostics|onboarding|remote-access|update|wsl|cli)(/|$)").unwrap());
 static VOLUME_FILES: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^/api/volumes/[^/]+/(files|export|import)(/|$)").unwrap());
 
 /// Every request resolves its engine once; in-flight requests keep this immutable snapshot.
@@ -912,6 +912,19 @@ fn routes(app: Arc<App>) -> Router {
         .route("/api/diagnostics/resources", get(|| async { ApiResult::Ok(Json(crate::diagnostics::resource_sample().await?)) }))
         .route("/api/diagnostics", get(diagnostics))
         .route("/api/open-external", post(open_external_url))
+        .route(
+            "/api/wsl/config",
+            get(|| async { ApiResult::Ok(Json(serde_json::to_value(crate::wslconfig::load().await?)?)) }).put(
+                |Json(body): Json<crate::wslconfig::WslConfig>| async move {
+                    ApiResult::Ok(Json(serde_json::to_value(crate::wslconfig::save(body).await?)?))
+                },
+            ),
+        )
+        .route("/api/wsl/shutdown", post(|| async {
+            crate::wslconfig::shutdown_wsl().await?;
+            ApiResult::Ok(Json(json!({ "ok": true })))
+        }))
+        .route("/api/cli/status", get(|| async { Json(crate::tools::cli_path_status().await) }))
         .route("/api/update/check", get(|| async { ApiResult::Ok(Json(serde_json::to_value(crate::updater::check_for_updates().await?)?)) }))
         .route("/api/remote-access", get(get_remote).put(put_remote))
         .route("/api/engines", get(engines).post(add_engine))

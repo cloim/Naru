@@ -180,6 +180,7 @@ function Settings() {
                 </section>
               )}
               {status?.installed && <DiskSpace />}
+              {status?.managed !== false && <WslResources />}
               <fieldset disabled={managedLocked} className={cn(fieldset, 'mb-8')}>
                 <h3>{t('컨테이너 엔진')}</h3>
                 <div className="mb-4 flex gap-3.5 max-desktop:flex-col">
@@ -431,11 +432,154 @@ function LastCompaction({ last }) {
   );
 }
 
+function WslResources() {
+  useLocale();
+  const { notify, confirm } = useActions();
+  const q = useData('wsl-config', '/wsl/config');
+  const [form, setForm] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [restarting, setRestarting] = useState(false);
+  const [savedNeedRestart, setSavedNeedRestart] = useState(false);
+
+  useEffect(() => {
+    if (q.data && !form) {
+      setForm({
+        processors: q.data.processors ?? '',
+        memoryGb: q.data.memoryGb ?? '',
+        autoMemoryReclaim: q.data.autoMemoryReclaim ?? '',
+      });
+    }
+  }, [q.data, form]);
+
+  if (q.error || !form) return null;
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await api('/wsl/config', {
+        method: 'PUT',
+        body: {
+          processors: form.processors === '' ? null : Number(form.processors),
+          memoryGb: form.memoryGb === '' ? null : Number(form.memoryGb),
+          autoMemoryReclaim: form.autoMemoryReclaim || null,
+        },
+      });
+      await q.refetch();
+      setSavedNeedRestart(true);
+      notify(t('WSL 설정을 저장했습니다. 적용하려면 WSL을 재시작해 주세요.'));
+    } catch (e) {
+      notify(e);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const restartWsl = () =>
+    confirm(
+      t('WSL 재시작'),
+      t(
+        'wsl --shutdown을 실행해 WSL 2 가상 머신을 종료합니다. Naru 엔진과 실행 중인 다른 WSL 배포판도 함께 멈춥니다. 그 뒤 엔진을 다시 시작하면 새 설정이 적용됩니다.',
+      ),
+      async () => {
+        setRestarting(true);
+        try {
+          await api('/wsl/shutdown', { method: 'POST' });
+          setSavedNeedRestart(false);
+          notify(t('WSL을 종료했습니다. 엔진을 다시 시작해 주세요.'));
+        } catch (e) {
+          notify(e);
+        } finally {
+          setRestarting(false);
+        }
+      },
+    );
+
+  return (
+    <section className="mb-8">
+      <h3>{t('WSL 리소스 (.wslconfig)')}</h3>
+      <p className={cn(tw.groupText, 'mb-3 leading-[1.6]')}>
+        {t(
+          '사용자 폴더의 .wslconfig에서 [wsl2] CPU, 메모리와 메모리 회수 항목만 수정하고 나머지 설정은 보존합니다. 비워 두면 WSL 기본값을 사용합니다.',
+        )}
+      </p>
+      <div className={tw.formRow}>
+        <label className={tw.field}>
+          <span>{t('CPU 코어 수 (최대 {0})', [q.data.hostCpus])}</span>
+          <input
+            type="number"
+            min="1"
+            max={q.data.hostCpus}
+            placeholder={t('자동')}
+            value={form.processors}
+            onChange={(e) => setForm({ ...form, processors: e.target.value })}
+          />
+        </label>
+        <label className={tw.field}>
+          <span>{t('메모리 (GB)')}</span>
+          <input
+            type="number"
+            min="1"
+            max="512"
+            placeholder={t('자동')}
+            value={form.memoryGb}
+            onChange={(e) => setForm({ ...form, memoryGb: e.target.value })}
+          />
+        </label>
+        <label className={tw.field}>
+          <span>{t('메모리 회수 (autoMemoryReclaim)')}</span>
+          <SelectControl
+            className="w-full py-2.75"
+            value={form.autoMemoryReclaim}
+            onChange={(e) => setForm({ ...form, autoMemoryReclaim: e.target.value })}
+          >
+            <option value="">{t('기본값')}</option>
+            <option value="gradual">{t('gradual (유휴 시 점진 회수)')}</option>
+            <option value="dropcache">{t('dropcache (캐시 즉시 회수)')}</option>
+            <option value="disabled">{t('disabled (사용 안 함)')}</option>
+          </SelectControl>
+        </label>
+      </div>
+      <div className={cn(tw.actions, 'mt-3')}>
+        <Button icon={Check} disabled={saving || restarting} onClick={save}>
+          {t('WSL 설정 저장')}
+        </Button>
+        <Button icon={RotateCw} disabled={saving || restarting} onClick={restartWsl}>
+          {t('WSL 재시작')}
+        </Button>
+        {savedNeedRestart && (
+          <small className={tw.groupText}>
+            {t('바뀐 설정은 WSL을 재시작해야 적용되며, 다른 배포판도 함께 멈춥니다.')}
+          </small>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function ConnectionTools() {
   useLocale();
   const { job, form, busy, status } = useActions();
+  const cli = useData('cli-status', '/cli/status');
+  const cliInfo = cli.data;
   return (
     <section>
+      {cliInfo?.conflict && (
+        <div className="mb-5 rounded-[9px] border border-[#e0b86c] bg-[#fdf7ea] px-4 py-3.5 text-[13px] leading-[1.6] text-ink">
+          <strong className="block">
+            {cliInfo.dockerDesktop
+              ? t('PATH에서 Docker Desktop의 docker CLI가 먼저 잡힙니다')
+              : t('PATH에서 다른 docker CLI가 먼저 잡힙니다')}
+          </strong>
+          <p className="mt-1 text-muted">
+            {t('현재 우선 실행되는 경로: {0}', [cliInfo.active])}
+          </p>
+          <p className="mt-1 text-muted">
+            {t(
+              'Windows는 시스템 PATH를 사용자 PATH보다 먼저 찾습니다. 다른 docker CLI에서도 docker context use naru로 Naru 엔진을 그대로 쓸 수 있고, Naru의 CLI를 우선 쓰려면 시스템 PATH 순서를 조정해 주세요.',
+            )}
+          </p>
+        </div>
+      )}
       <div className={tw.actions}>
         <Button icon={Terminal} disabled={busy} onClick={() => job('installCLI')}>
           {' '}

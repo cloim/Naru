@@ -192,3 +192,56 @@ pub async fn sync_cli_proxies() -> Result<()> {
     atomic_json(&file, &config).await?;
     atomic_json(&record, &wanted).await
 }
+
+/// Classifies `where.exe docker` output against Naru's own `bin\docker.exe`.
+pub fn classify_docker_paths(naru_bin: &std::path::Path, matches: &[String]) -> Value {
+    let naru_docker = naru_bin.join("docker.exe");
+    let norm = |p: &str| p.trim().replace('/', "\\").to_ascii_lowercase();
+    let naru_norm = norm(&naru_docker.to_string_lossy());
+    let active = matches.first().cloned();
+    let conflict = active.as_deref().is_some_and(|first| norm(first) != naru_norm);
+    let docker_desktop = matches
+        .iter()
+        .any(|m| norm(m).contains("\\docker\\docker\\resources\\bin\\docker.exe"));
+    json!({
+        "naruBin": naru_bin.to_string_lossy(),
+        "naruDocker": naru_docker.to_string_lossy(),
+        "naruInstalled": naru_docker.exists(),
+        "matches": matches,
+        "active": active,
+        "conflict": conflict,
+        "dockerDesktop": docker_desktop,
+    })
+}
+
+/// Inspects PATH for `docker.exe` so Settings and Onboarding can warn when another CLI wins.
+pub async fn cli_path_status() -> Value {
+    let naru_bin = data().join("bin");
+    let matches: Vec<String> = command("where.exe", &args(["docker"]), Opts::timeout(5))
+        .await
+        .ok()
+        .map(|out| out.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect())
+        .unwrap_or_default();
+    classify_docker_paths(&naru_bin, &matches)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detects_other_docker_cli_before_naru() {
+        let bin = PathBuf::from(r"C:\Users\me\AppData\Local\Naru\bin");
+        let desktop = r"C:\Program Files\Docker\Docker\resources\bin\docker.exe".to_string();
+        let naru = r"C:\Users\me\AppData\Local\Naru\bin\docker.exe".to_string();
+
+        let conflict = classify_docker_paths(&bin, &[desktop.clone(), naru.clone()]);
+        assert_eq!(conflict["conflict"], true);
+        assert_eq!(conflict["dockerDesktop"], true);
+        assert_eq!(conflict["active"], desktop);
+
+        let clean = classify_docker_paths(&bin, &[naru.clone(), desktop]);
+        assert_eq!(clean["conflict"], false);
+        assert_eq!(clean["dockerDesktop"], true);
+    }
+}

@@ -806,4 +806,29 @@ export default {
   '진단 리포트를 만드는 중…': 'Making the diagnostic report…',
   '공개 포트는 이 PC(localhost)에서만 열립니다. 외부 접속은 Tailscale을 사용해 주세요.':
     'Published ports open on this PC (localhost) only. Use Tailscale for external access.',
+  'WSL 리소스 (.wslconfig)': 'WSL resources (.wslconfig)',
+  '사용자 폴더의 .wslconfig에서 [wsl2] CPU, 메모리와 메모리 회수 항목만 수정하고 나머지 설정은 보존합니다. 비워 두면 WSL 기본값을 사용합니다.':
+    'Updates only [wsl2] CPU, memory and autoMemoryReclaim in your .wslconfig and keeps all other settings. Leave blank for WSL defaults.',
+  'CPU 코어 수 (최대 {0})': 'CPU cores (max {0})',
+  '메모리 (GB)': 'Memory (GB)',
+  '메모리 회수 (autoMemoryReclaim)': 'Memory reclaim (autoMemoryReclaim)',
+  기본값: 'Default',
+  'gradual (유휴 시 점진 회수)': 'gradual (reclaim gradually when idle)',
+  'dropcache (캐시 즉시 회수)': 'dropcache (drop cache immediately)',
+  'disabled (사용 안 함)': 'disabled (off)',
+  'WSL 설정 저장': 'Save WSL settings',
+  'WSL 재시작': 'Restart WSL',
+  'WSL 설정을 저장했습니다. 적용하려면 WSL을 재시작해 주세요.':
+    'WSL settings saved. Restart WSL to apply them.',
+  'wsl --shutdown을 실행해 WSL 2 가상 머신을 종료합니다. Naru 엔진과 실행 중인 다른 WSL 배포판도 함께 멈춥니다. 그 뒤 엔진을 다시 시작하면 새 설정이 적용됩니다.':
+    'Runs wsl --shutdown to stop the WSL 2 VM. Both the Naru engine and any other running WSL distributions will stop. Start the engine again to apply the new settings.',
+  'WSL을 종료했습니다. 엔진을 다시 시작해 주세요.': 'WSL has been shut down. Start the engine again.',
+  '바뀐 설정은 WSL을 재시작해야 적용되며, 다른 배포판도 함께 멈춥니다.':
+    'Changes apply after restarting WSL, which also stops other WSL distributions.',
+  'PATH에서 Docker Desktop의 docker CLI가 먼저 잡힙니다':
+    'Docker Desktop docker CLI comes first in PATH',
+  'PATH에서 다른 docker CLI가 먼저 잡힙니다': 'Another docker CLI comes first in PATH',
+  '현재 우선 실행되는 경로: {0}': 'Currently active path: {0}',
+  'Windows는 시스템 PATH를 사용자 PATH보다 먼저 찾습니다. 다른 docker CLI에서도 docker context use naru로 Naru 엔진을 그대로 쓸 수 있고, Naru의 CLI를 우선 쓰려면 시스템 PATH 순서를 조정해 주세요.':
+    'Windows searches System PATH before User PATH. You can still use Naru with docker context use naru from any Docker CLI, or adjust PATH order to prefer Naru.',
 };
