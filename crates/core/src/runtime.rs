@@ -24,6 +24,7 @@ pub const PACKAGES: &[&str] = &[
     "docker-cli",
     "docker-cli-buildx",
     "docker-cli-compose",
+    "crun",
     "containerd",
     "nerdctl",
     "buildkit",
@@ -316,6 +317,49 @@ async fn install_scripts(log: &Log) -> Result<()> {
     Ok(())
 }
 
+/// Merges `crun` into `/etc/naru/dockerd.json` without disturbing existing keys or custom runtimes.
+/// Sets `default-runtime` to `crun` only when no default runtime was explicitly configured.
+pub fn merge_dockerd_crun(existing: &str) -> Result<String> {
+    let mut cfg: Value = if existing.trim().is_empty() {
+        json!({
+            "min-api-version": "1.41",
+            "features": { "containerd-snapshotter": true }
+        })
+    } else {
+        serde_json::from_str(existing)?
+    };
+    let obj = cfg.as_object_mut().ok_or_else(|| anyhow!("dockerd.json 형식이 객체가 아닙니다."))?;
+    if !obj.get("runtimes").is_some_and(Value::is_object) {
+        obj.insert("runtimes".into(), json!({}));
+    }
+    if let Some(runtimes) = obj.get_mut("runtimes").and_then(Value::as_object_mut) {
+        runtimes.entry("crun".to_string()).or_insert_with(|| json!({ "path": "/usr/bin/crun" }));
+    }
+    if obj.get("default-runtime").and_then(Value::as_str).unwrap_or_default().is_empty() {
+        obj.insert("default-runtime".into(), json!("crun"));
+    }
+    Ok(serde_json::to_string_pretty(&cfg)? + "\n")
+}
+
+/// Ensures existing installations get `crun` installed and merged into `/etc/naru/dockerd.json`.
+async fn ensure_crun(log: &Log) -> Result<()> {
+    let has_crun = wsl(&args(["test", "-x", "/usr/bin/crun"]), Opts::timeout(10)).await.is_ok();
+    if !has_crun {
+        log("crun 런타임을 설치합니다.\n");
+        if let Err(e) = wsl(&args(["apk", "add", "--no-cache", "crun"]), Opts::timeout(180).log(log)).await {
+            log(&format!("crun 설치를 건너뜁니다(기본 runc 유지): {e}\n"));
+            return Ok(());
+        }
+    }
+    let text = wsl_sh("cat /etc/naru/dockerd.json 2>/dev/null || true", Opts::timeout(10)).await?;
+    let merged = merge_dockerd_crun(&text)?;
+    if merged.trim() != text.trim() {
+        wsl_sh("mkdir -p /etc/naru; cat > /etc/naru/dockerd.json", Opts::timeout(10).input(merged)).await?;
+        log("dockerd.json에 기본 런타임 crun을 반영했습니다.\n");
+    }
+    Ok(())
+}
+
 /// The Docker CLI inside WSL hands these to containers and builds, as Windows clients get from the bridge.
 async fn write_cli_proxies(proxy: &crate::state::Proxy) -> Result<()> {
     // Before the first boot the file does not exist yet; start from the default naru-boot would write.
@@ -362,6 +406,9 @@ pub async fn start(log: &Log) -> Result<()> {
     // Booting from a disk outside the data folder, or from none, is what a missing drive looks like.
     crate::storage::require_ready()?;
     install_scripts(log).await?;
+    if cfg.engine == "moby" {
+        ensure_crun(log).await?;
+    }
     write_cli_proxies(&cfg.proxy).await?;
     // Pass proxy values as env arguments, never interpolate into a shell program.
     let launch = args([
@@ -568,5 +615,20 @@ mod tests {
         let fresh = merge_kubeconfig(serde_yaml::Value::Null, &naru);
         assert_eq!(fresh["current-context"], "naru");
         assert_eq!(fresh["kind"], "Config");
+    }
+
+    #[test]
+    fn merge_dockerd_crun_keeps_existing_keys_and_sets_default() {
+        let existing = r#"{"min-api-version":"1.41","features":{"containerd-snapshotter":true},"runtimes":{"custom":{"path":"/usr/bin/custom"}}}"#;
+        let merged: Value = serde_json::from_str(&merge_dockerd_crun(existing).unwrap()).unwrap();
+        assert_eq!(merged["default-runtime"], "crun");
+        assert_eq!(merged["runtimes"]["crun"]["path"], "/usr/bin/crun");
+        assert_eq!(merged["runtimes"]["custom"]["path"], "/usr/bin/custom");
+        assert_eq!(merged["features"]["containerd-snapshotter"], true);
+
+        let manual_runc = r#"{"default-runtime":"runc"}"#;
+        let kept: Value = serde_json::from_str(&merge_dockerd_crun(manual_runc).unwrap()).unwrap();
+        assert_eq!(kept["default-runtime"], "runc");
+        assert_eq!(kept["runtimes"]["crun"]["path"], "/usr/bin/crun");
     }
 }

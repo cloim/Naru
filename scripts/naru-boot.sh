@@ -93,7 +93,11 @@ if [ "$engine" = 'moby' ]; then
   ln -sf /run/naru/docker.sock /var/run/docker.sock
   # Fixed min-api-version and containerd-snapshotter so migrated data and older clients keep working.
   if [ ! -f /etc/naru/dockerd.json ]; then
-    printf '{\n  "min-api-version": "1.41",\n  "features": { "containerd-snapshotter": true }\n}\n' > /etc/naru/dockerd.json
+    if [ -x /usr/bin/crun ]; then
+      printf '{\n  "min-api-version": "1.41",\n  "features": { "containerd-snapshotter": true },\n  "default-runtime": "crun",\n  "runtimes": { "crun": { "path": "/usr/bin/crun" } }\n}\n' > /etc/naru/dockerd.json
+    else
+      printf '{\n  "min-api-version": "1.41",\n  "features": { "containerd-snapshotter": true }\n}\n' > /etc/naru/dockerd.json
+    fi
   fi
   /usr/local/bin/naru-netns /usr/bin/dockerd --config-file /etc/naru/dockerd.json --host unix:///run/naru/docker.sock --pidfile /run/naru/docker.pid --data-root /var/lib/naru/docker > /var/log/naru/engine.log 2>&1 &
   engine_pid=$!
