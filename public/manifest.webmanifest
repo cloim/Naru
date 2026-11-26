@@ -1,0 +1,14 @@
+{
+  "id": "/",
+  "name": "Naru",
+  "short_name": "Naru",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#163d35",
+  "theme_color": "#163d35",
+  "icons": [
+    { "src": "/brand/naru-icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/brand/naru-icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

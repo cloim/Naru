@@ -28,6 +28,10 @@ On first run, interactive onboarding walks through these steps:
 
 If setup cannot continue, the screen explains what to do and lets you quit Naru. Closing the window keeps Naru running in the tray so port forwarding and the Docker pipe stay available. To exit completely, use **종료** (Quit) in the tray menu. The tray menu is shown in Korean.
 
+### Install as a web app
+
+While Naru is running, open its address in a browser. Use the install option in the Chrome or Edge address bar or browser menu, or use **Add to Home Screen** from the Safari share menu on iPhone or iPad. Installation is available over HTTPS or a local address (`localhost` or `127.0.0.1`). The installed web app needs a connection to the Naru server to manage containers and engines.
+
 ### Updates
 
 **업데이트 확인** (Check for updates) in the tray menu looks for a new version on GitHub Releases. When one is available, the same menu item downloads and installs it.

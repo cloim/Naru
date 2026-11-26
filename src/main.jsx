@@ -546,3 +546,14 @@ createRoot(document.getElementById('root')).render(
     </BrowserRouter>
   </QueryClientProvider>,
 );
+
+if (
+  import.meta.env.PROD &&
+  window.isSecureContext &&
+  !window.__TAURI_INTERNALS__ &&
+  'serviceWorker' in navigator
+) {
+  navigator.serviceWorker.register('/sw.js').catch((error) => {
+    console.warn('Naru service worker registration failed.', error);
+  });
+}
