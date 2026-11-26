@@ -9,8 +9,7 @@
 //! `[[ -z ]]`, joined with `&&`) whose block exits or calls a function that does. Other variables the
 //! same condition tests empty, or compares with a value (`[ 'trust' != "$X" ]`), are alternatives. A
 //! check that only applies when another variable is set (`-n`), one joined with `||`, and variables the
-//! image or the script sets itself do not count. The approach follows Kiri (github.com/libracoder/kiri,
-//! Apache-2.0, crates/kiri/src/ui/needs.rs).
+//! image or the script sets itself do not count.
 use crate::engine::{docker, docker_bytes, encode};
 use anyhow::{bail, Result};
 use regex::Regex;

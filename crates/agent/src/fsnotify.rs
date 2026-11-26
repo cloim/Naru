@@ -16,8 +16,7 @@
 //! root is therefore held open with `O_PATH` (nothing opens on the Windows side), which keeps its inode.
 //!
 //! Paths are limited to the current roots, never follow a symlink and touch only regular files and
-//! folders. The technique comes from Kiri (github.com/libracoder/kiri, Apache-2.0,
-//! crates/kiri-init/src/linux/fsnotify.rs).
+//! folders.
 use serde_json::Value;
 use std::collections::{HashMap, VecDeque};
 use std::ffi::{CStr, CString};

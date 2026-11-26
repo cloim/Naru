@@ -7,7 +7,7 @@ default-members = ["crates/core", "crates/agent", "src-tauri"]
 [workspace.package]
 version = "0.2.15"
 edition = "2021"
-license = "MIT"
+license = "Apache-2.0"
 
 [workspace.dependencies]
 anyhow = "1"

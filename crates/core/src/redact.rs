@@ -6,8 +6,7 @@
 //! name.
 //!
 //! Patterns, not parsing: it runs over any text (log lines, JSON, command output), so it errs towards
-//! taking out too much. The list of what to take out follows Kiri (github.com/libracoder/kiri,
-//! Apache-2.0, crates/kiri/src/diag/redact.rs).
+//! taking out too much.
 use regex::{Captures, Regex};
 use std::sync::LazyLock;
 
