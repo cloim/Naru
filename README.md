@@ -1,203 +1,235 @@
 # Naru
 
-Windows에서 컨테이너와 로컬 Kubernetes 환경을 관리하는 데스크톱 앱입니다. 전용 WSL 2 배포판에서 Moby 또는 containerd 엔진을 실행하고, Naru 창과 Windows CLI로 같은 환경을 사용해요.
+**English** | [한국어](README.ko.md)
 
-컨테이너 실행부터 Compose 프로젝트 관리, 로그와 터미널, 이미지 빌드, 볼륨 백업, 네트워크 진단과 스냅샷까지 한곳에서 처리합니다.
+Naru is a desktop app for managing containers and a local Kubernetes environment on Windows. It runs the Moby or containerd engine in a dedicated WSL 2 distribution, and the Naru window and the Windows CLI share that same environment. Docker engines on servers you reach over SSH can be managed from the same screens.
 
-## 설치
+Run containers, manage Compose projects, read logs and open terminals, build images, back up volumes, diagnose networks and take snapshots, all in one place.
 
-### 준비 사항
+## Installation
 
-- Windows 10 2004(빌드 19041) 이상 또는 Windows 11, x64
-- BIOS 또는 UEFI에서 켠 하드웨어 가상화. 가상 머신에서는 중첩 가상화가 필요합니다
-- 런타임과 도구를 다운로드할 인터넷 연결, 이미지와 데이터를 저장할 디스크 공간(20GB 이상 권장)
+### Requirements
 
-### 설치와 첫 실행
+- Windows 10 2004 (build 19041) or later, or Windows 11, x64
+- Hardware virtualization enabled in BIOS or UEFI. Virtual machines need nested virtualization
+- An internet connection to download runtimes and tools, and disk space for images and data (20 GB or more recommended)
 
-설치 파일(`Naru_<버전>_x64-setup.exe`)을 실행하면 현재 사용자 계정에 설치됩니다. 관리자 권한은 필요하지 않아요.
+### Install and first run
 
-처음 실행하면 대화형 온보딩이 다음 순서로 진행됩니다.
+Run the installer (`Naru_<version>_x64-setup.exe`). It installs for the current user and does not need administrator rights.
 
-1. 화면 언어 선택
-2. 환경 점검: WSL 2, 하드웨어 가상화와 디스크 여유 공간을 확인하고, WSL이 없으면 설치합니다. 설치 후 PC를 다시 시작하면 Naru가 자동으로 열려 이어서 진행해요
-3. 데이터 위치와 화면 포트 선택
-4. 엔진, Kubernetes, Windows CLI 설치 여부와 프록시 선택
-5. 공식 배포물을 내려받아 검증한 뒤 엔진 설치와 시작
+On first run, interactive onboarding walks through these steps:
 
-진행할 수 없는 조건이면 화면에 조치 방법을 안내하고 Naru를 종료할 수 있습니다. 창을 닫아도 Naru는 트레이에서 계속 실행되어 포트 전달과 Docker pipe가 유지되며, 완전히 끝낼 때는 트레이 메뉴의 **종료**를 사용해 주세요.
+1. Choose the display language
+2. Environment check: WSL 2, hardware virtualization and free disk space. If WSL is missing, Naru installs it. After the PC restarts, Naru opens again and continues
+3. Choose the data location and the screen port
+4. Choose whether to install the engine, Kubernetes and the Windows CLI, and set a proxy
+5. Download and verify the official releases, then install and start the engine
 
-## 개발
+If setup cannot continue, the screen explains what to do and lets you quit Naru. Closing the window keeps Naru running in the tray so port forwarding and the Docker pipe stay available. To exit completely, use **종료** (Quit) in the tray menu. The tray menu is shown in Korean.
 
-| 작업 | 명령 |
+### Updates
+
+**업데이트 확인** (Check for updates) in the tray menu looks for a new version on GitHub Releases. When one is available, the same menu item downloads and installs it.
+
+## Development
+
+| Task | Command |
 | --- | --- |
-| 의존성 설치 | `npm install` |
-| 화면 빌드 | `npm run build` |
-| 개발용 서버(창 없음) | `cargo run -p naru -- --serve` |
-| 개발용 앱 | `cargo run -p naru` |
-| 테스트 | `cargo test -p naru-core`, `npm test` |
-| 성능 측정 | `python scripts/bench.py` |
-| 설치 파일(NSIS) | `npm run build:desktop` |
+| Install dependencies | `npm install` |
+| Build the screens | `npm run build` |
+| Development server (no window) | `cargo run -p naru -- --serve` |
+| Development app | `cargo run -p naru` |
+| Tests | `cargo test -p naru-core`, `npm test` |
+| Benchmarks | `python scripts/bench.py` |
+| Installer (NSIS) | `npm run build:desktop` |
 
-백엔드는 Rust(`crates/core`)이고, Tauri 셸(`src-tauri`)이 같은 프로세스에서 서버와 창을 함께 실행합니다. 개발용 서버는 [Naru 열기](http://127.0.0.1:49170)로 브라우저에서 확인할 수 있어요. 엔진 에이전트(`crates/agent`)는 Linux 정적 바이너리라 `rustup target add x86_64-unknown-linux-musl`이 필요하며, 설치 파일 빌드는 에이전트와 화면을 먼저 빌드합니다.
+The backend is Rust (`crates/core`), and the Tauri shell (`src-tauri`) runs the server and the window in one process. Open the development server at [http://127.0.0.1:49170](http://127.0.0.1:49170) in a browser. The engine agent (`crates/agent`) is a static Linux binary and needs `rustup target add x86_64-unknown-linux-musl`. The installer build compiles the agent and the screens first.
 
-## 기본 사용 흐름
+## Basic workflow
 
-**Docker와 Compose 개발**은 엔진 시작 → 이미지 가져오기 또는 빌드 → 컨테이너나 Compose 프로젝트 실행 → 로그와 리소스 확인 순으로 진행하면 돼요. 유지할 데이터는 볼륨에 저장하고, 서비스 사이의 연결은 네트워크에서 확인합니다.
+**Docker and Compose development**: start the engine → pull or build an image → run a container or a Compose project → check logs and resource usage. Keep data that must survive in volumes, and check how services connect on the Networks screen.
 
-**Kubernetes 개발**은 Kubernetes 시작 → YAML 적용 → 리소스 상태와 Pod 로그 확인 → 포트 전달로 접속 확인 순으로 진행합니다. 환경을 크게 변경하기 전에는 스냅샷을 만들어 두세요.
+**Kubernetes development**: start Kubernetes → apply YAML → check resource status and Pod logs → open a port forward to try it. Take a snapshot before large changes to the environment.
 
-목록의 검색과 분류 필터로 대상을 찾고, 페이지 오른쪽 상단의 아이콘 버튼으로 관리 작업을 실행할 수 있어요. 시간이 걸리는 요청의 진행 상황과 결과는 **작업 기록**에서 확인합니다.
+**Docker on a server**: add an SSH profile under **Connections**, then switch the **Engine target** at the top of the sidebar. The Containers, Images, Volumes and Networks screens then work on the selected server.
 
-## 메뉴와 기능
+Find items with the search box and the category filters in each list, and run management actions with the icon buttons at the top right of each page. Progress and results of longer requests appear in **Job history**.
 
-| 메뉴 | 주요 기능 |
+## Menus and features
+
+| Menu | Main features |
 | --- | --- |
-| 컨테이너 | 생성, 시작, 정지, 재시작, 복제, 로그, 파일, 터미널과 Compose 프로젝트 관리 |
-| 이미지 | 가져오기, 빌드, 태그, 업로드, TAR 내보내기와 불러오기, 레이어와 취약점 분석 |
-| 볼륨 | 생성, 파일 탐색과 편집, 백업과 복원, 미사용 볼륨 정리 |
-| 네트워크 | 생성, 연결된 컨테이너 확인, Ping과 TCP 통신 진단, 미사용 네트워크 정리 |
-| Kubernetes | k3s 실행, 리소스 조회, YAML 적용, Pod 로그와 포트 전달 |
-| 스냅샷 | Naru WSL 배포판 백업과 복원 |
-| 확장 | OCI 이미지 기반 개발 도구 설치와 실행 |
-| 작업 기록 | 작업 상태, 결과와 상세 로그 확인 |
-| 진단 | WSL, 서버와 엔진 상태 및 기반 환경 로그 확인 |
-| 설정 | 엔진, Kubernetes, 프록시, 화면, CLI와 레지스트리 설정 |
+| Containers | Create, start, stop, restart, clone, logs, files, terminal, Compose project management and locks against pruning |
+| Images | Docker Hub search and pull, build, tag, push, TAR export and import, layer and vulnerability analysis |
+| Volumes | Create, browse and edit files, back up and restore, prune unused volumes |
+| Networks | Create, view connected containers, Ping and TCP diagnostics, prune unused networks |
+| Kubernetes | Run k3s, browse resources, apply YAML, Pod logs and port forwarding |
+| Snapshots | Back up and restore the Naru WSL distribution |
+| Extensions | Install and run developer tools packaged as OCI images |
+| Connections | Add, edit, delete and test SSH remote engine profiles |
+| Job history | Job status, results and detailed logs |
+| Diagnostics | WSL, server and engine status, resource graphs, underlying logs and diagnostic reports |
+| Settings | Engine, Kubernetes, proxy, display, CLI and registries, and remote access |
 
-### 컨테이너와 Compose
+### Containers and Compose
 
-컨테이너는 이름으로 검색하거나 실행 상태별로 나누어 관리합니다. 여러 항목을 선택해 일괄 작업을 실행할 수 있어요. 생성 화면에는 Nginx, Redis, PostgreSQL, MySQL, Node.js와 Ubuntu 템플릿이 있으며, 기존 컨테이너의 설정을 복사하는 복제 기능도 제공합니다.
+Containers are grouped by Compose project, and you can search by name or filter by state. On the local engine, the list shows CPU and memory use for each container and totals for each project. Select several items to run an action on all of them.
 
-생성 폼은 `docker run`의 기본 옵션을 읽어 채우거나 입력값을 명령어로 변환합니다. 환경 변수는 기본 프리셋과 직접 저장한 프리셋으로 재사용할 수 있어요.
+The create screen offers Nginx, Redis, PostgreSQL, MySQL, Node.js and Ubuntu templates, and you can clone the settings of an existing container. The form can read the common options of a `docker run` command, or turn what you entered into one. Environment variables can be reused from built-in presets or presets you save.
 
-| 상세 탭 | 확인할 내용 |
+For an image that is already on the engine, Naru reads its start script before the first run and asks first for environment variables it cannot start without, such as `POSTGRES_PASSWORD` for PostgreSQL. When a container stops right after starting, its detail page explains why and offers a fix: a missing required variable, a port already in use, running out of memory, or the engine refusing to start it. If the cause is not recognized, it shows the last lines of the log.
+
+| Detail tab | What it shows |
 | --- | --- |
-| 로그 | 로그 검색, 자동 스크롤과 복사 |
-| 리소스 | CPU, 메모리와 네트워크 사용량, 높은 사용량 경고 |
-| 파일 | 디렉터리 탐색, 텍스트 파일 조회와 편집, 업로드와 다운로드 |
-| 터미널 | 컨테이너 내부 대화형 터미널 |
-| 구성 | 환경 변수, 마운트와 네트워크 등 엔진의 상세 구성 |
+| General | Configuration such as image, ports, environment variables, volumes and mounts, network and restart policy, and editing it |
+| Logs and resources | Log search, auto-scroll and copy, CPU, memory and network use for the last 5 minutes, high usage warnings |
+| Files | Browse folders, view and edit text files, upload and download |
+| Terminal | Interactive terminal inside the container |
 
-Compose 프로젝트는 **컨테이너** 화면에서 프로젝트별로 묶어 표시합니다. 프로젝트 관리 창에서 소속 서비스와 연결 관계를 확인하고, 함께 시작하거나 정지, 재시작할 수 있어요. 원본 Compose 파일이 있으면 `up`, `down`, `pull`, `build`와 파일 편집도 지원합니다.
+The project window shows the services in a project and how they connect, and starts, stops or restarts them together. When the original Compose file is available, it also supports `up`, `down`, `pull`, `build` and editing the file. New Compose files are saved to `compose\<name>\compose.yaml` in the data folder. The project list is kept in `projects.json`, so a project can be run again after `down`.
 
-새 Compose 파일은 데이터 폴더의 `compose\<이름>\compose.yaml`에 저장합니다. 프로젝트 목록은 `projects.json`에 보관하므로 `down` 이후에도 다시 실행할 수 있어요.
+Use **Lock against pruning** on a container or a project to keep it when unused resources are pruned.
 
-HTTP 서비스를 실행한 컨테이너는 `http://<컨테이너이름>.naru.localhost:49170`으로도 접속할 수 있습니다. 이 프록시는 컨테이너의 첫 번째 공개 포트로 요청을 전달하므로, 웹 서비스의 포트를 공개한 뒤 사용해 주세요.
+A container serving HTTP can also be reached at `http://<container-name>.naru.localhost:49170`. This proxy forwards requests to the container's first published port, so publish the web service's port first.
 
-### GPU 가속
+### Windows folders and change notifications
 
-Windows에 NVIDIA 드라이버가 설치되어 있으면 Moby 엔진을 시작할 때 WSL GPU용 CDI 스펙(`/etc/cdi/naru-nvidia.yaml`)을 자동으로 생성합니다. 별도의 NVIDIA Container Toolkit 없이 `docker run --gpus all`, `--gpus 1` 또는 `--device nvidia.com/gpu=all`로 GPU를 사용할 수 있어요. Compose에서는 `deploy.resources.reservations.devices`에 `driver: nvidia`와 `capabilities: [gpu]`를 지정합니다.
+Windows bind mount paths are converted to Linux paths for the engine. For example, `D:\work\app` is mounted as `/mnt/d/work/app`.
 
-컨테이너에는 `/dev/dxg`, `/usr/lib/wsl`과 `nvidia-smi`가 연결되고 WSL GPU 라이브러리가 동적 링커 캐시에 등록됩니다. 생성 결과는 배포판의 `/var/log/naru/gpu.log`에서 확인합니다. 스펙은 드라이버 버전과 무관한 고정 경로만 사용하므로 드라이버를 업데이트해도 다시 설정할 필요가 없어요. NVIDIA 드라이버가 없던 PC에 처음 설치한 경우에만 엔진을 한 번 재시작해 주세요.
+**Settings > Engine > Notice changes in Windows folders** (on by default) sends file change events (inotify) into containers when you save files in a bound Windows folder, so development servers reload for files edited on Windows. `node_modules` and `.git` folders are skipped.
 
-Moby 엔진은 컨테이너 시작 속도를 높이기 위해 `crun`을 기본 OCI 런타임으로 사용합니다. 호환성 문제가 있는 컨테이너는 `--runtime runc` 옵션으로 기존 `runc` 런타임으로 실행할 수 있어요.
+### GPU acceleration
 
-### 이미지
+When an NVIDIA driver is installed on Windows, Naru generates a CDI spec for WSL GPUs (`/etc/cdi/naru-nvidia.yaml`) when the Moby engine starts. Use the GPU with `docker run --gpus all`, `--gpus 1` or `--device nvidia.com/gpu=all`, without installing the NVIDIA Container Toolkit. In Compose, set `driver: nvidia` and `capabilities: [gpu]` under `deploy.resources.reservations.devices`.
 
-레지스트리에서 이미지를 가져오거나 Dockerfile과 Windows 소스 폴더로 직접 빌드합니다. 이미지별로 컨테이너 실행, 태그 추가, 레지스트리 업로드, TAR 내보내기와 불러오기를 지원해요.
+Containers get `/dev/dxg`, `/usr/lib/wsl` and `nvidia-smi`, and the WSL GPU libraries are registered in the dynamic linker cache. The result is logged to `/var/log/naru/gpu.log` in the distribution. The spec uses only fixed paths that do not depend on the driver version, so driver updates need no reconfiguration. Restart the engine once only after installing an NVIDIA driver on a PC that had none.
 
-레이어 분석에서는 빌드 명령별 크기와 비중을 확인할 수 있습니다. 취약점 검사는 Trivy를 사용하며, 도구와 취약점 DB를 내려받을 네트워크 연결이 필요해요.
+The Moby engine uses `crun` as the default OCI runtime for faster container starts. Run a container that has compatibility problems with `--runtime runc` to use `runc` instead.
 
-### 볼륨과 네트워크
+### Images
 
-볼륨은 컨테이너를 교체해도 유지할 데이터를 저장하는 공간입니다. 파일 탐색기에서 내용을 확인하고 텍스트 파일을 편집할 수 있어요. 볼륨 행의 백업 버튼으로 `.tar.gz`를 내려받고, 파일 탐색기의 복원 기능으로 아카이브를 업로드합니다. 복원은 같은 경로의 기존 파일을 덮어쓰므로 필요한 데이터를 먼저 백업해 주세요.
+Pull images from a registry, or build them from a Dockerfile and a Windows source folder. In the pull screen, typing an image name searches Docker Hub, and typing a colon (`:`) suggests tags. For each image you can run a container, add a tag, push to a registry, and export or import a TAR.
 
-네트워크에서는 연결된 컨테이너의 IP와 MAC 주소를 확인합니다. 출발지 컨테이너와 목적지를 지정해 Ping 또는 TCP 포트 연결을 진단할 수 있어요. 진단에 필요한 명령은 출발지 컨테이너에서 실행됩니다.
+Layer analysis shows the size and share of each build step. Vulnerability scanning uses Trivy and needs a network connection to download the tool and its database.
 
-컨테이너, 이미지, 볼륨과 네트워크의 미사용 리소스 정리는 확인 창을 거쳐 실행합니다. 삭제로 확보한 엔진 내부 공간을 Windows 디스크에 반환하려면 **설정 > 엔진 > 디스크 압축**을 사용해 주세요. 압축 중에는 엔진과 컨테이너가 멈추며 관리자 권한 승인이 필요할 수 있습니다.
+### Volumes and networks
 
-### Kubernetes와 포트 전달
+Volumes hold data that must survive replacing a container. Browse their contents and edit text files in the file explorer. The backup button on a volume row downloads a `.tar.gz`, and the restore action in the file explorer uploads an archive. Restoring overwrites existing files at the same paths, so back up what you need first.
 
-Kubernetes 화면에서 로컬 k3s를 시작하고 리소스를 종류와 네임스페이스별로 조회합니다. Pod, Deployment, Service, Node, Namespace, ConfigMap, PVC와 Event를 지원하며, YAML 적용, 리소스 구성 조회와 삭제, Pod 로그 확인과 kubeconfig 다운로드를 제공해요.
+The Networks screen shows the IP and MAC addresses of connected containers. Pick a source container and a destination to diagnose Ping or TCP port connectivity. The commands run inside the source container.
 
-**포트 전달**은 Kubernetes 화면 안의 탭입니다. Service, Pod 또는 Deployment의 포트를 Windows 로컬 포트로 연결합니다. 예를 들어 `127.0.0.1:8080 → svc/my-web:80`으로 지정하면 로컬 브라우저에서 해당 서비스에 접속할 수 있어요. 전달 종료와 종료된 기록 삭제도 이 탭에서 수행합니다.
+Pruning unused containers, images, volumes and networks first shows what will be removed in a confirmation dialog, and skips containers locked against pruning. To return the space freed inside the engine to the Windows disk, use **Settings > Engine > Compact disk**. Compaction stops the engine and containers and may ask for administrator approval.
 
-### 스냅샷과 확장
+### Kubernetes and port forwarding
 
-스냅샷은 Naru WSL 배포판을 정지한 상태로 내보냅니다. 실행 중에 생성하면 백업이 끝난 뒤 엔진을 다시 시작해요. 복원 시에는 현재 배포판을 별도 백업하고 저장한 시점의 데이터로 교체합니다. Windows 폴더를 연결한 bind mount의 원본 데이터는 배포판 밖에 있으므로 별도로 백업해 주세요.
+Start local k3s on the Kubernetes screen and browse resources by kind and namespace. Pods, Deployments, Services, Nodes, Namespaces, ConfigMaps, PVCs and Events are supported, along with applying YAML, viewing and deleting resources, Pod logs and downloading the kubeconfig.
 
-확장은 OCI 이미지로 설치하며, 패키지에 따라 UI, VM 서비스와 Windows 실행파일을 제공합니다. 확장별 UI는 별도의 localhost 출처로 격리해요. 설치 시 `TRUST` 확인을 거치며, 확장에는 엔진과 호스트에 접근하는 실행 권한이 있으므로 신뢰하는 이미지를 사용해 주세요. 확장 UI는 Naru를 실행 중인 PC에서 열 수 있습니다.
+**Port forwarding** is a tab on the Kubernetes screen. It connects a Service, Pod or Deployment port to a local Windows port. For example, `127.0.0.1:8080 → svc/my-web:80` lets a local browser reach that service. Stop forwards and clear finished ones from the same tab.
 
-### 작업 기록, 진단과 설정
+### Snapshots and extensions
 
-| 확인할 상황 | 사용할 화면 |
+A snapshot exports the Naru WSL distribution while it is stopped. Taking one while it runs restarts the engine after the backup. Restoring backs up the current distribution separately and replaces it with the saved data. The source data of bind-mounted Windows folders lives outside the distribution, so back it up separately.
+
+Extensions install from OCI images and, depending on the package, provide a UI, a VM service and Windows executables. Each extension UI is isolated on its own localhost origin. Installation asks for a `TRUST` confirmation. Extensions can run with access to the engine and the host, so install only images you trust. Extension UIs open on the PC running Naru.
+
+### SSH remote engines
+
+Add a profile for each server under **Connections**: a name, an SSH host alias or address, a user, a port and a private key path. Leave the user, port and key empty to use your existing SSH configuration (`~/.ssh/config`). **Test connection** checks the server's Docker version before you save.
+
+Naru runs the server's `docker` CLI through Windows OpenSSH (`ssh.exe`). It needs:
+
+- Key-based login that does not prompt for a password
+- The server's host key in `known_hosts` (confirm it once with `ssh <host>` in a terminal)
+- Docker installed on the server, and permission for the login user to run `docker`
+
+When a server is selected as the **Engine target** in the sidebar, the Containers, Images, Volumes and Networks screens work on that server. Mounts use paths on the server. WSL settings, disk, snapshots, Kubernetes, extensions, diagnostics, settings and local file tools are available only for the local engine. Profiles are stored in `~/.config/Naru/engines.json`. Deleting a profile keeps the containers and data on the server.
+
+### Job history, diagnostics and settings
+
+| Situation | Where to look |
 | --- | --- |
-| 애플리케이션의 오류나 실행 출력 | 컨테이너 상세 > 로그 |
-| 이미지 빌드, 다운로드나 설치의 진행 상황 | 작업 기록 > 상세 로그 |
-| 엔진이나 Kubernetes의 시작 문제 | 진단 |
-| 런타임 설치, 엔진 전환이나 CLI 연결 | 설정 |
+| Application errors or output | Container details > Logs and resources |
+| Progress of image builds, downloads or installs | Job history > job details |
+| Engine or Kubernetes start problems | Diagnostics |
+| Runtime install, engine switching or CLI setup | Settings |
+| Server connection errors | Connections > Test connection |
 
-완료된 작업 기록은 최근 30일 이내, 최대 200건까지 보관합니다. 보관 범위를 벗어난 기록과 관련 로그는 자동으로 정리해요.
+Finished jobs are kept for 30 days, up to 200 records. Older records and their logs are cleaned up automatically.
 
-설정은 다음 다섯 개 탭으로 구성됩니다.
+The Diagnostics screen updates CPU and memory graphs for the Naru control server, the Windows host and containers every 3 seconds, and shows the engine, build engine and Kubernetes logs. **Save diagnostic report** writes status and logs to one file. Before saving, it removes the home folder path and user name, password, token and key values, private keys, e-mail addresses, tailnet host names and the computer name.
 
-| 탭 | 설정 내용 |
+Settings has six tabs:
+
+| Tab | Settings |
 | --- | --- |
-| 엔진 | Moby 또는 containerd 선택, containerd 네임스페이스, 런타임 설치와 시작 및 종료, 엔진 자동 시작, Windows 로그인 시 시작과 디스크 압축 |
-| Kubernetes | 자동 시작, k3s 버전, API 포트와 Traefik Ingress |
-| 프록시 | `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` |
-| 화면 | 한국어와 영어, 자동 갱신 간격 |
-| CLI와 레지스트리 | Windows CLI 설치, 레지스트리 로그인과 로그아웃 |
+| Engine | Moby or containerd, containerd namespace, runtime install, start and stop, engine auto-start, Windows folder change detection, start at Windows sign-in, disk usage and compaction, WSL resources (CPU, memory and memory reclaim in `.wslconfig`) |
+| Kubernetes | Auto-start, k3s version, API port and Traefik Ingress |
+| Proxy | `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` |
+| Display | Korean or English, auto-refresh interval |
+| CLI and registries | Windows CLI install, registry sign-in and sign-out |
+| Remote access | Tailscale host and allowed tailnet accounts |
 
-엔진, Kubernetes와 프록시의 주요 설정은 엔진을 종료한 뒤 변경해 주세요. 서버 시작 시 엔진 자동 시작과 화면 설정은 실행 중에도 저장할 수 있습니다.
+Stop the engine before changing the main engine, Kubernetes and proxy settings. Engine auto-start on server start and display settings can be saved while running. WSL resources change only CPU, memory and `autoMemoryReclaim` under `[wsl2]` in your `.wslconfig`, keep every other setting, and apply after WSL restarts.
 
-## Windows CLI 연결
+## Windows CLI
 
-**설정 > CLI와 레지스트리**에서 Docker, Compose, Buildx, kubectl, Helm과 자격 증명 도우미를 설치합니다. 도구는 다운로드한 파일을 검증한 뒤 데이터 폴더의 `bin`에 설치하고, 이 폴더를 사용자 PATH에 추가해요. 새 터미널에서 `docker`, `kubectl`, `helm`을 바로 쓸 수 있습니다.
+**Settings > CLI and registries** installs Docker, Compose, Buildx, kubectl, Helm and the credential helper. Downloads are verified, installed to `bin` in the data folder, and that folder is added to the user PATH, so `docker`, `kubectl` and `helm` work in a new terminal. If another `docker` CLI, such as Docker Desktop's, comes first in PATH, the screen says so, and `docker context use naru` still selects the Naru engine.
 
-Docker context `naru`는 `naru_engine` named pipe로 연결합니다. 기본 `docker_engine` pipe도 사용 가능한 경우 같은 엔진에 연결하므로, 기본 pipe를 사용하는 SDK와 도구에서도 Naru 엔진을 사용할 수 있어요.
+The Docker context `naru` connects through the `naru_engine` named pipe. When the default `docker_engine` pipe is free, it connects to the same engine too, so SDKs and tools that use the default pipe also use Naru.
 
-Windows의 bind mount 경로는 엔진에 전달할 때 Linux 경로로 변환합니다. 예를 들어 `D:\work\app`은 `/mnt/d/work/app`으로 연결해요.
+### Ports and host access
 
-### 포트와 호스트 접속
+The engine runs in its own network namespace, and Naru opens the engine's published TCP and UDP ports only on Windows `localhost` (`127.0.0.1` and `::1`). Ports are not opened on LAN interfaces even with `-p 0.0.0.0:...` or a LAN IP, and access from other devices is allowed only through Tailscale, such as `tailscale serve`. Ports published by containers, ports opened by `--network host` containers, Kubernetes LoadBalancers and port forwards all open the same way, with the containerd engine as well. Open ports and their state are listed at `/api/port-forwarding`.
 
-엔진은 전용 네트워크 네임스페이스에서 실행되고, Naru가 엔진의 TCP와 UDP 공개 포트를 Windows `localhost`(`127.0.0.1`과 `::1`)에만 직접 엽니다. `-p 0.0.0.0:...`이나 LAN IP를 지정해도 LAN 인터페이스에는 열리지 않으며, 외부 기기에서의 접속은 `tailscale serve`처럼 Tailscale로만 허용합니다. 컨테이너가 공개한 포트, `--network host` 컨테이너가 연 포트, Kubernetes LoadBalancer와 포트 전달이 모두 같은 방식으로 열려요. containerd 엔진에서도 동일합니다. 열린 포트와 상태는 `/api/port-forwarding`에서 확인할 수 있습니다.
+Containers and Pods reach services on Windows `localhost` through `host.docker.internal`, including development servers listening only on IPv6 `localhost`. `127.0.0.1` or `localhost` in proxy settings is passed to the engine, containers and builds as `host.docker.internal`. Proxy settings are also applied to the Windows Docker CLI configuration, keeping any CLI proxy you set yourself.
 
-컨테이너와 Pod에서 Windows `localhost`의 서비스에 접속할 때는 `host.docker.internal`을 사용합니다. IPv6 `localhost`에서만 대기하는 개발 서버에도 연결돼요. 프록시 설정의 `127.0.0.1`이나 `localhost` 주소는 엔진, 컨테이너와 빌드에 `host.docker.internal`로 바꿔 전달합니다. 프록시는 Windows Docker CLI 설정에도 반영하며, 사용자가 직접 지정한 CLI 프록시는 유지해요.
+Registry credentials are stored in the current Windows user's credential store through the Docker credential helper. Existing Docker credential settings are kept, and the Compose and Buildx search paths are added.
 
-레지스트리 인증 정보는 Docker 자격 증명 도우미를 통해 현재 Windows 사용자의 자격 증명 저장소에 보관합니다. 기존 Docker 자격 증명 설정은 유지하고 Compose와 Buildx 검색 경로를 추가해요.
+## Remote access
 
-## 원격 접속
-
-기본 접속 범위는 Naru를 실행 중인 PC입니다. Tailscale을 사용하는 환경에서는 Serve로 로컬 서버를 연결하고, **설정 > 원격 접속**에서 Tailscale 호스트와 허용할 tailnet 계정을 저장합니다. 저장하면 바로 적용되고, 이 설정은 Naru를 실행 중인 PC에서만 바꿀 수 있어요.
+By default, Naru is reachable only on the PC running it. With Tailscale, connect the local server with Serve, then save the Tailscale host and allowed tailnet accounts in **Settings > Remote access**. Changes apply immediately and can only be made on the PC running Naru.
 
 ```text
-tailscale serve --bg --https=<포트> http://127.0.0.1:<Naru 화면 포트>
+tailscale serve --bg --https=<port> http://127.0.0.1:<Naru screen port>
 ```
 
-서버는 로컬에서 전달된 요청인지 확인하고, Host와 허용 계정, 요청에 포함된 Origin을 검사해요. 확장 UI는 localhost 출처를 사용하므로 실행 중인 PC에서 접속해 주세요.
+The server checks that a request was forwarded locally, and checks the Host, the allowed account and the request's Origin. Extension UIs use localhost origins, so open them on the PC running Naru.
 
-## 설정, 데이터와 프로젝트 구조
+## Settings, data and project layout
 
-사용자가 고르는 설정은 모두 `~/.config/Naru`(`%USERPROFILE%\.config\Naru`)에 저장합니다. 데이터 폴더와 화면 포트는 첫 실행 온보딩에서 정하며, 기본값은 `%LOCALAPPDATA%\Naru`와 `49170`이에요. 이전 버전이 데이터 폴더에 둔 설정 파일은 처음 실행할 때 설정 폴더로 복사합니다. WSL 배포판 이름은 `naru`로 고정되어 있어, 데이터 폴더를 바꿔도 별도의 배포판 인스턴스가 생성되는 것은 아니에요.
+All settings you choose are stored in `~/.config/Naru` (`%USERPROFILE%\.config\Naru`). The data folder and screen port are chosen during onboarding and default to `%LOCALAPPDATA%\Naru` and `49170`. Settings files that earlier versions kept in the data folder are copied to the settings folder on first run. The WSL distribution is always named `naru`, so changing the data folder does not create another distribution instance.
 
-| 위치 | 내용 |
+| Location | Contents |
 | --- | --- |
-| `~/.config/Naru` | `app.json`(데이터 폴더, 화면 포트, 로그인 시 시작), `settings.json`(엔진, Kubernetes, 프록시, 화면), `engines.json`(원격 엔진), `remote.json`(원격 접속) |
-| 데이터 폴더 | WSL 디스크, 작업 기록, Compose 파일, 확장, CLI 도구, 다운로드 캐시와 스냅샷 |
-| WSL의 `/var/lib/naru` | 엔진 데이터 |
-| `crates/core` | 로컬 API, 런타임 제어, 작업 프로세스와 연결 계층 |
-| `crates/agent` | 엔진 네트워크 네임스페이스 안의 포트 전달, DNS와 host.docker.internal 에이전트 |
-| `src-tauri/` | 데스크톱 창, 트레이와 실행 전 점검 |
-| `src/` | React 화면과 공용 컴포넌트 |
-| `scripts/` | 엔진 부팅과 네트워크 스크립트, 검증 스크립트 |
-| `tests/` | 단위 테스트와 통합 테스트 |
-| `.local/` | 개발 환경의 실행 로그와 임시 파일 |
+| `~/.config/Naru` | `app.json` (data folder, screen port, start at sign-in), `settings.json` (engine, Kubernetes, proxy, display), `engines.json` (SSH remote engine profiles and the selected target), `remote.json` (remote access) |
+| Data folder | WSL disk, job history, Compose files, extensions, CLI tools, download cache and snapshots |
+| `/var/lib/naru` in WSL | Engine data |
+| `crates/core` | Local API, runtime control, job processes and the local and SSH connection layer |
+| `crates/agent` | Agent in the engine network namespace for port forwarding, DNS, host.docker.internal and file change notifications |
+| `src-tauri/` | Desktop window, tray, updates and pre-launch checks |
+| `src/` | React screens and shared components |
+| `scripts/` | Engine boot and network scripts, verification scripts |
+| `tests/` | Unit and integration tests |
+| `.local/` | Run logs and temporary files in development |
 
-화면은 React와 Tailwind CSS v4로 구성합니다. 테마는 `src/tailwind.css`, 공용 스타일은 `src/tw.js`, 그리드 스타일은 `src/components/DataGrid/data-grid.css`에서 관리해요. 개발 문서 `docs/`와 실행 증거 `evidence/`는 로컬에 보관하며 Git 추적에서 제외합니다.
+The screens use React and Tailwind CSS v4. The theme is in `src/tailwind.css`, shared styles in `src/tw.js`, and grid styles in `src/components/DataGrid/data-grid.css`. Development documents in `docs/` and run evidence in `evidence/` stay local and are not tracked by Git.
 
-## 검증과 사용 시 참고사항
+## Verification and usage notes
 
-`scripts/check.cmd`는 화면 빌드와 화면 단위 테스트를 실행하고, 백엔드 테스트는 `cargo test -p naru-core`로 실행합니다. 통합 테스트 코드는 `tests/`에 있으며, 결과를 저장하려면 먼저 로컬 `evidence/` 폴더를 준비해 주세요. 통합 테스트는 실제 엔진과 시험용 컨테이너를 변경하며, 일부 테스트에는 스냅샷 복원이 포함됩니다. 데이터가 있는 환경에서는 테스트 내용을 확인하고 백업한 뒤 실행해 주세요.
+`scripts/check.cmd` builds the screens and runs the screen unit tests. Run the backend tests with `cargo test -p naru-core`. Integration tests are in `tests/`; create a local `evidence/` folder first to keep their results. Integration tests change the real engine and test containers, and some include a snapshot restore. On a machine with data you care about, read the tests and back up before running them.
 
-현재 사용 시 고려할 범위는 다음과 같습니다.
+Current limits to keep in mind:
 
-- 파일 탐색기의 개별 파일 업로드와 다운로드는 텍스트를 처리합니다. 볼륨 전체 데이터는 아카이브 백업과 복원을 사용해 주세요.
-- 이미지 TAR는 실행 패키지를 보관합니다. DB 파일과 업로드 데이터는 볼륨 등 실제 저장 위치에서 별도로 백업해 주세요.
-- Trivy 취약점 DB 다운로드와 전체 확장 SDK 호환성은 추가 검증이 필요합니다. 기업 인증서와 VPN, 다른 WSL 배포판 연동, 버전 변경 후 복구도 사용 환경별로 확인해 주세요.
-- 현재 지원 환경은 Windows와 WSL 2입니다.
+- File upload and download in the file explorer handle text. Use archive backup and restore for whole volumes.
+- Image TARs hold runnable packages. Back up database files and uploaded data from where they actually live, such as volumes.
+- Trivy database downloads and full extension SDK compatibility need more verification. Corporate certificates and VPNs, integration with other WSL distributions, and recovery after version changes should be checked in each environment.
+- Supported environments are Windows and WSL 2. SSH remote engines target Linux servers where the Docker CLI is available.
 
-## 라이선스
+## Related projects
 
-Naru는 [MIT 라이선스](LICENSE)로 배포합니다. 참고한 프로젝트의 출처는 [NOTICE](NOTICE)에 있으며, 두 파일은 설치 폴더에도 함께 포함됩니다.
+Some features, including folder change notifications in WSL, redaction in diagnostic reports and pre-start checks for containers, were informed by [Kiri](https://github.com/libracoder/kiri).
 
-런타임 이미지와 함께 사용하는 도구에는 각 구성 요소의 오픈소스 라이선스가 적용됩니다. 배포 패키지의 서드파티 라이선스 고지와 SBOM 검증은 배포 전에 완료해야 해요.
+## License
+
+Naru is released under the [Apache License 2.0](LICENSE), and the license file is included in the install folder. Tools used with the runtime images are covered by the open source licenses of each component. Third-party license notices and SBOM verification for release packages must be completed before release.
